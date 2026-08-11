@@ -132,7 +132,7 @@
 
     </LinearLayout>
 
-    <!-- 廣告預留位置：目前用 Google 官方測試用 Ad Unit ID，正式上架前請換成您自己 AdMob 帳號的橫幅廣告 ID -->
+    <!-- 橫幅廣告：正式 AdMob 廣告單元 -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -145,7 +145,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             ads:adSize="BANNER"
-            ads:adUnitId="ca-app-pub-3940256099942544/6300978111" />
+            ads:adUnitId="ca-app-pub-1512317781873771/9473895830" />
 
     </FrameLayout>
 

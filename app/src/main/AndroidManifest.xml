@@ -11,10 +11,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Calculator">
 
-        <!-- TODO: 換成您自己 AdMob 帳號的 App ID（目前是 Google 官方測試用 App ID） -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-1512317781873771~3495790786" />
 
         <activity
             android:name=".MainActivity"
