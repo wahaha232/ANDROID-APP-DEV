@@ -3,6 +3,8 @@ package com.example.calculator
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.example.calculator.databinding.ActivityMainBinding
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.MobileAds
 
 class MainActivity : AppCompatActivity() {
 
@@ -18,6 +20,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        MobileAds.initialize(this) {}
+        binding.adView.loadAd(AdRequest.Builder().build())
 
         val digitButtons = listOf(
             binding.btn0 to "0", binding.btn1 to "1", binding.btn2 to "2",
@@ -41,6 +46,21 @@ class MainActivity : AppCompatActivity() {
         binding.btnEquals.setOnClickListener { onEquals() }
 
         updateDisplay()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        binding.adView.resume()
+    }
+
+    override fun onPause() {
+        binding.adView.pause()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        binding.adView.destroy()
+        super.onDestroy()
     }
 
     private fun onDigit(digit: String) {

@@ -30,6 +30,14 @@ AndroidCalculator/
 
 ## 已知限制
 
-- 這個環境沒有安裝 Android SDK / Gradle / JDK，所以我只做了「XML 格式驗證」與「Kotlin 括號配對、view id 對應」等靜態檢查，**沒有實際跑過 Gradle build**，第一次同步時如果 Android Studio 版本較舊，可能需要微調 AGP/Kotlin 版本號（在 `build.gradle.kts` 裡）。
 - App 圖示是用簡單向量圖形（`ic_launcher_foreground.xml`）畫的示意圖，不是設計稿，可以之後用 Android Studio 的 **Image Asset** 工具重新產生。
 - 計算邏輯是「即時運算」型（例如 `5 + 3 + 2 =` 會依序算 5+3=8、8+2=10），不是完整的數學運算式解析器（不支援括號、運算子優先順序），這也是市面上大多數基本計算機 App 的行為方式。
+
+## 廣告（Google AdMob）位置預留
+
+畫面最下方已經預留一個橫幅（Banner）廣告位，用 `com.google.android.gms:play-services-ads` 實作。**目前用的是 Google 官方公開的「測試用」App ID / Ad Unit ID**，可以正常顯示測試廣告、不會有政策風險，但**正式上架前必須換成您自己 AdMob 帳號的正式 ID**，否則收不到真的廣告收益。需要換的地方有兩處：
+
+1. `app/src/main/AndroidManifest.xml` 裡的 `com.google.android.gms.ads.APPLICATION_ID`
+2. `app/src/main/res/layout/activity_main.xml` 裡 `AdView` 的 `ads:adUnitId`
+
+兩個值都要去 [AdMob 後台](https://apps.admob.com/) 申請您自己的 App 跟廣告單元後才能替換。在還沒申請之前，請保留測試 ID，**絕對不要自己去點測試廣告或用假流量產生點擊**，這違反 AdMob 政策，可能導致帳號被停用。
