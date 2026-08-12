@@ -1,4 +1,13 @@
 <resources>
     <string name="app_name">計算機</string>
     <string name="error_message">錯誤</string>
+
+    <string name="tab_calculator">計算</string>
+    <string name="tab_convert">換算</string>
+    <string name="lang_toggle">EN</string>
+
+    <string name="hint_amount">輸入金額</string>
+    <string name="status_loading">讀取匯率中…</string>
+    <string name="status_updated">匯率更新時間：%1$s（資料來源：exchangerate-api.com）</string>
+    <string name="status_error">匯率讀取失敗，請檢查網路連線</string>
 </resources>

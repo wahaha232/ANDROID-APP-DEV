@@ -37,9 +37,15 @@ AndroidCalculator/
 
 跟隨裝置的深色/淺色模式自動切換（`values/colors.xml` 為淺色、`values-night/colors.xml` 為深色）。
 
-## 匯率換算
+## 頁籤：計算 / 換算
 
-主畫面左上角「⇄ 匯率換算」進入換算頁，支援 TWD / USD / JPY / HKD / CNY / EUR / GBP 互相換算。匯率資料來自 [exchangerate-api.com](https://www.exchangerate-api.com/) 的免費公開端點（`open.er-api.com`，不需 API 金鑰，資料每日更新），開啟頁面時即時抓取。需要網路連線，抓取失敗會顯示錯誤訊息。
+畫面最上方是「計算」「換算」頁籤（同一個 Activity 內切換，不是另開新頁面），右上角有「EN / 中」語言切換按鈕。
+
+**換算頁**支援 TWD / USD / JPY / HKD / CNY / EUR / GBP 互相換算，匯率資料來自 [exchangerate-api.com](https://www.exchangerate-api.com/) 的免費公開端點（`open.er-api.com`，不需 API 金鑰，資料每日更新），開啟 App 時即時抓取。需要網路連線，抓取失敗會顯示錯誤訊息。目前只有匯率換算一種，長度/重量/溫度等其他換算功能之後可以再擴充成頁籤內的子分類。
+
+## 多語系
+
+`values/strings.xml`（繁體中文，預設）+ `values-en/strings.xml`（英文）。透過 AndroidX 的 Per-App Language API（`AppCompatDelegate.setApplicationLocales`）切換，不需要跟著改手機系統語言。切換語言會重新啟動畫面（Activity recreate），是正常行為。
 
 ## 廣告（Google AdMob）
 

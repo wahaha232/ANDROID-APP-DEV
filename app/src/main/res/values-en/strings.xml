@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Calculator</string>
+    <string name="error_message">Error</string>
+
+    <string name="tab_calculator">Calculate</string>
+    <string name="tab_convert">Convert</string>
+    <string name="lang_toggle">中</string>
+
+    <string name="hint_amount">Enter amount</string>
+    <string name="status_loading">Loading exchange rates…</string>
+    <string name="status_updated">Rates updated: %1$s (source: exchangerate-api.com)</string>
+    <string name="status_error">Failed to load exchange rates. Check your connection.</string>
+</resources>
