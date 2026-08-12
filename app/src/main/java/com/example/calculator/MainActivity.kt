@@ -1,5 +1,6 @@
 package com.example.calculator
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.example.calculator.databinding.ActivityMainBinding
@@ -11,8 +12,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
 
     private var currentInput = "0"
-    private var previousValue: Double? = null
-    private var pendingOperator: Char? = null
+    private val tokens = mutableListOf<Any>() // alternating Double operand / Char operator
     private var justEvaluated = false
     private var awaitingNewOperand = false
 
@@ -44,6 +44,9 @@ class MainActivity : AppCompatActivity() {
         binding.btnMultiply.setOnClickListener { onOperator('×') }
         binding.btnDivide.setOnClickListener { onOperator('÷') }
         binding.btnEquals.setOnClickListener { onEquals() }
+        binding.btnCurrency.setOnClickListener {
+            startActivity(Intent(this, CurrencyActivity::class.java))
+        }
 
         updateDisplay()
     }
@@ -87,8 +90,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun onClear() {
         currentInput = "0"
-        previousValue = null
-        pendingOperator = null
+        tokens.clear()
         justEvaluated = false
         awaitingNewOperand = false
         updateDisplay()
@@ -119,59 +121,78 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onOperator(op: Char) {
-        val currentValue = currentInput.toDoubleOrNull() ?: return
+        val value = currentInput.toDoubleOrNull() ?: return
 
-        if (pendingOperator != null && !awaitingNewOperand) {
-            val result = applyOperator(previousValue ?: 0.0, currentValue, pendingOperator!!)
-            if (result == null) {
-                showError()
-                return
-            }
-            previousValue = result
-        } else if (previousValue == null) {
-            previousValue = currentValue
+        if (justEvaluated) {
+            tokens.clear()
+            tokens.add(value)
+            tokens.add(op)
+        } else if (awaitingNewOperand && tokens.isNotEmpty()) {
+            // user changed their mind about the operator; just swap it
+            tokens[tokens.size - 1] = op
+        } else {
+            tokens.add(value)
+            tokens.add(op)
         }
 
-        pendingOperator = op
         awaitingNewOperand = true
         justEvaluated = false
+        currentInput = "0"
         updateDisplay()
     }
 
     private fun onEquals() {
-        val op = pendingOperator
-        val prev = previousValue
-        val currentValue = currentInput.toDoubleOrNull()
-        if (op == null || prev == null || currentValue == null) return
+        if (tokens.isEmpty()) return
+        val value = currentInput.toDoubleOrNull() ?: return
 
-        val result = applyOperator(prev, currentValue, op)
+        val fullExpression = tokens.toMutableList()
+        fullExpression.add(value)
+
+        val result = evaluateExpression(fullExpression)
         if (result == null) {
             showError()
             return
         }
 
         currentInput = formatNumber(result)
-        previousValue = null
-        pendingOperator = null
+        tokens.clear()
         awaitingNewOperand = false
         justEvaluated = true
         updateDisplay()
     }
 
-    private fun applyOperator(a: Double, b: Double, op: Char): Double? {
-        return when (op) {
-            '+' -> a + b
-            '-' -> a - b
-            '×' -> a * b
-            '÷' -> if (b == 0.0) null else a / b
-            else -> null
+    /** Evaluates a flat [operand, op, operand, op, ...] list with × and ÷ resolved before + and -. */
+    private fun evaluateExpression(expression: List<Any>): Double? {
+        val reduced = mutableListOf<Any>(expression[0] as Double)
+        var i = 1
+        while (i < expression.size) {
+            val op = expression[i] as Char
+            val operand = expression[i + 1] as Double
+            if (op == '×' || op == '÷') {
+                val left = reduced.removeAt(reduced.size - 1) as Double
+                if (op == '÷' && operand == 0.0) return null
+                reduced.add(if (op == '×') left * operand else left / operand)
+            } else {
+                reduced.add(op)
+                reduced.add(operand)
+            }
+            i += 2
         }
+
+        var result = reduced[0] as Double
+        i = 1
+        while (i < reduced.size) {
+            val op = reduced[i] as Char
+            val operand = reduced[i + 1] as Double
+            result = if (op == '+') result + operand else result - operand
+            i += 2
+        }
+        return result
     }
 
     private fun showError() {
         currentInput = "0"
-        previousValue = null
-        pendingOperator = null
+        tokens.clear()
         awaitingNewOperand = false
         justEvaluated = true
         binding.tvExpression.text = ""
@@ -189,10 +210,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateDisplay() {
         binding.tvDisplay.text = currentInput
-        binding.tvExpression.text = if (pendingOperator != null && previousValue != null) {
-            "${formatNumber(previousValue!!)} $pendingOperator"
-        } else {
-            ""
+        binding.tvExpression.text = tokens.joinToString(" ") { token ->
+            if (token is Double) formatNumber(token) else token.toString()
         }
     }
 }

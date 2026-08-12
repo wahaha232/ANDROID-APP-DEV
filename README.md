@@ -30,8 +30,16 @@ AndroidCalculator/
 
 ## 已知限制
 
-- App 圖示是用簡單向量圖形（`ic_launcher_foreground.xml`）畫的示意圖，不是設計稿，可以之後用 Android Studio 的 **Image Asset** 工具重新產生。
-- 計算邏輯是「即時運算」型（例如 `5 + 3 + 2 =` 會依序算 5+3=8、8+2=10），不是完整的數學運算式解析器（不支援括號、運算子優先順序），這也是市面上大多數基本計算機 App 的行為方式。
+- App 圖示是用向量圖形（`ic_launcher_foreground.xml`）畫的示意圖（Material 3 / Android 16 風格，含 Android 13+ 單色主題圖示支援），不是設計稿。
+- 計算邏輯支援**先乘除後加減**的標準運算子優先順序（例如 `5 + 3 × 2 =` 會算出 11，不是 16），但不支援括號。
+
+## 主題
+
+跟隨裝置的深色/淺色模式自動切換（`values/colors.xml` 為淺色、`values-night/colors.xml` 為深色）。
+
+## 匯率換算
+
+主畫面左上角「⇄ 匯率換算」進入換算頁，支援 TWD / USD / JPY / HKD / CNY / EUR / GBP 互相換算。匯率資料來自 [exchangerate-api.com](https://www.exchangerate-api.com/) 的免費公開端點（`open.er-api.com`，不需 API 金鑰，資料每日更新），開啟頁面時即時抓取。需要網路連線，抓取失敗會顯示錯誤訊息。
 
 ## 廣告（Google AdMob）
 

@@ -7,6 +7,26 @@
     android:background="@color/colorBackground"
     android:padding="12dp">
 
+    <!-- Top bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnCurrency"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@null"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
+            android:text="⇄ 匯率換算"
+            android:textAllCaps="false"
+            android:textColor="@color/colorOperatorBg"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+
     <!-- Display area -->
     <LinearLayout
         android:layout_width="match_parent"

@@ -1,0 +1,15 @@
+<resources>
+    <!-- Dark theme -->
+    <color name="colorBackground">#000000</color>
+    <color name="colorDisplayText">#FFFFFF</color>
+    <color name="colorExpressionText">#8E8E93</color>
+
+    <color name="colorFunctionBg">#A5A5A5</color>
+    <color name="colorFunctionText">#000000</color>
+
+    <color name="colorNumberBg">#333333</color>
+    <color name="colorNumberText">#FFFFFF</color>
+
+    <color name="colorOperatorBg">#FF9500</color>
+    <color name="colorOperatorText">#FFFFFF</color>
+</resources>
