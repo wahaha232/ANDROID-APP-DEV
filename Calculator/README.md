@@ -13,7 +13,7 @@ AndroidCalculator/
     ├── build.gradle.kts
     └── src/main/
         ├── AndroidManifest.xml
-        ├── java/com/example/calculator/MainActivity.kt
+        ├── java/com/wahaha232/calculator/MainActivity.kt
         └── res/
             ├── layout/activity_main.xml
             ├── values/{strings,colors,themes,styles}.xml

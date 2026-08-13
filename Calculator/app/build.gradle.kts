@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.calculator"
+    namespace = "com.wahaha232.calculator"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.calculator"
+        applicationId = "com.wahaha232.calculator"
         minSdk = 24
         targetSdk = 34
         versionCode = 1

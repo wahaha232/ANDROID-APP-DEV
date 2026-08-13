@@ -1,4 +1,4 @@
-package com.example.calculator
+package com.wahaha232.calculator
 
 import android.os.Bundle
 import android.text.Editable
@@ -7,7 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
-import com.example.calculator.databinding.ActivityMainBinding
+import com.wahaha232.calculator.databinding.ActivityMainBinding
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.MobileAds
 import kotlinx.coroutines.Dispatchers
