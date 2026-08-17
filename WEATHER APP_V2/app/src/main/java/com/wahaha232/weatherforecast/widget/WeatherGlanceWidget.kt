@@ -40,10 +40,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val WidgetBackground = Color(0xFF0B1626)
-private val WidgetSurface = Color(0xFF13233B)
 private val WidgetOnSurface = Color(0xFFFFFFFF)
-private val WidgetOnSurfaceVariant = Color(0xFFB0BEC5)
+private val WidgetOnSurfaceVariant = Color(0xFFB6C2D9)
+private val WidgetDividerColor = Color(0x33FFFFFF)
 
 private val SIZE_SMALL = androidx.compose.ui.unit.DpSize(120.dp, 90.dp)
 private val SIZE_MEDIUM = androidx.compose.ui.unit.DpSize(220.dp, 110.dp)
@@ -77,13 +76,15 @@ class WeatherGlanceWidget : GlanceAppWidget() {
 @Composable
 private fun WeatherWidgetContent(data: WeatherWidgetData?) {
     val size = androidx.glance.LocalSize.current
+    val compact = size.width < SIZE_MEDIUM.width
+    val showDaily = size.height >= SIZE_LARGE.height && data != null && data.daily.isNotEmpty()
 
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(WidgetBackground)
+            .background(ImageProvider(R.drawable.widget_background_gradient))
             .cornerRadius(20.dp)
-            .padding(12.dp)
+            .padding(14.dp)
     ) {
         if (data == null) {
             Text(
@@ -94,11 +95,18 @@ private fun WeatherWidgetContent(data: WeatherWidgetData?) {
         }
 
         HeaderRow(data)
-        Spacer(modifier = GlanceModifier.height(4.dp))
-        CurrentWeatherRow(data, compact = size.width < SIZE_MEDIUM.width)
+        Spacer(modifier = GlanceModifier.height(6.dp))
+        CurrentWeatherRow(data, compact = compact)
 
-        if (size.height >= SIZE_LARGE.height && data.daily.isNotEmpty()) {
-            Spacer(modifier = GlanceModifier.height(8.dp))
+        if (showDaily) {
+            Spacer(modifier = GlanceModifier.height(10.dp))
+            Spacer(
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(WidgetDividerColor)
+            )
+            Spacer(modifier = GlanceModifier.height(10.dp))
             DailyForecastRow(data)
         }
     }
@@ -114,7 +122,7 @@ private fun HeaderRow(data: WeatherWidgetData) {
             text = data.cityName,
             style = TextStyle(
                 color = ColorProvider(WidgetOnSurface),
-                fontSize = 14.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             ),
             modifier = GlanceModifier.defaultWeight()
@@ -123,7 +131,7 @@ private fun HeaderRow(data: WeatherWidgetData) {
             provider = ImageProvider(R.drawable.ic_widget_refresh),
             contentDescription = "手動更新",
             modifier = GlanceModifier
-                .size(20.dp)
+                .size(22.dp)
                 .clickable(actionRunCallback<WeatherWidgetRefreshAction>())
         )
     }
@@ -142,47 +150,54 @@ private fun CurrentWeatherRow(data: WeatherWidgetData, compact: Boolean) {
             text = "${data.currentTemp}°",
             style = TextStyle(
                 color = ColorProvider(WidgetOnSurface),
-                fontSize = if (compact) 28.sp else 36.sp,
+                fontSize = if (compact) 34.sp else 52.sp,
                 fontWeight = FontWeight.Bold
             )
         )
-        Spacer(modifier = GlanceModifier.width(8.dp))
+        Spacer(modifier = GlanceModifier.width(10.dp))
         Image(
             provider = ImageProvider(data.conditionType.toWidgetIconRes(data.isDay)),
             contentDescription = data.conditionLabel,
-            modifier = GlanceModifier.size(if (compact) 28.dp else 36.dp)
+            modifier = GlanceModifier.size(if (compact) 32.dp else 48.dp)
         )
         if (!compact) {
             Spacer(modifier = GlanceModifier.defaultWeight())
             Column(horizontalAlignment = Alignment.Horizontal.End) {
-                Text(text = now, style = TextStyle(color = ColorProvider(WidgetOnSurface), fontSize = 20.sp, fontWeight = FontWeight.Medium))
-                Text(text = date, style = TextStyle(color = ColorProvider(WidgetOnSurfaceVariant), fontSize = 11.sp))
+                Text(
+                    text = now,
+                    style = TextStyle(color = ColorProvider(WidgetOnSurface), fontSize = 36.sp, fontWeight = FontWeight.Medium)
+                )
+                Text(text = date, style = TextStyle(color = ColorProvider(WidgetOnSurfaceVariant), fontSize = 12.sp))
             }
         }
     }
-    if (!compact) {
-        Text(
-            text = "${data.conditionLabel} ${data.tempMax}°/${data.tempMin}°",
-            style = TextStyle(color = ColorProvider(WidgetOnSurfaceVariant), fontSize = 12.sp)
-        )
-    }
+    Spacer(modifier = GlanceModifier.height(4.dp))
+    Text(
+        text = "${data.conditionLabel}  ${data.tempMax}°/${data.tempMin}°",
+        style = TextStyle(color = ColorProvider(WidgetOnSurfaceVariant), fontSize = 13.sp)
+    )
 }
 
 @Composable
 private fun DailyForecastRow(data: WeatherWidgetData) {
-    Row(modifier = GlanceModifier.fillMaxWidth().background(WidgetSurface).cornerRadius(14.dp).padding(8.dp)) {
+    Row(modifier = GlanceModifier.fillMaxWidth()) {
         data.daily.forEach { day ->
             Column(
                 modifier = GlanceModifier.defaultWeight(),
                 horizontalAlignment = Alignment.Horizontal.CenterHorizontally
             ) {
-                Text(text = day.weekdayLabel.takeLast(5), style = TextStyle(color = ColorProvider(WidgetOnSurfaceVariant), fontSize = 10.sp))
+                Text(text = day.weekdayLabel, style = TextStyle(color = ColorProvider(WidgetOnSurfaceVariant), fontSize = 12.sp))
+                Spacer(modifier = GlanceModifier.height(4.dp))
                 Image(
                     provider = ImageProvider(day.conditionType.toWidgetIconRes(true)),
                     contentDescription = null,
-                    modifier = GlanceModifier.size(18.dp).padding(vertical = 2.dp)
+                    modifier = GlanceModifier.size(22.dp)
                 )
-                Text(text = "${day.tempMax}°/${day.tempMin}°", style = TextStyle(color = ColorProvider(WidgetOnSurface), fontSize = 10.sp))
+                Spacer(modifier = GlanceModifier.height(4.dp))
+                Text(
+                    text = "${day.tempMax}°/${day.tempMin}°",
+                    style = TextStyle(color = ColorProvider(WidgetOnSurface), fontSize = 11.sp)
+                )
             }
         }
     }

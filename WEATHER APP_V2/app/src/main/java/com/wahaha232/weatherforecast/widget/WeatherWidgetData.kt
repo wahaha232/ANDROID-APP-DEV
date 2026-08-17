@@ -5,6 +5,8 @@ import com.wahaha232.weatherforecast.domain.model.WeatherConditionType
 import com.wahaha232.weatherforecast.domain.model.WeatherForecast
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 /** 小工具相關類別共用同一個 Json 實例，避免各處重複建立造成不必要的效能開銷。 */
 val widgetJson = Json { ignoreUnknownKeys = true }
@@ -54,11 +56,21 @@ fun WeatherForecast.toWidgetData(): WeatherWidgetData {
         lastUpdatedEpochMillis = lastUpdatedEpochMillis,
         daily = daily.drop(1).take(4).map { day ->
             WidgetDailyItem(
-                weekdayLabel = day.dateIso,
+                weekdayLabel = formatWeekday(day.dateIso),
                 conditionType = day.conditionType,
                 tempMax = day.temperatureMax.toInt(),
                 tempMin = day.temperatureMin.toInt()
             )
         }
     )
+}
+
+/** 將 Open-Meteo 的 ISO 日期字串（例如 "2026-08-18"）轉成中文星期幾縮寫（例如 "週二"）。 */
+private fun formatWeekday(dateIso: String): String {
+    return try {
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(dateIso)
+        SimpleDateFormat("EEE", Locale.TAIWAN).format(requireNotNull(date))
+    } catch (e: Exception) {
+        dateIso
+    }
 }
