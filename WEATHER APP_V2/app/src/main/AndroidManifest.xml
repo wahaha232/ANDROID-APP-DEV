@@ -43,17 +43,44 @@
             </intent-filter>
         </activity>
 
-        <!-- 桌面天氣小工具 -->
+        <!--
+          桌面天氣小工具：拆成三個獨立的 receiver/provider，讓使用者在「新增小工具」選單裡
+          能直接看到並挑選小/中/大三種尺寸（而不是只能新增單一尺寸再靠長按拖曳調整）。
+        -->
         <receiver
-            android:name=".widget.WeatherWidgetReceiver"
+            android:name=".widget.WeatherWidgetReceiverSmall"
             android:exported="false"
-            android:label="@string/app_name">
+            android:label="@string/widget_label_small">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/weather_widget_info" />
+                android:resource="@xml/weather_widget_info_small" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.WeatherWidgetReceiverMedium"
+            android:exported="false"
+            android:label="@string/widget_label_medium">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/weather_widget_info_medium" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.WeatherWidgetReceiverLarge"
+            android:exported="false"
+            android:label="@string/widget_label_large">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/weather_widget_info_large" />
         </receiver>
     </application>
 

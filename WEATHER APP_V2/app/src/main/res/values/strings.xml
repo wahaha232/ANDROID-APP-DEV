@@ -2,4 +2,8 @@
 <!-- D:/Claude/ANDROID-APP-DEV/WEATHER APP_V2/app/src/main/res/values/strings.xml -->
 <resources>
     <string name="app_name">天氣預報</string>
+
+    <string name="widget_label_small">天氣（小）</string>
+    <string name="widget_label_medium">天氣（中）</string>
+    <string name="widget_label_large">天氣（大）</string>
 </resources>
