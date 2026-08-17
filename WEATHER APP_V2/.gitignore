@@ -1,0 +1,19 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+/app/build
+/app/release
+
+# 依循此 repo 慣例：不提交 Gradle Wrapper 二進位檔，交由 Android Studio 或
+# `gradle wrapper` 指令在本機重新產生；CI 則直接使用 gradle/actions/setup-gradle。
+gradlew
+gradlew.bat
+gradle/wrapper/gradle-wrapper.jar
+gradle/wrapper/gradle-wrapper.properties

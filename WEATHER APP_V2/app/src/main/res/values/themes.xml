@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- D:/Claude/ANDROID-APP-DEV/WEATHER APP_V2/app/src/main/res/values/themes.xml -->
+<resources>
+    <!--
+      畫面內容完全由 Jetpack Compose (WeatherForecastTheme) 決定樣式，
+      這裡只需要提供一個系統啟動 Activity 前會用到的最小骨架主題，
+      刻意繼承平台內建主題而非額外的 Material Components XML 主題，避免引入不必要的相依套件。
+    -->
+    <style name="Theme.WeatherForecastV2" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

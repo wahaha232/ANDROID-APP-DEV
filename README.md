@@ -5,6 +5,7 @@
 ## 目前的 App
 
 - [`Calculator/`](Calculator/) — 計算機 App（詳見資料夾內的 README）
+- [`WEATHER APP_V2/`](WEATHER%20APP_V2/) — 天氣預報 App，Kotlin + Jetpack Compose，Clean Architecture + MVI（詳見資料夾內的 README）
 
 ## 慣例
 
