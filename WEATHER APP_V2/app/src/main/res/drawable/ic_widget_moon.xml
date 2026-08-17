@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- D:/Claude/ANDROID-APP-DEV/WEATHER APP_V2/app/src/main/res/drawable/ic_widget_moon.xml -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#CFD8DC"
+        android:pathData="M12.3,3c-0.68,0 -1.33,0.08 -1.96,0.23 3.07,0.99 5.29,3.86 5.29,7.27 0,3.41 -2.22,6.28 -5.29,7.27 0.63,0.15 1.28,0.23 1.96,0.23 4.28,0 7.75,-3.47 7.75,-7.75S16.58,3 12.3,3z" />
+</vector>

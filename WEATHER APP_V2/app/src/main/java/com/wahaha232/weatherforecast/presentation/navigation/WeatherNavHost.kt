@@ -2,6 +2,7 @@
 package com.wahaha232.weatherforecast.presentation.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -42,12 +43,16 @@ fun WeatherNavHost(
     container: AppContainer,
     navController: NavHostController = rememberNavController()
 ) {
+    val appContext = LocalContext.current.applicationContext
+
     val weatherViewModel: WeatherViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
                 WeatherViewModel(
+                    appContext = appContext,
                     getWeatherForecastUseCase = container.getWeatherForecastUseCase,
                     getCurrentLocationUseCase = container.getCurrentLocationUseCase,
+                    reverseGeocodeCityUseCase = container.reverseGeocodeCityUseCase,
                     toggleFavoriteCityUseCase = container.toggleFavoriteCityUseCase,
                     getFavoriteCitiesUseCase = container.getFavoriteCitiesUseCase,
                     initialCity = DEFAULT_START_CITY

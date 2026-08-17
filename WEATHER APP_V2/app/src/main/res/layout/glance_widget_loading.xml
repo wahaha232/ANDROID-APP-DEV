@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- D:/Claude/ANDROID-APP-DEV/WEATHER APP_V2/app/src/main/res/layout/glance_widget_loading.xml -->
+<!-- Glance 要求的最小骨架 layout：實際畫面內容由 WeatherGlanceWidget 的 Compose 內容取代。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />

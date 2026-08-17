@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- D:/Claude/ANDROID-APP-DEV/WEATHER APP_V2/app/src/main/res/drawable/ic_widget_fog.xml -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#B0BEC5"
+        android:pathData="M3,7h18v2H3z" />
+    <path
+        android:fillColor="#B0BEC5"
+        android:pathData="M1,11h20v2H1z" />
+    <path
+        android:fillColor="#B0BEC5"
+        android:pathData="M3,15h18v2H3z" />
+    <path
+        android:fillColor="#90A4AE"
+        android:pathData="M5,19h14v2H5z" />
+</vector>

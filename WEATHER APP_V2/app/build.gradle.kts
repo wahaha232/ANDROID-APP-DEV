@@ -111,6 +111,9 @@ dependencies {
     // ---------- WorkManager（每日天氣通知排程） ----------
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
+    // ---------- Jetpack Glance（桌面天氣小工具，可調整大小） ----------
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+
     // ---------- Unit Test ----------
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

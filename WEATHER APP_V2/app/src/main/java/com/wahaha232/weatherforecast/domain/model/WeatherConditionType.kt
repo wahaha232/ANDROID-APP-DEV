@@ -1,12 +1,16 @@
 // D:/Claude/ANDROID-APP-DEV/WEATHER APP_V2/app/src/main/java/com/wahaha232/weatherforecast/domain/model/WeatherConditionType.kt
 package com.wahaha232.weatherforecast.domain.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * WMO (World Meteorological Organization) Weather interpretation code 的型別安全對應。
  * Open-Meteo API 回傳的 weather_code 皆遵循此標準（0, 1, 2, 3, 45, 48, 51...）。
  * Domain 層只描述「是什麼天氣狀況」，實際圖示與顏色留給 Presentation 層決定，
- * 藉此保持 Domain 不依賴任何 Android/Compose API。
+ * 藉此保持 Domain 不依賴任何 Android/Compose API；標註 @Serializable 只是引入
+ * kotlinx.serialization（純 Kotlin、無 Android 依賴）以便小工具能將狀態序列化保存。
  */
+@Serializable
 enum class WeatherConditionType(val displayNameZh: String) {
     CLEAR_SKY("晴朗"),
     MAINLY_CLEAR("大致晴朗"),

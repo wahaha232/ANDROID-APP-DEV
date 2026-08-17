@@ -8,6 +8,7 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import com.wahaha232.weatherforecast.data.local.AppDatabase
 import com.wahaha232.weatherforecast.data.local.SettingsRepositoryImpl
 import com.wahaha232.weatherforecast.data.local.settingsDataStore
+import com.wahaha232.weatherforecast.data.remote.NominatimApiService
 import com.wahaha232.weatherforecast.data.remote.OpenMeteoAirQualityApiService
 import com.wahaha232.weatherforecast.data.remote.OpenMeteoForecastApiService
 import com.wahaha232.weatherforecast.data.remote.OpenMeteoGeocodingApiService
@@ -22,6 +23,7 @@ import com.wahaha232.weatherforecast.domain.usecase.GetAppSettingsUseCase
 import com.wahaha232.weatherforecast.domain.usecase.GetCurrentLocationUseCase
 import com.wahaha232.weatherforecast.domain.usecase.GetFavoriteCitiesUseCase
 import com.wahaha232.weatherforecast.domain.usecase.GetWeatherForecastUseCase
+import com.wahaha232.weatherforecast.domain.usecase.ReverseGeocodeCityUseCase
 import com.wahaha232.weatherforecast.domain.usecase.SearchCitiesUseCase
 import com.wahaha232.weatherforecast.domain.usecase.ToggleFavoriteCityUseCase
 import com.wahaha232.weatherforecast.domain.usecase.UpdateAppSettingsUseCase
@@ -63,6 +65,12 @@ class AppContainer(private val appContext: Context) {
         .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
         .build()
 
+    private val nominatimRetrofit: Retrofit = Retrofit.Builder()
+        .baseUrl(NominatimApiService.BASE_URL)
+        .client(okHttpClient)
+        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+        .build()
+
     private val airQualityRetrofit: Retrofit = Retrofit.Builder()
         .baseUrl(OpenMeteoAirQualityApiService.BASE_URL)
         .client(okHttpClient)
@@ -74,6 +82,9 @@ class AppContainer(private val appContext: Context) {
 
     private val geocodingApiService: OpenMeteoGeocodingApiService =
         geocodingRetrofit.create(OpenMeteoGeocodingApiService::class.java)
+
+    private val nominatimApiService: NominatimApiService =
+        nominatimRetrofit.create(NominatimApiService::class.java)
 
     private val airQualityApiService: OpenMeteoAirQualityApiService =
         airQualityRetrofit.create(OpenMeteoAirQualityApiService::class.java)
@@ -90,7 +101,7 @@ class AppContainer(private val appContext: Context) {
     private val weatherRepository: WeatherRepository =
         WeatherRepositoryImpl(forecastApiService, airQualityApiService)
     private val cityRepository: CityRepository =
-        CityRepositoryImpl(geocodingApiService, database.favoriteCityDao())
+        CityRepositoryImpl(geocodingApiService, nominatimApiService, database.favoriteCityDao())
     private val locationRepository: LocationRepository =
         LocationRepositoryImpl(appContext, fusedLocationClient)
     private val settingsRepository: SettingsRepository =
@@ -102,6 +113,7 @@ class AppContainer(private val appContext: Context) {
     val getFavoriteCitiesUseCase = GetFavoriteCitiesUseCase(cityRepository)
     val toggleFavoriteCityUseCase = ToggleFavoriteCityUseCase(cityRepository)
     val getCurrentLocationUseCase = GetCurrentLocationUseCase(locationRepository)
+    val reverseGeocodeCityUseCase = ReverseGeocodeCityUseCase(cityRepository)
     val getAppSettingsUseCase = GetAppSettingsUseCase(settingsRepository)
     val updateAppSettingsUseCase = UpdateAppSettingsUseCase(settingsRepository)
 }

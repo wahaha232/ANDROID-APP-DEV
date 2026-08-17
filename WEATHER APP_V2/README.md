@@ -12,8 +12,10 @@ Production-Ready 的原生 Android 天氣預報 App，Kotlin + Jetpack Compose �
 | 架構 | Clean Architecture（data / domain / presentation）+ MVI |
 | 網路 | Retrofit2 + kotlinx.serialization（[Open-Meteo](https://open-meteo.com/) 免費氣象 API，無需 API Key） |
 | 定位 | Google Play Services Location（FusedLocationProviderClient）+ Accompanist Permissions |
+| 反向地理編碼 | Nominatim (OpenStreetMap)，精確到村里等級（例如「新北市新莊區中信里」） |
 | 本地儲存 | Room（最愛城市清單）、DataStore Preferences（單位偏好與功能開關） |
 | 背景工作 | WorkManager（每日天氣通知） |
+| 桌面小工具 | Jetpack Glance（`glance-appwidget`），可調整大小 |
 | 廣告 | Google AdMob 橫幅廣告 |
 | 依賴注入 | 手動 Service Locator（`di/AppContainer.kt`），未引入 Hilt/Koin |
 
@@ -32,7 +34,8 @@ WEATHER APP_V2/
             ├── di/                 # 手動依賴注入容器
             ├── domain/             # model, repository interface, usecase（純 Kotlin，無 Android 依賴）
             ├── data/               # remote(Retrofit/DTO), local(Room/DataStore), repository 實作, mapper, worker
-            └── presentation/       # theme, navigation, weather(MVI), search(MVI), settings(抽屜選單)
+            ├── presentation/       # theme, navigation, weather(MVI), search(MVI), settings(抽屜選單)
+            └── widget/             # 桌面小工具（Jetpack Glance）
 ```
 
 ## 核心功能
@@ -45,6 +48,8 @@ WEATHER APP_V2/
 - **空氣品質 (AQI)**、**過敏原推估**、**攝影黃金/藍色時段**、**日出日落與月相**、**雷達地圖**（示意用途，Open-Meteo 免費方案無雷達圖磚 API，以裝飾性漸層卡片保留版位）。
 - **左側抽屜選單**：城市清單（當前位置／編輯位置／收藏城市）、單位設定（溫度/風速/氣壓/能見度/降水）、功能開關（每日天氣通知/天氣背景/夜間資訊）、評價我／反饋意見／分享／隱私政策／版本。
 - **每日天氣通知**：開關開啟後透過 WorkManager 排程每 24 小時背景更新一次通知（Android 13+ 會請求 `POST_NOTIFICATIONS` 權限）。
+- **精確定位**：GPS 座標透過 Nominatim 反向地理編碼解析到村里等級（縣市＋鄉鎮市區＋村里，例如「新北市新莊區中信里」），非台灣地區則自動退回較粗略的層級。
+- **桌面天氣小工具**：城市名稱、即時溫度、天氣圖示、時間/日期/星期、4 天預報列，右上角有手動更新按鈕；支援拖曳調整大小（Small / Medium / Large 三種 Responsive 版面），與 App 內顯示的城市自動同步。
 
 ## 如何開啟與編譯
 
@@ -67,6 +72,8 @@ WEATHER APP_V2/
 - **雷達地圖**：Open-Meteo 免費方案不提供逐格降水雷達圖磚，卡片目前僅為裝飾性示意圖，如需真實雷達影像需另外串接 RainViewer / Windy 等付費圖磚服務。
 - **隱私政策**：目前僅以應用內文字（Toast 提示）呈現，尚未有對外託管的正式隱私權政策網址；上架 Google Play 前必須補上實際可公開存取的隱私政策頁面。
 - **反饋信箱**：`AppInfoActions.kt` 中的意見回饋信箱目前是預留的 `support@example.com`，請換成實際可用信箱。
+- **小工具城市**：目前所有已放置的小工具都顯示「App 內最後檢視的城市」同一份快照，尚未實作「每個小工具各自選擇城市」的 Configuration Activity。
+- **Nominatim 使用限制**：反向地理編碼呼叫的是 OpenStreetMap 官方免費 Nominatim 服務，使用政策限制每秒最多 1 次請求，僅適合輕量個人使用；正式大量上線建議改用自架 Nominatim 或付費地理編碼服務。
 
 ## 主題
 

@@ -3,7 +3,9 @@ package com.wahaha232.weatherforecast.data.repository
 
 import com.wahaha232.weatherforecast.data.local.FavoriteCityDao
 import com.wahaha232.weatherforecast.data.mapper.toDomain
+import com.wahaha232.weatherforecast.data.mapper.toDomainCity
 import com.wahaha232.weatherforecast.data.mapper.toFavoriteEntity
+import com.wahaha232.weatherforecast.data.remote.NominatimApiService
 import com.wahaha232.weatherforecast.data.remote.OpenMeteoGeocodingApiService
 import com.wahaha232.weatherforecast.domain.model.City
 import com.wahaha232.weatherforecast.domain.repository.CityRepository
@@ -15,6 +17,7 @@ import java.io.IOException
 
 class CityRepositoryImpl(
     private val geocodingApi: OpenMeteoGeocodingApiService,
+    private val nominatimApi: NominatimApiService,
     private val favoriteCityDao: FavoriteCityDao
 ) : CityRepository {
 
@@ -29,6 +32,19 @@ class CityRepositoryImpl(
             Resource.Error("網路連線失敗，無法搜尋城市", e)
         } catch (e: Exception) {
             Resource.Error(e.message ?: "搜尋城市時發生未知錯誤", e)
+        }
+    }
+
+    override suspend fun reverseGeocodeCity(latitude: Double, longitude: Double): Resource<City> {
+        return try {
+            val response = nominatimApi.reverseGeocode(latitude = latitude, longitude = longitude)
+            Resource.Success(response.toDomainCity(latitude, longitude))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            Resource.Error("網路連線失敗，無法解析目前位置地址", e)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "解析目前位置地址時發生未知錯誤", e)
         }
     }
 

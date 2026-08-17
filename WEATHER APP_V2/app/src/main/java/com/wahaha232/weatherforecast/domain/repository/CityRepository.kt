@@ -12,6 +12,9 @@ interface CityRepository {
     /** 依關鍵字搜尋全球城市（遠端） */
     suspend fun searchCities(query: String): Resource<List<City>>
 
+    /** 將 GPS 座標反查為精確到村里等級的城市名稱（遠端 Nominatim 反向地理編碼） */
+    suspend fun reverseGeocodeCity(latitude: Double, longitude: Double): Resource<City>
+
     /** 觀察本地收藏的城市清單，Room Flow 會在資料變動時自動推送新結果 */
     fun observeFavoriteCities(): Flow<List<City>>
 
