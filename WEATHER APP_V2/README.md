@@ -53,9 +53,17 @@ WEATHER APP_V2/
 3. 需要 Android SDK Platform 35 + Build-Tools 35.0.0、JDK 17。
 4. 指令列編譯：`gradle assembleDebug`（需系統已安裝 Gradle 8.7 對應版本，或用 Android Studio 內建 Gradle）。
 
+## 廣告（Google AdMob）
+
+畫面中的橫幅廣告已串接**正式的 AdMob App ID / Ad Unit ID**（在 [AdMob 後台](https://apps.admob.com/) 申請）：
+
+1. `app/src/main/AndroidManifest.xml` 裡的 `com.google.android.gms.ads.APPLICATION_ID`：`ca-app-pub-1512317781873771~8436143739`
+2. `presentation/weather/components/AdBannerView.kt` 裡的 `WEATHER_BANNER_AD_UNIT_ID`：`ca-app-pub-1512317781873771/6879519480`
+
+**注意：這是正式廣告單元，不是測試 ID**——開發者本人或用模擬器/測試裝置反覆點擊自己的廣告會違反 AdMob 政策，嚴重可能導致帳號被停用。如果之後要在自己手機上頻繁測試，建議改用 Google 官方測試 ID（`ca-app-pub-3940256099942544~3347511713` / `ca-app-pub-3940256099942544/6300978111`），或在 AdMob 後台把測試裝置加入白名單。
+
 ## 已知限制 / 待辦事項
 
-- **AdMob App ID**：`AndroidManifest.xml` 中暫時使用 Google 官方**測試用** App ID（`ca-app-pub-3940256099942544~3347511713`）；橫幅廣告單元 ID 已改為正式的 `ca-app-pub-1512317781873771/6879519480`。正式上架前請把 App ID 換成你自己 AdMob 後台對應此廣告單元的正式 App ID，否則廣告可能無法正確歸戶。
 - **雷達地圖**：Open-Meteo 免費方案不提供逐格降水雷達圖磚，卡片目前僅為裝飾性示意圖，如需真實雷達影像需另外串接 RainViewer / Windy 等付費圖磚服務。
 - **隱私政策**：目前僅以應用內文字（Toast 提示）呈現，尚未有對外託管的正式隱私權政策網址；上架 Google Play 前必須補上實際可公開存取的隱私政策頁面。
 - **反饋信箱**：`AppInfoActions.kt` 中的意見回饋信箱目前是預留的 `support@example.com`，請換成實際可用信箱。

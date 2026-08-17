@@ -25,14 +25,12 @@
         android:theme="@style/Theme.WeatherForecastV2">
 
         <!--
-          AdMob Application ID：此處先填入 Google 官方公開的「測試用」App ID，
-          確保專案可直接編譯並顯示測試廣告。正式上架前請務必替換成你自己
-          AdMob 後台（對應廣告單元 ca-app-pub-1512317781873771/6879519480）的正式 App ID，
-          否則廣告將無法正確歸戶／可能無法送達。
+          AdMob Application ID：正式 App ID，對應廣告單元 ca-app-pub-1512317781873771/6879519480
+          （同一個 AdMob 帳號下的發布商 ID 1512317781873771 一致）。
         -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-1512317781873771~8436143739" />
 
         <activity
             android:name=".MainActivity"
