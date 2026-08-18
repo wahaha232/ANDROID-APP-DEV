@@ -12,7 +12,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.wahaha232.weatherforecast"
+        applicationId = "com.startinsnow.weatherforecast"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
