@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">計算機</string>
+    <string name="app_name">小算盤</string>
     <string name="error_message">錯誤</string>
 
     <string name="tab_calculator">計算</string>

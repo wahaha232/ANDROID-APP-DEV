@@ -1,6 +1,8 @@
-# Calculator（Android 計算機）
+# Calculator（小算盤）
 
 一個簡單的 Android 計算機 App，Kotlin + View Binding 實作，支援加減乘除、正負號切換、百分比、清除、退格。
+App 顯示名稱為「小算盤」，`applicationId` 為 `com.startinsnow.calculator`（Kotlin 原始碼的 package
+仍是 `com.wahaha232.calculator`，兩者可以不同，改 `applicationId` 不需要搬動原始碼資料夾）。
 
 ## 專案結構
 

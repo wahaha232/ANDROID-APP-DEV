@@ -10,7 +10,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.wahaha232.calculator"
+        applicationId = "com.startinsnow.calculator"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
