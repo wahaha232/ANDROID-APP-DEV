@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- D:/Claude/ANDROID-APP-DEV/WEATHER APP_V2/app/src/main/res/values/strings.xml -->
 <resources>
-    <string name="app_name">天氣預報</string>
+    <string name="app_name">SkyFlow Weather: 即時雷達</string>
 
     <string name="widget_label_small">天氣（小）</string>
     <string name="widget_label_medium">天氣（中）</string>

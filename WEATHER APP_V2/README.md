@@ -1,7 +1,9 @@
-# WEATHER APP_V2（天氣預報 App）
+# SkyFlow Weather: 即時雷達（WEATHER APP_V2）
 
 Production-Ready 的原生 Android 天氣預報 App，Kotlin + Jetpack Compose 實作，
 採 Clean Architecture（Data / Domain / Presentation）+ MVI（StateFlow + UI State）架構。
+App 顯示名稱為「SkyFlow Weather: 即時雷達」（`res/values/strings.xml` 的 `app_name`），
+專案資料夾與 Package ID（`com.wahaha232.weatherforecast`）維持不變。
 
 ## 技術棧
 
@@ -78,3 +80,7 @@ WEATHER APP_V2/
 ## 主題
 
 跟隨裝置深色/淺色模式，並支援 Android 12+ 動態色彩（Material You）。
+
+## App Icon
+
+採用者提供的插畫圖示（雲朵、太陽、雷雨），原始圖檔四角為白色背景，已用 Pillow 從四個角落做連通區域去背（保留雲朵內部的白色高光細節，不是整張圖去白），再依 Android Adaptive Icon 安全區域（約 66%）置中縮放，產出 `mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher_foreground.png`，背景層則用取樣自圖片的代表色（`#2A74FB`，`res/values/colors.xml` 的 `ic_launcher_background`）鋪底。通知小圖示（`data/worker/DailyWeatherNotificationWorker.kt`）仍使用另一個簡化的單色雲朵向量圖（`drawable/ic_launcher_foreground.xml`），因為 Android 要求通知圖示必須是純白色剪影，不能用這張全彩插畫。
