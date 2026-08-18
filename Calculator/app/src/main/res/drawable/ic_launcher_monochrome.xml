@@ -1,28 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Android 13+ 單色主題圖示：跟正式圖示同一套計算機造型，改成白色剪影供系統套色 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- "+" -->
-    <path android:fillColor="#FFFFFF" android:pathData="M23.5,30.5 L41.5,30.5 L41.5,34.5 L23.5,34.5 Z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M30.5,23.5 L34.5,23.5 L34.5,41.5 L30.5,41.5 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,20 L76,20 A10,10 0 0 1 86,30 L86,82 A10,10 0 0 1 76,92 L32,92 A10,10 0 0 1 22,82 L22,30 A10,10 0 0 1 32,20 Z" />
 
-    <!-- "−" -->
-    <path android:fillColor="#FFFFFF" android:pathData="M66.5,30.5 L84.5,30.5 L84.5,34.5 L66.5,34.5 Z" />
+    <path android:fillColor="#66FFFFFF" android:pathData="M30,26 L78,26 L78,40 L30,40 Z" />
 
-    <!-- "×" -->
-    <group
-        android:pivotX="32.5"
-        android:pivotY="75.5"
-        android:rotation="45">
-        <path android:fillColor="#FFFFFF" android:pathData="M23.5,73.5 L41.5,73.5 L41.5,77.5 L23.5,77.5 Z" />
-        <path android:fillColor="#FFFFFF" android:pathData="M30.5,66.5 L34.5,66.5 L34.5,84.5 L30.5,84.5 Z" />
-    </group>
+    <path android:fillColor="#B3FFFFFF" android:pathData="M30,48 L44,48 L44,60 L30,60 Z" />
+    <path android:fillColor="#B3FFFFFF" android:pathData="M47,48 L61,48 L61,60 L47,60 Z" />
+    <path android:fillColor="#B3FFFFFF" android:pathData="M64,48 L78,48 L78,60 L64,60 Z" />
 
-    <!-- "=" -->
-    <path android:fillColor="#FFFFFF" android:pathData="M66.5,68.5 L84.5,68.5 L84.5,72.5 L66.5,72.5 Z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M66.5,78.5 L84.5,78.5 L84.5,82.5 L66.5,82.5 Z" />
+    <path android:fillColor="#B3FFFFFF" android:pathData="M30,65 L44,65 L44,77 L30,77 Z" />
+    <path android:fillColor="#B3FFFFFF" android:pathData="M47,65 L61,65 L61,77 L47,77 Z" />
+    <path android:fillColor="#B3FFFFFF" android:pathData="M64,65 L78,65 L78,77 L64,77 Z" />
+
+    <path android:fillColor="#FFFFFF" android:pathData="M30,82 L78,82 L78,90 L30,90 Z" />
 
 </vector>

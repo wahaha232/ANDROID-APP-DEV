@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 深靛藍 -> 紫羅蘭對角漸層，呼應 Material 3 濃郁色調（Tonal）風格 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#2E3540" />
+    <gradient
+        android:type="linear"
+        android:angle="135"
+        android:startColor="#4338CA"
+        android:centerColor="#5B21B6"
+        android:endColor="#7C3AED" />
 </shape>
