@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS TRACKER</string>
+    <string name="notif_channel_recording">GPS 軌跡記錄中</string>
+    <string name="notif_recording_title">GPS TRACKER 記錄中</string>
+</resources>
