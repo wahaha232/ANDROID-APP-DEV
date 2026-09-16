@@ -36,7 +36,13 @@ class LocationTracker(private val context: Context) {
     val qualityManager = LocationQualityManager()
 
     @SuppressLint("MissingPermission")
-    fun observe(trackId: String): Flow<FilteredLocation> = callbackFlow {
+    fun observe(
+        trackId: String,
+        gpsMinTimeMs: Long = GPS_MIN_TIME_MS,
+        gpsMinDistanceM: Float = GPS_MIN_DISTANCE_M,
+        networkMinTimeMs: Long = NETWORK_MIN_TIME_MS,
+        networkMinDistanceM: Float = NETWORK_MIN_DISTANCE_M
+    ): Flow<FilteredLocation> = callbackFlow {
         driftFilter.reset()
         qualityManager.reset()
 
@@ -59,8 +65,8 @@ class LocationTracker(private val context: Context) {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
-                    GPS_MIN_TIME_MS,
-                    GPS_MIN_DISTANCE_M,
+                    gpsMinTimeMs,
+                    gpsMinDistanceM,
                     listener,
                     context.mainLooper
                 )
@@ -69,8 +75,8 @@ class LocationTracker(private val context: Context) {
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
-                    NETWORK_MIN_TIME_MS,
-                    NETWORK_MIN_DISTANCE_M,
+                    networkMinTimeMs,
+                    networkMinDistanceM,
                     listener,
                     context.mainLooper
                 )

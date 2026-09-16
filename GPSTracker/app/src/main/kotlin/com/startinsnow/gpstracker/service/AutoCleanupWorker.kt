@@ -19,14 +19,14 @@ class AutoCleanupWorker(context: Context, params: WorkerParameters) : CoroutineW
 
     override suspend fun doWork(): Result {
         val app = applicationContext as GpsTrackerApplication
-        val settings = app.settingsRepository.settings
-        val retentionDays = settings.first().dataRetentionDays
+        val settings = app.settingsRepository.settings.first()
+        val retentionDays = settings.dataRetentionDays
         if (retentionDays <= 0) return Result.success()
 
         val cutoff = System.currentTimeMillis() - retentionDays * 24L * 60 * 60 * 1000
-        val tracks = app.trackRepository.observeTracks().first()
-        tracks.filter { it.status == TrackStatus.FINISHED && (it.endTimeMs ?: it.startTimeMs) < cutoff }
-            .forEach { app.trackRepository.deleteTrack(it.trackId) }
+        // 於 SQL 端篩選（不把整張表載入記憶體），再交由 Repository 刪除（含本機檔案）。
+        val expiredTrackIds = app.trackRepository.getFinishedTrackIdsBefore(TrackStatus.FINISHED, cutoff)
+        expiredTrackIds.forEach { app.trackRepository.deleteTrack(it) }
         return Result.success()
     }
 

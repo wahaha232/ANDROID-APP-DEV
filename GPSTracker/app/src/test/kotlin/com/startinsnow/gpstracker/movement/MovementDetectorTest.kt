@@ -4,6 +4,7 @@ import com.startinsnow.gpstracker.core.geo.GeoMath
 import com.startinsnow.gpstracker.core.model.MovementMode
 import com.startinsnow.gpstracker.core.model.PointReliability
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class MovementDetectorTest {
@@ -113,5 +114,36 @@ class MovementDetectorTest {
         feedConstantSpeed(detector, 20.0, sampleCount = 5)
         detector.reset()
         assertEquals(MovementMode.UNKNOWN, detector.currentMode())
+    }
+
+    @Test
+    fun `dwell time blocks a mode change that comes too soon`() {
+        val detector = MovementDetector(minDwellMs = 30_000L)
+        // t = 0,3,6 秒 → 第 3 個樣本確立 CAR（最後一次 Mode 變更發生在 t=6s）
+        feedConstantSpeed(detector, 100.0, sampleCount = 3, startTimeMs = 0L)
+        assertEquals(MovementMode.CAR, detector.currentMode())
+
+        // t = 9,12,15 秒：新分類連續 3 個樣本已達 hysteresis 門檻，
+        // 但距離上次切換只有 9 秒 < 30 秒，因此不可切換（避免 Mode 快速跳動）。
+        feedConstantSpeed(detector, 0.0, sampleCount = 3, startTimeMs = 9_000L)
+        assertEquals(MovementMode.CAR, detector.currentMode())
+
+        // 超過 dwell 時間之後才允許切換
+        feedConstantSpeed(detector, 0.0, sampleCount = 20, startTimeMs = 18_000L)
+        assertNotEquals(MovementMode.CAR, detector.currentMode())
+    }
+
+    @Test
+    fun `airplane requires enough sustained samples not a single spike`() {
+        val detector = MovementDetector()
+        // 只有 3 個高速樣本（窗口長度不足 / 樣本數不足）不得直接判為飛機
+        val mode = feedConstantSpeed(
+            detector,
+            kmh = 600.0,
+            sampleCount = 3,
+            intervalMs = 3_000L,
+            altitudeMeters = 9000.0
+        )
+        assertNotEquals(MovementMode.AIRPLANE, mode)
     }
 }

@@ -19,7 +19,8 @@ class GpsTrackerApplication : Application() {
             photoDao = database.photoDao(),
             movementSegmentDao = database.movementSegmentDao(),
             gpsOutageDao = database.gpsOutageDao(),
-            filesDir = filesDir
+            filesDir = filesDir,
+            photoRootDir = getExternalFilesDir("photos")
         )
     }
 

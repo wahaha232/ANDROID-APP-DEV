@@ -85,4 +85,16 @@ class StatsCalculatorTest {
         assertEquals(0.0, stats.distanceMeters, 0.0)
         assertEquals(MovementMode.UNKNOWN, stats.dominantMode)
     }
+
+    @Test
+    fun `average speed is computed from trusted segments only`() {
+        val points = listOf(
+            point(25.0000, 121.0000, 0L, speedMps = 2f),
+            point(25.0010, 121.0000, 10_000L, speedMps = 4f),
+            // 低可信度 / 被捨棄的點不得影響平均速度（規格 8）
+            point(29.0000, 121.0000, 20_000L, reliability = "REJECTED", speedMps = 100f)
+        )
+        val stats = StatsCalculator.compute(points, emptyList())
+        assertEquals(4.0, stats.avgSpeedMps, 0.001)
+    }
 }

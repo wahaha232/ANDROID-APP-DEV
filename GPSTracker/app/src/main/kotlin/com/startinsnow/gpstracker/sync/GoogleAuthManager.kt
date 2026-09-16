@@ -47,4 +47,18 @@ class GoogleAuthManager(private val context: Context) {
             GoogleAuthUtil.getToken(context, androidAccount, "oauth2:${driveScope.scopeUri}")
         }
     }
+
+    /** 登出時一併清掉快取的 OAuth token，避免登出後仍能用舊 token 上傳。 */
+    suspend fun clearAccessToken(account: GoogleSignInAccount): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val androidAccount = account.account ?: return@runCatching
+            val scope = "oauth2:${driveScope.scopeUri}"
+            // 先取得（可能是快取的）access token 字串，再明確清除，
+            // 否則 GoogleAuthUtil.clearToken 無法指定要清哪一個 token。
+            val token = runCatching { GoogleAuthUtil.getToken(context, androidAccount, scope) }.getOrNull()
+            if (!token.isNullOrBlank()) {
+                GoogleAuthUtil.clearToken(context, token)
+            }
+        }
+    }
 }

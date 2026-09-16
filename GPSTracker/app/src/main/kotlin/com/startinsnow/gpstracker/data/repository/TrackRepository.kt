@@ -34,7 +34,9 @@ class TrackRepository(
     private val photoDao: PhotoDao,
     private val movementSegmentDao: MovementSegmentDao,
     private val gpsOutageDao: GpsOutageDao,
-    private val filesDir: File
+    private val filesDir: File,
+    /** 相機照片根目錄（external files dir），刪除 Track 時要一起清掉避免孤兒檔案。 */
+    private val photoRootDir: File? = null
 ) {
     fun observeTracks(): Flow<List<TrackEntity>> = trackDao.observeAll()
     fun observeTrack(trackId: String): Flow<TrackEntity?> = trackDao.observeById(trackId)
@@ -42,6 +44,10 @@ class TrackRepository(
     fun observePhotos(trackId: String): Flow<List<PhotoEntity>> = photoDao.observeForTrack(trackId)
 
     suspend fun getTrack(trackId: String): TrackEntity? = trackDao.getById(trackId)
+
+    /** Auto Cleanup 用：取得指定時間點之前已完成的 Track ID（SQL 端篩選）。 */
+    suspend fun getFinishedTrackIdsBefore(status: TrackStatus, cutoffTimestampMs: Long): List<String> =
+        trackDao.getFinishedTrackIdsBefore(status, cutoffTimestampMs)
     suspend fun getLastPoint(trackId: String) = trackPointDao.getLastForTrack(trackId)
     suspend fun getPoints(trackId: String): List<TrackPointEntity> = trackPointDao.getAllForTrack(trackId)
     suspend fun getPhotos(trackId: String): List<PhotoEntity> = photoDao.getAllForTrack(trackId)
@@ -190,8 +196,23 @@ class TrackRepository(
         return photo
     }
 
-    /** Finish Track 時做一次權威性重算，確保就算中途 crash / 統計快照漏更新，最終數字仍然正確。 */
-    suspend fun finalizeTrack(trackId: String, endTimestampMs: Long, stepCount: Long) {
+    /**
+     * Finish Track 時做一次權威性重算，確保就算中途 crash / 統計快照漏更新，最終數字仍然正確。
+     *
+     * @param activeDurationMs 實際「非暫停」的累積時間（由 Service 提供），
+     *   不使用 wall clock 的 end - start，否則會把暫停時間也算進 Duration。
+     * @param snapshot* 開始記錄期間的即時統計快照，用於重算結果低於快照時保留較可靠的值。
+     */
+    suspend fun finalizeTrack(
+        trackId: String,
+        endTimestampMs: Long,
+        stepCount: Long,
+        activeDurationMs: Long = 0L,
+        snapshotDistanceMeters: Double = 0.0,
+        snapshotAvgSpeedMps: Double = 0.0,
+        snapshotMaxSpeedMps: Double = 0.0,
+        snapshotPointCount: Int = 0
+    ) {
         val track = trackDao.getById(trackId) ?: return
         val points = trackPointDao.getAllForTrack(trackId)
         val segments = movementSegmentDao.getAllForTrack(trackId)
@@ -199,23 +220,29 @@ class TrackRepository(
         val recomputedSegments = movementSegmentDao.getAllForTrack(trackId)
         val stats = StatsCalculator.compute(points, recomputedSegments)
         val lastPoint = points.lastOrNull { it.reliability == "TRUSTED" }
+        val trustedPointCount = points.count { it.reliability == "TRUSTED" }
 
         val modeDistributionJson = Json.encodeToString(
             kotlinx.serialization.json.JsonObject.serializer(),
             JsonObject(stats.modeDistributionPercent.mapKeys { it.key.name }.mapValues { JsonPrimitive(it.value) })
         )
 
+        // 重算結果（以實際落地資料為準）不應小於記錄期間的即時快照，否則使用者會看到距離變少。
+        val finalDistance = maxOf(stats.distanceMeters, snapshotDistanceMeters)
+        val finalMaxSpeed = maxOf(stats.maxSpeedMps, snapshotMaxSpeedMps)
+        val finalAvgSpeed = if (stats.avgSpeedMps > 0.0) stats.avgSpeedMps else snapshotAvgSpeedMps
+
         trackDao.update(
             track.copy(
                 endTimeMs = endTimestampMs,
                 status = TrackStatus.FINISHED,
-                distanceMeters = stats.distanceMeters,
-                durationMs = (endTimestampMs - track.startTimeMs).coerceAtLeast(0L),
-                avgSpeedMps = stats.avgSpeedMps,
-                maxSpeedMps = stats.maxSpeedMps,
+                distanceMeters = finalDistance,
+                durationMs = if (activeDurationMs > 0L) activeDurationMs else track.durationMs,
+                avgSpeedMps = finalAvgSpeed,
+                maxSpeedMps = finalMaxSpeed,
                 stepCount = stepCount,
                 dominantMode = stats.dominantMode,
-                gpsPointCount = points.size,
+                gpsPointCount = maxOf(points.size, snapshotPointCount, trustedPointCount),
                 maxAltitudeMeters = stats.maxAltitudeMeters,
                 minAltitudeMeters = stats.minAltitudeMeters,
                 totalAscentMeters = stats.totalAscentMeters,
@@ -227,13 +254,35 @@ class TrackRepository(
         )
     }
 
+    /** 放棄一筆未完成的 Track（Crash Recovery 後使用者選擇不續錄時使用）。 */
+    suspend fun abandonTrack(trackId: String) {
+        val track = trackDao.getById(trackId) ?: return
+        closeOpenMovementSegment(trackId, System.currentTimeMillis())
+        val stats = StatsCalculator.compute(trackPointDao.getAllForTrack(trackId), movementSegmentDao.getAllForTrack(trackId))
+        trackDao.update(
+            track.copy(
+                status = TrackStatus.FINISHED,
+                endTimeMs = System.currentTimeMillis(),
+                distanceMeters = maxOf(stats.distanceMeters, track.distanceMeters),
+                dominantMode = stats.dominantMode
+            )
+        )
+    }
+
     suspend fun deleteTrack(trackId: String) {
         val photos = photoDao.getAllForTrack(trackId)
         photos.forEach { photo ->
             runCatching { File(photo.filePath).delete() }
         }
+        // 刪除匯出資料夾與打包好的 ZIP，避免留下孤兒檔案。
         val exportDir = File(filesDir, "exports/$trackId")
         if (exportDir.exists()) exportDir.deleteRecursively()
+        runCatching { File(filesDir, "exports/$trackId.zip").delete() }
+        // 刪除相機原始照片目錄（位於 external files dir，刪 Track 時常被漏掉）。
+        photoRootDir?.let { root ->
+            val photoDir = File(root, trackId)
+            if (photoDir.exists()) photoDir.deleteRecursively()
+        }
         // Room 的外鍵 CASCADE 會自動清掉 track_points / photos / movement_segments / gps_outages。
         trackDao.deleteById(trackId)
     }

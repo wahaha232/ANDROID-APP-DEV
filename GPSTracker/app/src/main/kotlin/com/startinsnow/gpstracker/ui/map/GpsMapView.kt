@@ -182,6 +182,12 @@ fun GpsMapView(
                     }
                 }
             }
+        },
+        onRelease = { view ->
+            // Compose 釋放 AndroidView 時務必呼叫 MapView.onDestroy()，
+            // 否則 native 資源（GL context / tiles）會在每次進出畫面時累積洩漏。
+            mapViewState.value = null
+            runCatching { view.onDestroy() }
         }
     )
 }

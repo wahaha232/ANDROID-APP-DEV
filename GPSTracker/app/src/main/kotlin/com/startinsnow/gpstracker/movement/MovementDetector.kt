@@ -30,12 +30,15 @@ data class MovementResult(
  */
 class MovementDetector(
     private val windowMs: Long = 30_000L,
-    private val minSamplesForChange: Int = 3
+    private val minSamplesForChange: Int = 3,
+    /** 兩次 Mode 切換之間的最短間隔，避免 Mode 快速跳動（例如 Bicycle→Car→Bicycle）。 */
+    private val minDwellMs: Long = MIN_DWELL_MS
 ) {
     private val window = ArrayDeque<MovementSample>()
     private var currentMode = MovementMode.UNKNOWN
     private var candidateMode = MovementMode.UNKNOWN
     private var candidateStreak = 0
+    private var lastModeChangeTimestampMs: Long? = null
 
     fun addSample(sample: MovementSample): MovementResult {
         if (sample.reliability != PointReliability.TRUSTED) {
@@ -49,7 +52,7 @@ class MovementDetector(
         }
 
         val classification = classifyWindow()
-        applyHysteresis(classification)
+        applyHysteresis(classification, sample.timestampMs)
 
         return MovementResult(currentMode, confidenceFor(window.size))
     }
@@ -61,9 +64,10 @@ class MovementDetector(
         currentMode = MovementMode.UNKNOWN
         candidateMode = MovementMode.UNKNOWN
         candidateStreak = 0
+        lastModeChangeTimestampMs = null
     }
 
-    private fun applyHysteresis(classification: MovementMode) {
+    private fun applyHysteresis(classification: MovementMode, timestampMs: Long) {
         when {
             classification == currentMode -> {
                 candidateMode = currentMode
@@ -71,9 +75,10 @@ class MovementDetector(
             }
             classification == candidateMode -> {
                 candidateStreak++
-                if (candidateStreak >= minSamplesForChange) {
+                if (candidateStreak >= minSamplesForChange && dwellSatisfied(timestampMs)) {
                     currentMode = candidateMode
                     candidateStreak = 0
+                    lastModeChangeTimestampMs = timestampMs
                 }
             }
             else -> {
@@ -81,6 +86,12 @@ class MovementDetector(
                 candidateStreak = 1
             }
         }
+    }
+
+    /** Hysteresis 的第二層保護：Mode 一旦確定，必須維持 [minDwellMs] 才能再切換。 */
+    private fun dwellSatisfied(timestampMs: Long): Boolean {
+        val last = lastModeChangeTimestampMs ?: return true
+        return (timestampMs - last) >= minDwellMs
     }
 
     private fun confidenceFor(sampleCount: Int): Double =
@@ -103,8 +114,9 @@ class MovementDetector(
             avgKmh < STATIONARY_MAX_KMH -> MovementMode.STATIONARY
 
             avgKmh >= AIRPLANE_MIN_KMH -> {
-                // 需要窗口涵蓋足夠時間長度的持續高速，而非單點瞬時速度，避免 GPS 尖峰誤判。
-                val sustained = windowDurationSeconds >= MIN_AIRPLANE_WINDOW_SECONDS
+                // 需要窗口涵蓋足夠時間長度的持續高速（而非單點瞬時速度）＋足夠樣本數，避免 GPS 尖峰誤判。
+                val sustained = windowDurationSeconds >= MIN_AIRPLANE_WINDOW_SECONDS &&
+                    window.size >= MIN_AIRPLANE_SAMPLES
                 val altitudeSupportsFlight = avgAltitude == null || avgAltitude > MIN_AIRPLANE_ALTITUDE_M ||
                     avgKmh >= UNAMBIGUOUS_AIRPLANE_KMH
                 if (sustained && altitudeSupportsFlight) MovementMode.AIRPLANE else fallbackGroundMode(avgKmh, stopRatio, variationKmh)
@@ -134,6 +146,12 @@ class MovementDetector(
 
         const val MIN_AIRPLANE_WINDOW_SECONDS = 15.0
         const val MIN_AIRPLANE_ALTITUDE_M = 1000.0
+
+        /** 判定飛機至少需要在窗口內累積的樣本數，避免 2~3 個尖峰點就誤判。 */
+        const val MIN_AIRPLANE_SAMPLES = 4
+
+        /** Mode 切換後的最短停留時間（毫秒），避免 Mode 快速跳動。 */
+        const val MIN_DWELL_MS = 5_000L
 
         const val STOP_SPEED_MPS = 0.6
         const val PUBLIC_TRANSPORT_STOP_RATIO = 0.2

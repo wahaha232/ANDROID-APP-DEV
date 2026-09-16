@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.startinsnow.gpstracker.GpsTrackerApplication
+import com.startinsnow.gpstracker.core.geo.RouteSimplifier
 import com.startinsnow.gpstracker.core.model.UploadStatus
 import com.startinsnow.gpstracker.export.TrackZipExporter
 import com.startinsnow.gpstracker.sync.DriveSyncManager
@@ -58,6 +59,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit) {
     val points by viewModel.points.collectAsState()
     val photos by viewModel.photos.collectAsState()
     val playback by viewModel.playback.collectAsState()
+    val outages by viewModel.outages.collectAsState()
 
     var mapController by remember { mutableStateOf<GpsMapController?>(null) }
     var uploadStatusText by remember { mutableStateOf<String?>(null) }
@@ -66,7 +68,12 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit) {
     val driveSyncManager = remember { DriveSyncManager() }
 
     val signInLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        val data = result.data
+        if (data == null) {
+            uploadStatusText = "登入已取消"
+            return@rememberLauncherForActivityResult
+        }
+        val task = GoogleSignIn.getSignedInAccountFromIntent(data)
         scope.launch {
             val account = runCatching { task.result }.getOrNull()
             if (account == null) {
@@ -109,16 +116,25 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit) {
         }
     }
 
-    LaunchedEffect(points, mapController) {
+    LaunchedEffect(points, photos, outages, mapController) {
         val controller = mapController ?: return@LaunchedEffect
         val trusted = points.filter { it.reliability == "TRUSTED" }.sortedBy { it.timestampMs }
         val coords = trusted.map { it.latitude to it.longitude }
-        controller.setRoute(coords)
+        // 上萬點時縮減「地圖顯示」用的座標，避免字串組裝與 native 繪製造成卡頓 / OOM。
+        // 資料庫、GPX / JSON / CSV 匯出仍使用完整資料，不做任何縮減。
+        controller.setRoute(RouteSimplifier.simplify(coords))
         coords.firstOrNull()?.let { controller.setPoints(GpsMapController.SOURCE_START, listOf(it)) }
         coords.lastOrNull()?.let { controller.setPoints(GpsMapController.SOURCE_END, listOf(it)) }
         controller.setPoints(
             GpsMapController.SOURCE_PHOTO,
             photos.mapNotNull { p -> if (p.latitude != null && p.longitude != null) p.latitude!! to p.longitude!! else null }
+        )
+        // GPS 中斷標記：標在「中斷開始前的最後一個可信點」位置（真實資料，不造假點）。
+        controller.setPoints(
+            GpsMapController.SOURCE_OUTAGE,
+            outages.mapNotNull { outage ->
+                trusted.lastOrNull { it.timestampMs <= outage.startTimestampMs } ?: trusted.firstOrNull()
+            }.map { it.latitude to it.longitude }
         )
         controller.fitBounds(coords)
     }

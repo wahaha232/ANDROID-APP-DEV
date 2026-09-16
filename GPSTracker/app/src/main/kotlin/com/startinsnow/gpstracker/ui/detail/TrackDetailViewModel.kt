@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.startinsnow.gpstracker.GpsTrackerApplication
 import com.startinsnow.gpstracker.data.db.PhotoEntity
+import com.startinsnow.gpstracker.data.db.GpsOutageEntity
 import com.startinsnow.gpstracker.data.db.TrackEntity
 import com.startinsnow.gpstracker.data.db.TrackPointEntity
 import com.startinsnow.gpstracker.export.ExportTrackData
@@ -46,6 +47,10 @@ class TrackDetailViewModel(
     val photos: StateFlow<List<PhotoEntity>> = app.trackRepository.observePhotos(trackId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** GPS 中斷區間（給地圖畫出 Signal Lost 標記用）。 */
+    private val _outages = MutableStateFlow<List<GpsOutageEntity>>(emptyList())
+    val outages: StateFlow<List<GpsOutageEntity>> = _outages
+
     private var playbackEngine: TrackPlaybackEngine = TrackPlaybackEngine(emptyList())
 
     private val _playback = MutableStateFlow(PlaybackUiState())
@@ -54,6 +59,9 @@ class TrackDetailViewModel(
     private var tickerJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            runCatching { _outages.value = app.trackRepository.getOutages(trackId) }
+        }
         viewModelScope.launch {
             combine(points, photos) { pts, phs -> pts to phs }.collect { (pts, phs) ->
                 val playbackPoints = pts.sortedBy { it.timestampMs }.map {

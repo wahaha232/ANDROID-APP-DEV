@@ -11,3 +11,8 @@
 *.aab
 !**/releases/*.apk
 !**/releases/*.aab
+
+# 本機建置工具鏈（可攜式 JDK / Android SDK）與建置記錄檔，不進版控
+/.tools/
+**/.tools/
+*.log

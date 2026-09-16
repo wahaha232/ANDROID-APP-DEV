@@ -33,6 +33,13 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE uploadStatus != :uploaded")
     suspend fun getPendingUpload(uploaded: UploadStatus = UploadStatus.UPLOADED): List<TrackEntity>
 
+    /** Auto Cleanup 用：直接由 SQL 篩選（避免把所有 Track 載入記憶體）。 */
+    @Query(
+        "SELECT trackId FROM tracks WHERE status = :status " +
+            "AND COALESCE(endTimeMs, startTimeMs) < :cutoffTimestampMs"
+    )
+    suspend fun getFinishedTrackIdsBefore(status: TrackStatus, cutoffTimestampMs: Long): List<String>
+
     @Query("DELETE FROM tracks WHERE trackId = :trackId")
     suspend fun deleteById(trackId: String)
 

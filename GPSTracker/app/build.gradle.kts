@@ -82,6 +82,12 @@ android {
     }
 }
 
+// Room schema 匯出位置：exportSchema = true 時必須提供，否則 Room 無法產生 schema 檔（未來無法寫 Migration）。
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.incremental", "true")
+}
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")
 

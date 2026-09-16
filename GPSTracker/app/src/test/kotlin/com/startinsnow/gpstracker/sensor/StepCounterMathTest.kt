@@ -60,4 +60,25 @@ class StepCounterMathTest {
         math.onRawCount(10_120L)
         assertEquals(120L, math.currentTrackSteps())
     }
+
+    @Test
+    fun `seeded steps continue accumulating after crash recovery`() {
+        // Crash Recovery（規格 57/83）：重新開始時先 seed 先前的步數，再繼續累加，
+        // 不可以因為 seed 之後重新建立 baseline 就讓先前的步數歸零。
+        val math = StepCounterMath()
+        math.seedAccumulated(500L)
+        math.onRawCount(10_000L) // 重新收到感測器值 → 建立新 baseline
+        assertEquals(620L, math.onRawCount(10_120L))
+    }
+
+    @Test
+    fun `seeded steps survive sensor reset`() {
+        val math = StepCounterMath()
+        math.seedAccumulated(1_000L)
+        math.onRawCount(8_000L)
+        math.onRawCount(8_300L) // +300
+        val afterReboot = math.onRawCount(50L) // 感測器重置
+        assertEquals(1_300L, afterReboot)
+        assertEquals(1_500L, math.onRawCount(250L))
+    }
 }
