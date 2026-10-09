@@ -100,7 +100,9 @@ fun RecordingScreen(
             cameraError = "沒有相機權限，無法拍照"
         }
 
-        if (!hasLocationPermission) {
+        // 必須用「剛更新過的 state 變數」重新判斷，不可用組合期算出的 hasLocationPermission 值，
+        // 否則剛授權成功時可能被誤判成沒有權限（該 val 是舊一次組合的值）。
+        if (!(hasFineLocation || hasCoarseLocation)) {
             TrackingStateHolder.postMessage("需要定位權限才能記錄軌跡，請允許「精確位置」後再試一次")
         } else {
             startOrResumeRecording()
@@ -156,7 +158,7 @@ fun RecordingScreen(
                 hasFineLocation = context.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 hasCoarseLocation = context.hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
                 hasCameraPermission = context.hasPermission(Manifest.permission.CAMERA)
-                if (hasLocationPermission) {
+                if (hasFineLocation || hasCoarseLocation) {
                     startOrResumeRecording()
                 }
             }

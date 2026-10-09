@@ -62,7 +62,6 @@ class TrackingForegroundService : LifecycleService() {
 
     private var activeDurationMs = 0L
     private var activeSegmentStartElapsedMs = 0L
-    private var recordingStartedElapsedMs = 0L
 
     private var distanceMeters = 0.0
     private var maxSpeedMps = 0.0
@@ -70,6 +69,9 @@ class TrackingForegroundService : LifecycleService() {
     private var runningSpeedCount = 0
     private var lastAggregatedLocation: LocationSample? = null
     private var lastMovementSample: LocationSample? = null
+
+    /** 目前開啟中的 Movement 區段模式；暫停/恢復/重設時清為 null，確保恢復後會重新開一段。 */
+    private var lastSegmentMode: MovementMode? = null
     private var gpsPointCount = 0
     private var stepCount = 0L
     private var batteryMode = BatteryMode.NORMAL
@@ -121,8 +123,20 @@ class TrackingForegroundService : LifecycleService() {
         isStarting = true
         TrackingStateHolder.update { it.copy(isStarting = true) }
 
+        // 必須在 startForegroundService() 的 5 秒限制內呼叫 startForeground()，否則系統會直接讓 App 崩潰。
+        // 因此在啟動協程、讀取 DataStore 之前就先同步進入前景服務，不把時限押在 I/O 上。
+        try {
+            startForegroundCompat()
+        } catch (t: Throwable) {
+            isStarting = false
+            TrackingStateHolder.update { it.copy(status = TrackStatus.FINISHED, isStarting = false) }
+            TrackingStateHolder.postMessage("無法啟動前景服務：${t.message ?: t::class.java.simpleName}")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+
         lifecycleScope.launch {
-            var foregroundStarted = false
             try {
                 val settings = app.settingsRepository.settings.first()
                 autoPauseEnabled = settings.autoPauseEnabled
@@ -130,10 +144,6 @@ class TrackingForegroundService : LifecycleService() {
                 batteryMode = BatteryModeResolver.modeFor(
                     BatteryModeResolver.currentBatteryPercent(this@TrackingForegroundService)
                 )
-
-                // 一定要在 startForegroundService 的 5 秒限制內進入前景，否則系統會直接讓 App 崩潰。
-                startForegroundCompat()
-                foregroundStarted = true
 
                 val existingTrack = resumeTrackId?.let { app.trackRepository.getTrack(it) }
                 val track = existingTrack ?: run {
@@ -183,7 +193,6 @@ class TrackingForegroundService : LifecycleService() {
                 }
 
                 activeSegmentStartElapsedMs = SystemClock.elapsedRealtime()
-                recordingStartedElapsedMs = activeSegmentStartElapsedMs
                 locationTracker.qualityManager.startTracking(activeSegmentStartElapsedMs)
                 isPaused = false
                 isAutoPaused = false
@@ -225,7 +234,8 @@ class TrackingForegroundService : LifecycleService() {
                 tickerJob?.cancel()
                 TrackingStateHolder.update { it.copy(status = TrackStatus.FINISHED, isStarting = false) }
                 TrackingStateHolder.postMessage("無法開始記錄：${t.message ?: t::class.java.simpleName}")
-                if (foregroundStarted) stopForeground(STOP_FOREGROUND_REMOVE)
+                // 前景服務已在 startRecording() 開頭同步啟動，這裡要一併關閉，避免殘留。
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
@@ -291,11 +301,8 @@ class TrackingForegroundService : LifecycleService() {
             hasOpenOutage = false
         }
 
-        if (isPaused) {
-            lastMovementSample = filtered.sample
-            return
-        }
-
+        // 即使暫停中也要持續做 Movement 判斷：否則自動暫停後 movementMode 會永遠凍結在
+        // STATIONARY，handleAutoPause() 不會被呼叫，resumeRecording(auto = true) 便永遠不可達。
         // GPS 不是每個點都會回報 speed（室內/Network/剛定位常見 null）。
         // 若直接當成 0 會讓 MovementDetector 一路判定靜止並觸發自動暫停，
         // 因此這裡用「與上一個樣本的位移 / 時間」推算的速度當後備值。
@@ -318,10 +325,15 @@ class TrackingForegroundService : LifecycleService() {
             reliability = filtered.reliability
         )
         val movementResult = movementDetector.addSample(movementSample)
-        if (movementResult.mode != TrackingStateHolder.state.value.movementMode) {
-            app.trackRepository.startMovementSegment(id, movementResult.mode, filtered.sample.timestampMs)
-        }
+        // 先處理自動暫停/恢復：若因移動而自動恢復，isPaused 會在這裡被清為 false，
+        // 之後才會正確建立新的交通模式區段並記錄這個點。
         handleAutoPause(movementResult.mode)
+        // 用獨立的最後區段模式判斷（而非 UI 的 movementMode）：暫停期間 UI 的 movementMode 仍會更新，
+        // 若拿它比較，恢復後若模式剛好相同就不會建立新區段，導致該段時間從模式統計中消失。
+        if (!isPaused && lastSegmentMode != movementResult.mode) {
+            app.trackRepository.startMovementSegment(id, movementResult.mode, filtered.sample.timestampMs)
+            lastSegmentMode = movementResult.mode
+        }
 
         TrackingStateHolder.update {
             it.copy(
@@ -329,6 +341,9 @@ class TrackingForegroundService : LifecycleService() {
                 currentSpeedKmh = GeoMath.msToKmh(effectiveSpeedMps)
             )
         }
+
+        // 暫停中（手動或自動）只更新即時顯示，不落地點位、不累積距離/速度。
+        if (isPaused) return
 
         if (filtered.reliability != PointReliability.TRUSTED) {
             // 低可信度 / 異常點仍寫入資料庫供除錯與 Browser Playback 顯示，但不計入距離/速度聚合。
@@ -349,7 +364,10 @@ class TrackingForegroundService : LifecycleService() {
             GeoMath.distanceMeters(it.latitude, it.longitude, filtered.sample.latitude, filtered.sample.longitude)
         } ?: Double.MAX_VALUE
 
-        val shouldAggregate = anchor == null || timeSinceMs >= plan.minIntervalMs || distanceSince >= plan.minDistanceMeters
+        // minDistanceMeters = 0（靜止模式）代表「不靠距離觸發」，只看時間間隔；
+        // 否則 distanceSince >= 0 會恆真，讓時間門檻在靜止時完全失效。
+        val distanceGatePassed = plan.minDistanceMeters > 0.0 && distanceSince >= plan.minDistanceMeters
+        val shouldAggregate = anchor == null || timeSinceMs >= plan.minIntervalMs || distanceGatePassed
         if (!shouldAggregate) {
             // 取樣策略擋掉的點仍然要落地（Crash Recovery / Playback 完整度），但不計入統計。
             app.trackRepository.appendPoint(filtered, movementResult.mode)
@@ -476,6 +494,13 @@ class TrackingForegroundService : LifecycleService() {
         if (!isPaused || trackId == null) return
         isPaused = false
         isAutoPaused = false
+        // 暫停期間的位移不應計入距離：清掉聚合 anchor，恢復後重新開始一段距離計算，
+        // 避免「暫停→移動很遠→恢復」時把整段跳躍距離累加進來。
+        lastAggregatedLocation = null
+        // 清掉暫停期間累積的靜止計時，否則剛恢復就可能被自動暫停立刻又暫停（manual resume 被吃掉）。
+        stationarySinceElapsedMs = null
+        // 強制恢復後重新開一段 Movement 區段（暫停時已把上一段關閉）。
+        lastSegmentMode = null
         activeSegmentStartElapsedMs = SystemClock.elapsedRealtime()
         val id = trackId
         if (id != null) {
@@ -547,6 +572,7 @@ class TrackingForegroundService : LifecycleService() {
         runningSpeedCount = 0
         lastAggregatedLocation = null
         lastMovementSample = null
+        lastSegmentMode = null
         gpsPointCount = 0
         hasOpenOutage = false
         lastStatsSnapshotElapsedMs = 0L

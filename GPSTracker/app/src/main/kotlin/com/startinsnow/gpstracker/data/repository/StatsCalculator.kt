@@ -39,7 +39,13 @@ object StatsCalculator {
             val segmentDistance = GeoMath.distanceMeters(prev.latitude, prev.longitude, curr.latitude, curr.longitude)
             distance += segmentDistance
 
-            val deltaSeconds = (curr.timestampMs - prev.timestampMs) / 1000.0
+            val deltaMs = if (curr.elapsedRealtimeMs > 0L && prev.elapsedRealtimeMs > 0L) {
+                // 與即時聚合共用 elapsedRealtime 時基，避免系統時間被調整時速度/距離被污染。
+                curr.elapsedRealtimeMs - prev.elapsedRealtimeMs
+            } else {
+                curr.timestampMs - prev.timestampMs
+            }
+            val deltaSeconds = deltaMs / 1000.0
             val impliedSpeed = if (deltaSeconds > 0) segmentDistance / deltaSeconds else 0.0
             val reportedSpeed = curr.speedMps?.toDouble()
             val speed = reportedSpeed ?: impliedSpeed

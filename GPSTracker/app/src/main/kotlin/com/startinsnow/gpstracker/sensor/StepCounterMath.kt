@@ -17,9 +17,11 @@ class StepCounterMath {
     fun onRawCount(rawCount: Long): Long {
         val currentBaseline = baseline
         if (currentBaseline == null) {
+            // 第一次收到感測器值：建立 baseline。必須回傳「已 seed 的累積步數」而非固定 0，
+            // 否則 Crash Recovery 續錄時的第一筆事件會把先前累積的步數歸零（規格 57/83）。
             baseline = rawCount
             lastRawCount = rawCount
-            return 0L
+            return accumulatedSteps.coerceAtLeast(0L)
         }
 
         if (rawCount < lastRawCount) {
@@ -52,7 +54,7 @@ class StepCounterMath {
     }
 
     fun currentTrackSteps(): Long {
-        val currentBaseline = baseline ?: return 0L
+        val currentBaseline = baseline ?: return accumulatedSteps.coerceAtLeast(0L)
         return (accumulatedSteps + (lastRawCount - currentBaseline)).coerceAtLeast(0L)
     }
 }

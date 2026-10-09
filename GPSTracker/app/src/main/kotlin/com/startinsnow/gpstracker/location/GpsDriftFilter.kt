@@ -31,7 +31,9 @@ class GpsDriftFilter {
     private var pendingHighSpeed: LocationSample? = null
 
     fun evaluate(sample: LocationSample): FilteredLocation {
-        val quality = classifyQuality(sample.accuracyMeters)
+        // 使用 Provider 感知的分類：Network/Passive 來源精度天生較差，
+        // 即使 accuracy 數字漂亮也不該顯示成 GOOD（與 LocationQualityManager.accuracyLabel 一致）。
+        val quality = LocationQualityManager.qualityFor(sample.provider, sample.accuracyMeters)
         val previous = lastTrusted
 
         if (previous == null) {

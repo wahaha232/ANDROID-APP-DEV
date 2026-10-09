@@ -72,6 +72,22 @@ class StepCounterMathTest {
     }
 
     @Test
+    fun `first sensor event after seed reports seeded steps instead of zero`() {
+        // Regression：建立 baseline 的第一筆事件必須回傳被 seed 的累積步數，
+        // 否則 Service 會先把 stepCount 覆寫成 0，造成「續錄步數被歸零」。
+        val math = StepCounterMath()
+        math.seedAccumulated(500L)
+        assertEquals(500L, math.onRawCount(10_000L))
+    }
+
+    @Test
+    fun `currentTrackSteps reflects seeded value before any sensor event`() {
+        val math = StepCounterMath()
+        math.seedAccumulated(750L)
+        assertEquals(750L, math.currentTrackSteps())
+    }
+
+    @Test
     fun `seeded steps survive sensor reset`() {
         val math = StepCounterMath()
         math.seedAccumulated(1_000L)

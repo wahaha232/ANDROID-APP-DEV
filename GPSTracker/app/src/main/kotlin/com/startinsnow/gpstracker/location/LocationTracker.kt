@@ -43,8 +43,10 @@ class LocationTracker(private val context: Context) {
         networkMinTimeMs: Long = NETWORK_MIN_TIME_MS,
         networkMinDistanceM: Float = NETWORK_MIN_DISTANCE_M
     ): Flow<FilteredLocation> = callbackFlow {
+        // 只重設漂移過濾器。「從未收到定位」的計時基準是由 TrackingForegroundService
+        // 在 startRecording() 呼叫 qualityManager.startTracking() 設定的，這裡若再呼叫
+        // qualityManager.reset() 會把基準清成 null，導致 GPS Lost / 尚未收到定位偵測永久失效。
         driftFilter.reset()
-        qualityManager.reset()
 
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
@@ -101,7 +103,11 @@ class LocationTracker(private val context: Context) {
                 runCatching { locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) }.getOrNull()
             } else null
         )
-        return candidates.minByOrNull { it.accuracy }?.toLocationSample(trackId = "")
+        // 未設定 accuracy 的 Location，其 getAccuracy() 回傳 0，會讓 minByOrNull 誤選最不可靠的點；
+        // 因此沒有 accuracy 的候選一律排到最後，避免用「看似最準」的無效值當起始點。
+        val best = candidates.minByOrNull { if (it.hasAccuracy()) it.accuracy else Float.MAX_VALUE }
+            ?: candidates.firstOrNull()
+        return best?.toLocationSample(trackId = "")
     }
 
     fun isAnyProviderEnabled(): Boolean = runCatching {

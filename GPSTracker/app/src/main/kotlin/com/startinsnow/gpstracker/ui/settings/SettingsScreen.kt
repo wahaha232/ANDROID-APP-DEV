@@ -11,6 +11,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +25,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.startinsnow.gpstracker.data.prefs.GpsMode
 import com.startinsnow.gpstracker.ui.map.OfflineDownloadProgress
 import com.startinsnow.gpstracker.ui.map.OfflineMapManager
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @Composable
@@ -32,6 +34,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var offlineMapStatus by remember { mutableStateOf<String?>(null) }
+    var offlineDownloadJob by remember { mutableStateOf<Job?>(null) }
+
+    // 離開設定畫面時取消仍在進行的離線地圖下載，避免背景 collector 洩漏。
+    DisposableEffect(Unit) {
+        onDispose { offlineDownloadJob?.cancel() }
+    }
 
     Scaffold { padding ->
         Column(
@@ -49,8 +57,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
             SettingRow("上傳成功後刪除本機資料", settings.deleteLocalAfterUploadEnabled) { viewModel.setDeleteAfterUpload(it) }
             SettingRow("離線地圖（下載台灣本島區域）", settings.offlineMapEnabled) { enabled ->
                 viewModel.setOfflineMap(enabled)
+                // 先取消舊的下載，避免反覆開關時同時跑多個 collector 而重複下載。
+                offlineDownloadJob?.cancel()
                 if (enabled) {
-                    scope.launch {
+                    offlineMapStatus = "下載中… 0%"
+                    offlineDownloadJob = scope.launch {
                         OfflineMapManager.downloadDefaultRegion(context).collect { progress ->
                             offlineMapStatus = when (progress) {
                                 is OfflineDownloadProgress.InProgress -> "下載中… ${progress.percent}%"
