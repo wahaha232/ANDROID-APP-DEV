@@ -1,21 +1,22 @@
 # GPS Tracker 網頁儀表板
 
-純靜態（前端）儀表板，會讀取本資料夾 `data/` 內的紀錄並顯示地圖、分析與圖表。
+純靜態（前端）儀表板，讀取本資料夾 `data/` 內的紀錄，顯示地圖、分析圖表、3D 回放與 GPX 匯出。
 全程 **0 元、免金鑰**：圖資使用免費的 Esri 衛星影像與 AWS Terrarium DEM（MapLibre GL JS）。
 
-## 一、啟用 GitHub Pages（一次性）
-1. 到 GitHub repo → **Settings → Pages**。
-2. **Build and deployment → Source** 選 **GitHub Actions**。
-3. 推送後（或手動執行 workflow「Deploy GPS Tracker Web」）即會部署。
-4. 網址：`https://<你的帳號>.github.io/<repo>/`（本專案為 `https://wahaha232.github.io/ANDROID-APP-DEV/`）。
+## 網址
+- 儀表板：`https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/`
+- 3D 回放：`.../gpstracker-web/flythrough.html?track=<trackId>`
 
-## 二、建立上傳用的 Token（一次性）
+> 本 repo 的 GitHub Pages 已啟用並以「分支 main / 根目錄」發佈，因此本資料夾會自動被
+> 發佈到 `/gpstracker-web/`。**不需要**額外設定 Pages（也移除了先前的 GitHub Actions Pages workflow，避免兩種來源互相覆蓋）。
+
+## 一、建立上傳用的 Token（一次性）
 1. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**。
-2. **Repository access**：只選 `ANDROID-APP-DEV`（本 repo）。
+2. **Repository access**：只選 `ANDROID-APP-DEV`。
 3. **Permissions → Repository permissions → Contents: Read and write**。
 4. 產生後複製 token，貼到 App：**設定 → 網頁儀表板 → GitHub Token**。
 
-## 三、App 內設定
+## 二、App 內設定
 - 啟用「自動上傳到網頁」
 - 儲存庫：`wahaha232/ANDROID-APP-DEV`
 - 分支：`main`
@@ -25,10 +26,10 @@
 
 記錄結束後，App 會自動把該筆紀錄寫成 `data/<trackId>.json` 並更新 `data/manifest.json`。
 
-## 四、手動測試
-- 在任一趟紀錄的明細頁按「上傳到網頁」。
+## 三、手動測試
+- 在任一趟紀錄的明細頁按「上傳到網頁儀表板」。
 - 成功後重新整理儀表板即可看到。
 
 ## 注意
-- 資料會以 JSON 形式存在 repo（公開）。若不想公開，請改用需要後端的方案（例如 Cloudflare Worker）。
-- 儀表板以 `raw.githubusercontent.com` 讀取資料，最即時；Pages 只負責放前端程式。
+- 資料以 JSON 形式存在 repo（公開）。若不想公開，請改用需要後端的方案（例如 Cloudflare Worker）。
+- 儀表板即時以 `raw.githubusercontent.com` 讀取資料；GitHub Pages 只負責放前端程式（約 1 分鐘 CDN 快取）。

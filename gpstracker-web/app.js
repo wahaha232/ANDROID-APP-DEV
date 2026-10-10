@@ -185,6 +185,23 @@
     drawChart($("speedChart"), pts.map(function (p) { return p[3] || 0; }), "#2F6BFF", "km/h");
     drawChart($("altChart"), pts.map(function (p) { return p[2] || 0; }), "#00E676", "m");
 
+    var actions = $("detailActions");
+    actions.innerHTML = "";
+    var a3d = document.createElement("a");
+    a3d.className = "btn";
+    a3d.textContent = "▶ 3D 回放";
+    a3d.href = "flythrough.html?track=" + encodeURIComponent(t.trackId) +
+      "&repo=" + encodeURIComponent(CONFIG.repo) +
+      "&branch=" + encodeURIComponent(CONFIG.branch) +
+      "&data=" + encodeURIComponent(CONFIG.dataPath);
+    a3d.target = "_blank";
+    actions.appendChild(a3d);
+    var gpxBtn = document.createElement("button");
+    gpxBtn.className = "btn secondary";
+    gpxBtn.textContent = "⬇ 下載 GPX";
+    gpxBtn.onclick = function () { downloadGpx(t); };
+    actions.appendChild(gpxBtn);
+
     var strip = $("photoStrip");
     strip.innerHTML = "";
     if ((t.photos || []).length) {
@@ -221,6 +238,29 @@
     ctx.fillStyle = "#9aa7bd"; ctx.font = "11px sans-serif";
     ctx.fillText(max.toFixed(0) + " " + unit, pad, 12);
     ctx.fillText(min.toFixed(0), pad, h - 3);
+  }
+
+  function downloadGpx(t) {
+    var pts = t.points || [];
+    var baseMs = t.startTimeMs || 0;
+    var gpx = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<gpx version="1.1" creator="GPS Tracker" xmlns="http://www.topografix.com/GPX/1/1">\n' +
+      '<metadata><name>' + fmtDate(t.startTimeMs) + '</name><time>' + new Date(baseMs).toISOString() + '</time></metadata>\n' +
+      '<trk><name>' + fmtDate(t.startTimeMs) + '</name><trkseg>\n';
+    pts.forEach(function (p) {
+      var time = new Date(baseMs + (p[4] || 0) * 1000).toISOString();
+      gpx += '<trkpt lat="' + p[1] + '" lon="' + p[0] + '"><ele>' + (p[2] || 0) + '</ele><time>' + time + '</time></trkpt>\n';
+    });
+    gpx += '</trkseg></trk></gpx>\n';
+    var blob = new Blob([gpx], { type: "application/gpx+xml" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = t.trackId + ".gpx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function renderAllRoutes() {

@@ -179,7 +179,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     checked = settings.webWifiOnly
                 ) { viewModel.setWebWifiOnly(it) }
                 Text(
-                    "設定好儲存庫、分支、路徑與 token 後，每次記錄結束會自動上傳。\n網頁網址：https://<你的帳號>.github.io/<repo>/",
+                    "設定好儲存庫、分支、路徑與 token 後，每次記錄結束會自動上傳。\n網頁網址：https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp)
