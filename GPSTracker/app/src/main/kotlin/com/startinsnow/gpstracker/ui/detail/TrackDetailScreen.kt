@@ -70,6 +70,7 @@ import com.startinsnow.gpstracker.core.model.UploadStatus
 import com.startinsnow.gpstracker.export.TrackZipExporter
 import com.startinsnow.gpstracker.sync.DriveSyncManager
 import com.startinsnow.gpstracker.sync.GoogleAuthManager
+import com.startinsnow.gpstracker.sync.WebDashboardUploader
 import com.startinsnow.gpstracker.ui.components.InfoBanner
 import com.startinsnow.gpstracker.ui.components.MetricCard
 import com.startinsnow.gpstracker.ui.components.formatDuration
@@ -330,6 +331,42 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                     Spacer(Modifier.width(6.dp))
                     Text("上傳")
                 }
+            }
+
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val currentSettings = app.settingsRepository.settings.first()
+                        if (currentSettings.githubToken.isBlank()) {
+                            uploadStatusText = "請先在「設定 → 網頁儀表板」填入 GitHub Token"
+                            return@launch
+                        }
+                        val data = viewModel.buildExportData()
+                        if (data == null) {
+                            uploadStatusText = "沒有可上傳的資料"
+                            return@launch
+                        }
+                        uploadStatusText = "上傳到網頁中…"
+                        val payload = WebDashboardUploader.buildPayload(data)
+                        WebDashboardUploader().uploadTrack(
+                            token = currentSettings.githubToken,
+                            repo = currentSettings.webRepo,
+                            branch = currentSettings.webBranch,
+                            dataPath = currentSettings.webDataPath,
+                            trackId = trackId,
+                            payload = payload
+                        ).onSuccess {
+                            uploadStatusText = "已上傳到網頁儀表板"
+                        }.onFailure {
+                            uploadStatusText = "網頁上傳失敗：${it.message}"
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("上傳到網頁儀表板")
             }
 
             OutlinedButton(

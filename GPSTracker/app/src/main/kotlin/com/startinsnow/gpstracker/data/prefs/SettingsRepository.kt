@@ -20,7 +20,14 @@ data class AppSettings(
     val wifiOnlySync: Boolean = true,
     val dataRetentionDays: Int = 0, // 0 = 永久保留
     val deleteLocalAfterUploadEnabled: Boolean = false,
-    val offlineMapEnabled: Boolean = false
+    val offlineMapEnabled: Boolean = false,
+    // 網頁儀表板（GitHub Pages）：記錄結束後自動上傳 JSON。
+    val webUploadEnabled: Boolean = false,
+    val webRepo: String = "wahaha232/ANDROID-APP-DEV",
+    val webBranch: String = "main",
+    val webDataPath: String = "gpstracker-web/data",
+    val githubToken: String = "",
+    val webWifiOnly: Boolean = true
 )
 
 /** 對應規格「64. 設定」。只放置真正有實作對應功能的設定項，避免「假設定」。 */
@@ -34,6 +41,12 @@ class SettingsRepository(private val context: Context) {
         val RETENTION_DAYS = intPreferencesKey("data_retention_days")
         val DELETE_AFTER_UPLOAD = booleanPreferencesKey("delete_local_after_upload")
         val OFFLINE_MAP = booleanPreferencesKey("offline_map_enabled")
+        val WEB_UPLOAD = booleanPreferencesKey("web_upload_enabled")
+        val WEB_REPO = stringPreferencesKey("web_repo")
+        val WEB_BRANCH = stringPreferencesKey("web_branch")
+        val WEB_DATA_PATH = stringPreferencesKey("web_data_path")
+        val GITHUB_TOKEN = stringPreferencesKey("github_token")
+        val WEB_WIFI_ONLY = booleanPreferencesKey("web_wifi_only")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -44,7 +57,13 @@ class SettingsRepository(private val context: Context) {
             wifiOnlySync = prefs[Keys.WIFI_ONLY] ?: true,
             dataRetentionDays = prefs[Keys.RETENTION_DAYS] ?: 0,
             deleteLocalAfterUploadEnabled = prefs[Keys.DELETE_AFTER_UPLOAD] ?: false,
-            offlineMapEnabled = prefs[Keys.OFFLINE_MAP] ?: false
+            offlineMapEnabled = prefs[Keys.OFFLINE_MAP] ?: false,
+            webUploadEnabled = prefs[Keys.WEB_UPLOAD] ?: false,
+            webRepo = prefs[Keys.WEB_REPO] ?: "wahaha232/ANDROID-APP-DEV",
+            webBranch = prefs[Keys.WEB_BRANCH] ?: "main",
+            webDataPath = prefs[Keys.WEB_DATA_PATH] ?: "gpstracker-web/data",
+            githubToken = prefs[Keys.GITHUB_TOKEN] ?: "",
+            webWifiOnly = prefs[Keys.WEB_WIFI_ONLY] ?: true
         )
     }
 
@@ -55,4 +74,11 @@ class SettingsRepository(private val context: Context) {
     suspend fun setDataRetentionDays(days: Int) = context.dataStore.edit { it[Keys.RETENTION_DAYS] = days }
     suspend fun setDeleteLocalAfterUpload(enabled: Boolean) = context.dataStore.edit { it[Keys.DELETE_AFTER_UPLOAD] = enabled }
     suspend fun setOfflineMapEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.OFFLINE_MAP] = enabled }
+
+    suspend fun setWebUploadEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.WEB_UPLOAD] = enabled }
+    suspend fun setWebRepo(value: String) = context.dataStore.edit { it[Keys.WEB_REPO] = value }
+    suspend fun setWebBranch(value: String) = context.dataStore.edit { it[Keys.WEB_BRANCH] = value }
+    suspend fun setWebDataPath(value: String) = context.dataStore.edit { it[Keys.WEB_DATA_PATH] = value }
+    suspend fun setGithubToken(value: String) = context.dataStore.edit { it[Keys.GITHUB_TOKEN] = value }
+    suspend fun setWebWifiOnly(enabled: Boolean) = context.dataStore.edit { it[Keys.WEB_WIFI_ONLY] = enabled }
 }

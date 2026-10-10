@@ -20,12 +20,14 @@ import com.startinsnow.gpstracker.core.model.PointReliability
 import com.startinsnow.gpstracker.core.model.TrackStatus
 import com.startinsnow.gpstracker.core.geo.GeoMath
 import com.startinsnow.gpstracker.data.prefs.GpsMode
+import com.startinsnow.gpstracker.export.ExportTrackData
 import com.startinsnow.gpstracker.location.AdaptiveSamplingPolicy
 import com.startinsnow.gpstracker.location.LocationQualityManager
 import com.startinsnow.gpstracker.location.LocationTracker
 import com.startinsnow.gpstracker.movement.MovementDetector
 import com.startinsnow.gpstracker.movement.MovementSample
 import com.startinsnow.gpstracker.sensor.StepCounterManager
+import com.startinsnow.gpstracker.sync.WebDashboardUploader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -557,8 +559,45 @@ class TrackingForegroundService : LifecycleService() {
             }.onFailure {
                 TrackingStateHolder.postMessage("結束記錄時發生錯誤：${it.message ?: it::class.java.simpleName}")
             }
+            // 記錄結束後自動上傳到網頁儀表板（設定有開啟且有 token 才做）。
+            runCatching { uploadToWebDashboard(id) }
+                .onFailure { TrackingStateHolder.postMessage("網頁上傳失敗：${it.message ?: it::class.java.simpleName}") }
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
+        }
+    }
+
+    /**
+     * 記錄結束後上傳到 GitHub Pages 網頁儀表板。失敗不影響本機資料，
+     * 只透過 TrackingStateHolder 回報訊息（本機優先，雲端為加分項）。
+     */
+    private suspend fun uploadToWebDashboard(trackId: String) {
+        val settings = app.settingsRepository.settings.first()
+        if (!settings.webUploadEnabled || settings.githubToken.isBlank() || settings.webRepo.isBlank()) return
+        if (settings.webWifiOnly && !WebDashboardUploader.isOnWifi(this)) {
+            TrackingStateHolder.postMessage("已略過網頁上傳（設定為僅 Wi-Fi）")
+            return
+        }
+        val track = app.trackRepository.getTrack(trackId) ?: return
+        val data = ExportTrackData(
+            track = track,
+            points = app.trackRepository.getPoints(trackId),
+            photos = app.trackRepository.getPhotos(trackId),
+            segments = app.trackRepository.getSegments(trackId),
+            outages = app.trackRepository.getOutages(trackId)
+        )
+        val payload = WebDashboardUploader.buildPayload(data)
+        WebDashboardUploader().uploadTrack(
+            token = settings.githubToken,
+            repo = settings.webRepo,
+            branch = settings.webBranch,
+            dataPath = settings.webDataPath,
+            trackId = trackId,
+            payload = payload
+        ).onSuccess {
+            TrackingStateHolder.postMessage("已上傳到網頁儀表板")
+        }.onFailure {
+            TrackingStateHolder.postMessage("網頁上傳失敗：${it.message ?: it::class.java.simpleName}")
         }
     }
 

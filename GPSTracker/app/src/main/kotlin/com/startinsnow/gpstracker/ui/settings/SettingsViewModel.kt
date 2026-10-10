@@ -24,4 +24,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setRetentionDays(days: Int) = viewModelScope.launch { app.settingsRepository.setDataRetentionDays(days) }
     fun setDeleteAfterUpload(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setDeleteLocalAfterUpload(enabled) }
     fun setOfflineMap(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setOfflineMapEnabled(enabled) }
+
+    fun setWebUpload(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setWebUploadEnabled(enabled) }
+    fun setWebRepo(value: String) = viewModelScope.launch { app.settingsRepository.setWebRepo(value) }
+    fun setWebBranch(value: String) = viewModelScope.launch { app.settingsRepository.setWebBranch(value) }
+    fun setWebDataPath(value: String) = viewModelScope.launch { app.settingsRepository.setWebDataPath(value) }
+    fun setGithubToken(value: String) = viewModelScope.launch { app.settingsRepository.setGithubToken(value) }
+    fun setWebWifiOnly(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setWebWifiOnly(enabled) }
 }

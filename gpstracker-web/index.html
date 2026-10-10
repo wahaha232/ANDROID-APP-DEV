@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GPS Tracker 紀錄儀表板</title>
+  <link href="vendor/maplibre-gl.css" rel="stylesheet" />
+  <link href="style.css" rel="stylesheet" />
+  <script src="vendor/maplibre-gl.js"></script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">🛰️</span>
+      <div>
+        <h1>GPS Tracker 紀錄</h1>
+        <div id="summary" class="summary">載入中…</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <label class="toggle"><input type="checkbox" id="showAll" /> 顯示全部軌跡</label>
+    </div>
+  </header>
+
+  <main>
+    <aside id="sidebar">
+      <div class="filters">
+        <input id="search" type="search" placeholder="搜尋日期或模式…" />
+        <select id="modeFilter">
+          <option value="">全部模式</option>
+        </select>
+      </div>
+      <ul id="trackList"></ul>
+      <div id="listEmpty" class="empty">尚無紀錄</div>
+    </aside>
+
+    <section id="content">
+      <div id="map"></div>
+      <div id="detail" class="detail hidden">
+        <div class="detail-head">
+          <h2 id="detailTitle">—</h2>
+          <button id="closeDetail" class="icon-btn">✕</button>
+        </div>
+        <div id="statGrid" class="stat-grid"></div>
+        <div class="chart-block">
+          <div class="chart-title">速度 (km/h)</div>
+          <canvas id="speedChart" height="140"></canvas>
+        </div>
+        <div class="chart-block">
+          <div class="chart-title">海拔 (m)</div>
+          <canvas id="altChart" height="140"></canvas>
+        </div>
+        <div id="photoStrip" class="photo-strip"></div>
+      </div>
+      <div id="hint" class="hint">← 選擇左側紀錄以查看分析，或勾選「顯示全部軌跡」。</div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -14,6 +14,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -30,6 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.startinsnow.gpstracker.data.prefs.GpsMode
@@ -157,6 +160,31 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     }
                 }
             }
+
+            SettingsSection(title = "網頁儀表板（GitHub Pages）") {
+                SwitchRow(
+                    title = "自動上傳到網頁",
+                    subtitle = "記錄結束後，把該筆紀錄上傳到 GitHub repo 供網頁讀取",
+                    checked = settings.webUploadEnabled
+                ) { viewModel.setWebUpload(it) }
+                SectionDivider()
+                SettingsTextField("GitHub 儲存庫 (owner/repo)", settings.webRepo) { viewModel.setWebRepo(it) }
+                SettingsTextField("分支", settings.webBranch) { viewModel.setWebBranch(it) }
+                SettingsTextField("資料夾路徑", settings.webDataPath) { viewModel.setWebDataPath(it) }
+                SettingsTextField("GitHub Token（fine-grained PAT）", settings.githubToken, isSecret = true) { viewModel.setGithubToken(it) }
+                SectionDivider()
+                SwitchRow(
+                    title = "僅限 Wi-Fi 上傳",
+                    subtitle = "避免使用行動網路流量",
+                    checked = settings.webWifiOnly
+                ) { viewModel.setWebWifiOnly(it) }
+                Text(
+                    "設定好儲存庫、分支、路徑與 token 後，每次記錄結束會自動上傳。\n網頁網址：https://<你的帳號>.github.io/<repo>/",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         }
     }
 }
@@ -200,5 +228,24 @@ private fun SwitchRow(
             )
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun SettingsTextField(
+    title: String,
+    value: String,
+    isSecret: Boolean = false,
+    onValueChange: (String) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            singleLine = true,
+            visualTransformation = if (isSecret) PasswordVisualTransformation() else VisualTransformation.None
+        )
     }
 }
