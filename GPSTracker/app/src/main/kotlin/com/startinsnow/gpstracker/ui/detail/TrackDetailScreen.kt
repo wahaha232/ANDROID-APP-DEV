@@ -3,18 +3,50 @@ package com.startinsnow.gpstracker.ui.detail
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -23,7 +55,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -34,6 +69,9 @@ import com.startinsnow.gpstracker.core.model.UploadStatus
 import com.startinsnow.gpstracker.export.TrackZipExporter
 import com.startinsnow.gpstracker.sync.DriveSyncManager
 import com.startinsnow.gpstracker.sync.GoogleAuthManager
+import com.startinsnow.gpstracker.ui.components.InfoBanner
+import com.startinsnow.gpstracker.ui.components.MetricCard
+import com.startinsnow.gpstracker.ui.components.formatDuration
 import com.startinsnow.gpstracker.ui.map.GpsMapController
 import com.startinsnow.gpstracker.ui.map.GpsMapView
 import kotlinx.coroutines.flow.first
@@ -45,6 +83,13 @@ private fun isOnWifi(context: android.content.Context): Boolean {
     val capabilities = cm.getNetworkCapabilities(network) ?: return false
     return capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
 }
+
+private data class StatItem(
+    val icon: ImageVector,
+    val value: String,
+    val label: String,
+    val unit: String? = null
+)
 
 @Composable
 fun TrackDetailScreen(trackId: String, onBack: () -> Unit) {
@@ -144,34 +189,100 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit) {
         mapController?.setPlaybackMarker(frame.latitude, frame.longitude)
     }
 
-    Scaffold { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            GpsMapView(modifier = Modifier.fillMaxWidth().height(280.dp)) { controller -> mapController = controller }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(track?.let { "${it.dominantMode.emoji} 軌跡詳情" } ?: "軌跡詳情", style = MaterialTheme.typography.titleLarge) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+                    .clip(MaterialTheme.shapes.large)
+            ) {
+                GpsMapView(modifier = Modifier.fillMaxSize()) { controller -> mapController = controller }
+            }
 
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                track?.let { t ->
-                    Text("${t.dominantMode.emoji} ${"%.2f".format(t.distanceMeters / 1000.0)} km", style = MaterialTheme.typography.titleLarge)
-                    Text("平均 ${"%.1f".format(t.avgSpeedMps * 3.6)} km/h ・ 最高 ${"%.1f".format(t.maxSpeedMps * 3.6)} km/h")
-                    Text("${t.stepCount} steps ・ ${t.photoCount} photos ・ ${t.gpsPointCount} GPS points")
-                    Text("上傳狀態：${t.uploadStatus.name}")
+            track?.let { t ->
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        "%.2f".format(t.distanceMeters / 1000.0),
+                        style = MaterialTheme.typography.displaySmall
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "km",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
                 }
 
-                Text("播放：${formatDuration(playback.elapsedMs)} / ${formatDuration(playback.totalDurationMs)}")
-                Slider(
-                    value = if (playback.totalDurationMs > 0) playback.elapsedMs.toFloat() / playback.totalDurationMs else 0f,
-                    onValueChange = { fraction -> viewModel.seekTo((fraction * playback.totalDurationMs).toLong()) }
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { viewModel.play() }) { Text("▶") }
-                    Button(onClick = { viewModel.pause() }) { Text("⏸") }
-                    Button(onClick = { viewModel.stop() }) { Text("⏹") }
-                    listOf(1.0, 2.0, 5.0, 10.0, 20.0).forEach { speed ->
-                        OutlinedButton(onClick = { viewModel.setSpeedMultiplier(speed) }) { Text("${speed.toInt()}×") }
+                val rows = remember(t) {
+                    listOf(
+                        StatItem(Icons.Filled.Timer, formatDuration(t.durationMs), "持續時間"),
+                        StatItem(Icons.Filled.Speed, "%.1f".format(t.avgSpeedMps * 3.6), "平均速度", "km/h"),
+                        StatItem(Icons.Filled.Speed, "%.1f".format(t.maxSpeedMps * 3.6), "最高速度", "km/h"),
+                        StatItem(Icons.Filled.DirectionsWalk, t.stepCount.toString(), "步數"),
+                        StatItem(Icons.Filled.PhotoCamera, t.photoCount.toString(), "照片"),
+                        StatItem(Icons.Filled.MyLocation, t.gpsPointCount.toString(), "定位點"),
+                        StatItem(Icons.Filled.TrendingUp, "%.0f".format(t.totalAscentMeters), "總爬升", "m"),
+                        StatItem(Icons.Filled.TrendingDown, "%.0f".format(t.totalDescentMeters), "總下降", "m")
+                    ).chunked(2)
+                }
+                rows.forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowItems.forEach { item ->
+                            MetricCard(
+                                icon = item.icon,
+                                value = item.value,
+                                label = item.label,
+                                unit = item.unit,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (rowItems.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
+            }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = {
+            PlaybackCard(
+                isPlaying = playback.isPlaying,
+                elapsedMs = playback.elapsedMs,
+                totalDurationMs = playback.totalDurationMs,
+                speedMultiplier = playback.speedMultiplier,
+                onSeek = { fraction -> viewModel.seekTo((fraction * playback.totalDurationMs).toLong()) },
+                onPlayPause = { if (playback.isPlaying) viewModel.pause() else viewModel.play() },
+                onStop = { viewModel.stop() },
+                onSpeed = { viewModel.setSpeedMultiplier(it) }
+            )
+
+            uploadStatusText?.let { text ->
+                InfoBanner(text = text, color = MaterialTheme.colorScheme.primary)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = {
                         scope.launch {
                             val zip = viewModel.buildExportZip()
                             if (zip != null) {
@@ -184,9 +295,16 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit) {
                                 context.startActivity(android.content.Intent.createChooser(intent, "分享 GPS TRACKER 匯出檔"))
                             }
                         }
-                    }) { Text("匯出 / 分享") }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("匯出")
+                }
 
-                    OutlinedButton(onClick = {
+                OutlinedButton(
+                    onClick = {
                         scope.launch {
                             val currentSettings = app.settingsRepository.settings.first()
                             if (!currentSettings.driveSyncEnabled) {
@@ -195,23 +313,79 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit) {
                             }
                             signInLauncher.launch(authManager.signInIntent())
                         }
-                    }) { Text("上傳 Google Drive") }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("上傳")
                 }
-                uploadStatusText?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            }
 
-                OutlinedButton(onClick = {
+            OutlinedButton(
+                onClick = {
                     viewModel.deleteTrack()
                     onBack()
-                }) { Text("刪除這筆紀錄") }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("刪除這筆紀錄")
             }
         }
     }
 }
 
-private fun formatDuration(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val h = totalSeconds / 3600
-    val m = (totalSeconds % 3600) / 60
-    val s = totalSeconds % 60
-    return "%02d:%02d:%02d".format(h, m, s)
+@Composable
+private fun PlaybackCard(
+    isPlaying: Boolean,
+    elapsedMs: Long,
+    totalDurationMs: Long,
+    speedMultiplier: Double,
+    onSeek: (Float) -> Unit,
+    onPlayPause: () -> Unit,
+    onStop: () -> Unit,
+    onSpeed: (Double) -> Unit
+) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("軌跡回放", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "${formatDuration(elapsedMs)} / ${formatDuration(totalDurationMs)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Slider(
+                value = if (totalDurationMs > 0) elapsedMs.toFloat() / totalDurationMs else 0f,
+                onValueChange = onSeek
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilledTonalButton(onClick = onPlayPause) {
+                    Icon(
+                        if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = null
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (isPlaying) "暫停" else "播放")
+                }
+                Button(onClick = onStop) {
+                    Icon(Icons.Filled.Stop, contentDescription = null)
+                }
+            }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(listOf(1.0, 2.0, 5.0, 10.0, 20.0)) { speed ->
+                    FilterChip(
+                        selected = speedMultiplier == speed,
+                        onClick = { onSpeed(speed) },
+                        label = { Text("${speed.toInt()}×") }
+                    )
+                }
+            }
+        }
+    }
 }

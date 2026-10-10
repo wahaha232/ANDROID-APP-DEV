@@ -8,18 +8,40 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -30,9 +52,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -40,6 +65,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.startinsnow.gpstracker.core.model.PhotoType
 import com.startinsnow.gpstracker.core.model.TrackStatus
 import com.startinsnow.gpstracker.service.TrackingStateHolder
+import com.startinsnow.gpstracker.ui.components.InfoBanner
+import com.startinsnow.gpstracker.ui.components.StatusChip
+import com.startinsnow.gpstracker.ui.components.formatDuration
+import com.startinsnow.gpstracker.ui.theme.gpsQualityColor
 import kotlinx.coroutines.launch
 
 private enum class PhotoPromptStage { NONE, START, END }
@@ -50,6 +79,7 @@ private fun Context.hasPermission(permission: String): Boolean =
 @Composable
 fun RecordingScreen(
     onFinished: (trackId: String?) -> Unit,
+    onClose: () -> Unit = {},
     resumeTrackId: String? = null,
     viewModel: RecordingViewModel = viewModel()
 ) {
@@ -167,81 +197,159 @@ fun RecordingScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    Scaffold { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (hasCameraPermission) {
-                AndroidView(
-                    modifier = Modifier.fillMaxWidth().height(180.dp),
-                    factory = { ctx ->
-                        PreviewView(ctx).also { previewView ->
-                            viewModel.photoManager.bindCamera(lifecycleOwner, previewView) { result ->
-                                cameraReady = result.isSuccess
-                                cameraError = result.exceptionOrNull()?.let {
-                                    "相機無法使用：${it.message ?: it::class.java.simpleName}"
-                                }
-                            }
-                        }
+    Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        when (state.status) {
+                            TrackStatus.PAUSED -> "已暫停"
+                            else -> "記錄中"
+                        },
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "收起")
                     }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            )
+        },
+        bottomBar = {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    FilledTonalButton(
+                        onClick = {
+                            if (state.status == TrackStatus.PAUSED) viewModel.resumeRecording() else viewModel.pauseRecording()
+                        },
+                        modifier = Modifier.weight(1f).height(54.dp)
+                    ) {
+                        Icon(
+                            if (state.status == TrackStatus.PAUSED) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                            contentDescription = null
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (state.status == TrackStatus.PAUSED) "繼續" else "暫停")
+                    }
+                    Button(
+                        onClick = { photoPromptStage = PhotoPromptStage.END },
+                        modifier = Modifier.weight(1f).height(54.dp)
+                    ) {
+                        Icon(Icons.Filled.Stop, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("結束")
+                    }
+                }
+            }
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                StatusChip(
+                    text = state.accuracyLabel,
+                    color = gpsQualityColor(state.gpsQuality)
+                )
+                StatusChip(
+                    text = "${state.movementMode.emoji} ${state.movementMode.name}",
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
-            Text("${state.movementMode.emoji} ${state.movementMode.name}", style = MaterialTheme.typography.headlineSmall)
-            Text("${"%.1f".format(state.currentSpeedKmh)} km/h")
-            Text("${"%.2f".format(state.distanceMeters / 1000.0)} km")
-            Text(formatDuration(state.durationMs))
-            Text(if (state.isStepSensorAvailable) "${state.stepCount} steps" else "此裝置沒有步數感測器")
-            Text("${state.gpsQuality.emoji} ${state.accuracyLabel}")
-            Text("已記錄 ${state.pointCount} 個定位點")
-            if (state.isAutoPaused) Text("⏸ 自動暫停中（靜止超過 1 分鐘）", color = MaterialTheme.colorScheme.secondary)
-            if (!hasLocationPermission) Text("⚠️ 沒有定位權限，尚未開始記錄", color = MaterialTheme.colorScheme.error)
+            TrackMetricsCard(state)
 
-            state.message?.let { message ->
-                Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                OutlinedButton(
-                    onClick = { TrackingStateHolder.clearMessage() },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("知道了") }
+            if (state.isAutoPaused) {
+                InfoBanner(
+                    text = "自動暫停中（靜止超過 1 分鐘）",
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
+            if (!hasLocationPermission) {
+                InfoBanner(
+                    text = "沒有定位權限，尚未開始記錄",
+                    color = MaterialTheme.colorScheme.error,
+                    icon = Icons.Filled.ErrorOutline
+                )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        when {
-                            !hasCameraPermission -> permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
-                            !cameraReady -> TrackingStateHolder.postMessage(cameraError ?: "相機正在準備中，請稍候再試")
-                            else -> scope.launch {
-                                viewModel.capturePhoto(PhotoType.NORMAL).onFailure { error ->
-                                    TrackingStateHolder.postMessage("拍照失敗：${error.message ?: error::class.java.simpleName}")
+            state.message?.let { message ->
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    InfoBanner(text = message, color = MaterialTheme.colorScheme.error, icon = Icons.Filled.ErrorOutline)
+                    OutlinedButton(
+                        onClick = { TrackingStateHolder.clearMessage() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("知道了") }
+                }
+            }
+
+            if (hasCameraPermission) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(MaterialTheme.shapes.large)
+                ) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            PreviewView(ctx).also { previewView ->
+                                viewModel.photoManager.bindCamera(lifecycleOwner, previewView) { result ->
+                                    cameraReady = result.isSuccess
+                                    cameraError = result.exceptionOrNull()?.let {
+                                        "相機無法使用：${it.message ?: it::class.java.simpleName}"
+                                    }
                                 }
                             }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        when {
-                            !hasCameraPermission -> "📷 允許相機權限"
-                            !cameraReady -> "📷 相機準備中…"
-                            else -> "📷 拍照"
                         }
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = { if (state.status == TrackStatus.PAUSED) viewModel.resumeRecording() else viewModel.pauseRecording() },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text(if (state.status == TrackStatus.PAUSED) "▶ 繼續" else "⏸ 暫停") }
+
+            FilledTonalButton(
+                onClick = {
+                    when {
+                        !hasCameraPermission -> permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
+                        !cameraReady -> TrackingStateHolder.postMessage(cameraError ?: "相機正在準備中，請稍候再試")
+                        else -> scope.launch {
+                            viewModel.capturePhoto(PhotoType.NORMAL).onFailure { error ->
+                                TrackingStateHolder.postMessage("拍照失敗：${error.message ?: error::class.java.simpleName}")
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(50.dp)
+            ) {
+                Icon(Icons.Filled.PhotoCamera, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    when {
+                        !hasCameraPermission -> "允許相機權限"
+                        !cameraReady -> "相機準備中…"
+                        else -> "拍照"
+                    }
+                )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = { photoPromptStage = PhotoPromptStage.END },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("⏹ 結束") }
-            }
+
+            Text(
+                "已記錄 ${state.pointCount} 個定位點",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 
@@ -257,7 +365,7 @@ fun RecordingScreen(
 
         AlertDialog(
             onDismissRequest = { },
-            title = { Text(if (type == PhotoType.START) "📷 拍攝出發點照片" else "📷 拍攝終點照片") },
+            title = { Text(if (type == PhotoType.START) "拍攝出發點照片" else "拍攝終點照片") },
             text = {
                 Text(
                     if (!cameraReady) "相機尚未準備完成，可稍候再拍或直接跳過。" else "是否要拍攝這張照片？"
@@ -297,10 +405,45 @@ fun RecordingScreen(
     }
 }
 
-private fun formatDuration(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val h = totalSeconds / 3600
-    val m = (totalSeconds % 3600) / 60
-    val s = totalSeconds % 60
-    return "%02d:%02d:%02d".format(h, m, s)
+@Composable
+private fun TrackMetricsCard(state: com.startinsnow.gpstracker.service.RecordingUiState) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column {
+                Text(
+                    formatDuration(state.durationMs),
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "持續時間",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                BigMetric("%.2f".format(state.distanceMeters / 1000.0), "距離 (km)")
+                BigMetric("%.1f".format(state.currentSpeedKmh), "速度 (km/h)")
+                BigMetric(
+                    if (state.isStepSensorAvailable) state.stepCount.toString() else "—",
+                    "步數"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BigMetric(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }

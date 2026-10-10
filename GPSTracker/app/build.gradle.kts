@@ -59,6 +59,9 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
+            // RecordingScreen/HomeScreen 等畫面使用 Material3 的 TopAppBar / TopAppBarDefaults，
+            // 這兩個 API 目前仍標記為 @ExperimentalMaterial3Api，需明確 opt-in 才能編譯。
+            optIn.add("androidx.compose.material3.ExperimentalMaterial3Api")
         }
     }
 
