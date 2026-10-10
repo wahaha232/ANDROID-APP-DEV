@@ -3,7 +3,12 @@ package com.startinsnow.gpstracker.ui.flythrough
 import android.app.Activity
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
 import android.media.projection.MediaProjectionManager
 import android.util.Base64
 import android.webkit.WebView
@@ -30,6 +35,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -42,6 +48,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -70,6 +77,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 private val SPEED_OPTIONS = listOf(1.0, 2.0, 4.0, 8.0, 16.0)
+
+// 一鍵分享快速路徑的目標 App（實際安裝與否會再檢查，未安裝則退回系統分享面板）。
+private val INSTAGRAM_PACKAGES = listOf("com.instagram.android")
+private val TIKTOK_PACKAGES = listOf(
+    "com.zhiliaoapp.musically",
+    "com.ss.android.ugc.trill",
+    "com.zhiliaoapp.musically.go"
+)
 
 /**
  * 3D 飛越：WebView 內用 MapLibre GL JS（開源 BSD-3）的 globe 投影，
@@ -101,6 +116,8 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
     val progress by bridge.progress.collectAsState()
     val snapshotUrl by bridge.snapshotDataUrl.collectAsState()
     val finishedCount by bridge.finishedCount.collectAsState()
+    val hudValues by bridge.hud.collectAsState()
+    var showShareMenu by remember { mutableStateOf(false) }
 
     val baseConfig = TileProviderConfig.FREE_ESRI_SATELLITE
     val terrainConfig = TerrainProviderConfig.AWS_TERRARIUM
@@ -120,19 +137,27 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
         }
     }
 
-    // 把 GPS 軌跡（GeoJSON）餵進 WebView。
+    // 把 GPS 軌跡（GeoJSON）＋每點的 HUD 資料（速度/高度）餵進 WebView。
     LaunchedEffect(points, mapReady) {
         if (!mapReady) return@LaunchedEffect
         val trusted = points.filter { it.reliability == "TRUSTED" }.sortedBy { it.timestampMs }
         if (trusted.size < 2) return@LaunchedEffect
         val coordsArray = JSONArray()
-        trusted.forEach { coordsArray.put(JSONArray().put(it.longitude).put(it.latitude)) }
+        val hudArray = JSONArray()
+        trusted.forEach { point ->
+            coordsArray.put(JSONArray().put(point.longitude).put(point.latitude))
+            hudArray.put(
+                JSONArray()
+                    .put((point.speedMps?.toDouble() ?: 0.0) * 3.6)
+                    .put(point.altitudeMeters ?: 0.0)
+            )
+        }
         val geometry = JSONObject().put("type", "LineString").put("coordinates", coordsArray)
         val feature = JSONObject()
             .put("type", "Feature")
             .put("properties", JSONObject())
             .put("geometry", geometry)
-        js("setRoute(${JSONObject.quote(feature.toString())})")
+        js("setRoute(${JSONObject.quote(feature.toString())}, ${JSONObject.quote(hudArray.toString())})")
     }
 
     // 分享快照。
@@ -145,7 +170,8 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
                 val bytes = Base64.decode(base64, Base64.DEFAULT)
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             }.getOrNull()?.let { bitmap ->
-                ShareUtils.shareBitmap(context, bitmap, "flyover_${System.currentTimeMillis()}.png", "分享 3D 飛越快照")
+                val annotated = annotateHud(bitmap, hudValues)
+                ShareUtils.shareBitmap(context, annotated, "flyover_${System.currentTimeMillis()}.png", "分享 3D 飛越快照")
             }
         }
     }
@@ -273,9 +299,7 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
                     onSnapshot = { js("snapshot()") },
                     onRecord = { captureLauncher.launch(projectionManager.createScreenCaptureIntent()) },
                     sharedFile = lastFile,
-                    onShareVideo = {
-                        lastFile?.let { ShareUtils.shareFile(context, it, "video/mp4", "分享 3D 飛越影片") }
-                    }
+                    onShareVideo = { showShareMenu = true }
                 )
             } else {
                 Button(
@@ -292,6 +316,42 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (showShareMenu && lastFile != null) {
+        val videoFile = lastFile!!
+        AlertDialog(
+            onDismissRequest = { showShareMenu = false },
+            title = { Text("分享 3D 飛越影片") },
+            text = {
+                Column {
+                    TextButton(
+                        onClick = {
+                            showShareMenu = false
+                            ShareUtils.shareToApps(context, videoFile, "video/mp4", INSTAGRAM_PACKAGES, "分享到 Instagram")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("分享到 Instagram") }
+                    TextButton(
+                        onClick = {
+                            showShareMenu = false
+                            ShareUtils.shareToApps(context, videoFile, "video/mp4", TIKTOK_PACKAGES, "分享到 TikTok")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("分享到 TikTok") }
+                    TextButton(
+                        onClick = {
+                            showShareMenu = false
+                            ShareUtils.shareFile(context, videoFile, "video/mp4", "分享 3D 飛越影片")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("其他應用程式（系統分享面板）") }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showShareMenu = false }) { Text("取消") }
+            }
+        )
     }
 
     // 離開畫面時釋放 WebView，避免資源洩漏。
@@ -368,4 +428,26 @@ private fun FlythroughControls(
             }
         }
     }
+}
+
+/** 把 HUD（距離／速度／高度）疊加到地圖快照上，讓分享出去的圖片也有資訊。 */
+private fun annotateHud(source: Bitmap, hud: FlyoverHud): Bitmap {
+    val result = source.copy(Bitmap.Config.ARGB_8888, true) ?: return source
+    val scale = (source.width / 1080f).coerceAtLeast(0.5f)
+    val canvas = Canvas(result)
+    val pad = 18f * scale
+    val paintBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xCC0A0F19.toInt() }
+    val rect = RectF(pad, pad, pad + 250f * scale, pad + 118f * scale)
+    canvas.drawRoundRect(rect, 22f * scale, 22f * scale, paintBg)
+    val paintText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFFFFF.toInt()
+        typeface = Typeface.DEFAULT_BOLD
+    }
+    paintText.textSize = 42f * scale
+    canvas.drawText("%.2f km".format(hud.distanceKm), pad + 20f * scale, pad + 50f * scale, paintText)
+    paintText.typeface = Typeface.DEFAULT
+    paintText.textSize = 26f * scale
+    canvas.drawText("速度 %.0f km/h".format(hud.speedKmh), pad + 20f * scale, pad + 84f * scale, paintText)
+    canvas.drawText("高度 %.0f m".format(hud.altitudeM), pad + 20f * scale, pad + 114f * scale, paintText)
+    return result
 }

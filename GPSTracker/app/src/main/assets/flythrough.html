@@ -9,33 +9,46 @@
   <style>
     html, body { height: 100%; margin: 0; padding: 0; background: #000; overflow: hidden; }
     #map { position: absolute; inset: 0; }
+    #hud {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      background: rgba(10, 15, 25, 0.72); color: #fff;
+      border-radius: 12px; padding: 10px 14px;
+      font-family: -apple-system, Roboto, "Noto Sans TC", sans-serif;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+      min-width: 132px;
+    }
+    #hud .big { font-size: 24px; font-weight: 700; line-height: 1.1; }
+    #hud .unit { font-size: 12px; opacity: 0.75; margin-left: 3px; }
+    #hud .row { font-size: 13px; margin-top: 4px; opacity: 0.95; }
+    #hud .label { opacity: 0.6; }
   </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="hud">
+  <div><span class="big" id="hud-dist">0.00</span><span class="unit">km</span></div>
+  <div class="row"><span class="label">速度 </span><span id="hud-speed">0</span> km/h</div>
+  <div class="row"><span class="label">高度 </span><span id="hud-alt">--</span> m</div>
+</div>
 <script>
   // 全開源 / 0 元：MapLibre GL JS（BSD-3）＋ 免費衛星圖磚 ＋ AWS Terrarium DEM。
-  // 圖磚與 DEM 的實際 URL 由 Android 端（TileProviderConfig / TerrainProviderConfig）帶入。
-  var route = { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } };
+  // 圖磚與 DEM 的 URL 由 Android 端（TileProviderConfig / TerrainProviderConfig）帶入。
   var coords = [];   // [[lon, lat], ...]
+  var hudData = [];  // [[speedKmh, altitudeM], ...]
   var cum = [];      // 累積距離（公尺）
-  var total = 0;     // 總距離
-  var progress = 0;  // 0..1
+  var total = 0;
+  var progress = 0;
   var playing = false;
   var speed = 4;
   var lastTs = 0;
   var lastReport = 0;
+  var lastTravel = 0;
   var sourcesReady = false;
+  var routeAdded = false;
 
   var map = new maplibregl.Map({
     container: "map",
-    style: {
-      version: 8,
-      projection: { type: "globe" },
-      sky: {},
-      sources: {},
-      layers: []
-    },
+    style: { version: 8, projection: { type: "globe" }, sky: {}, sources: {}, layers: [] },
     center: [121.0, 23.5],
     zoom: 1.6,
     pitch: 0,
@@ -49,11 +62,11 @@
     if (window.AndroidBridge && AndroidBridge.onReady) AndroidBridge.onReady();
   });
 
-  function bridge(name, arg) {
-    try { if (window.AndroidBridge && AndroidBridge[name]) AndroidBridge[name](arg); } catch (e) {}
+  function bridge(name, a, b, c) {
+    try { if (window.AndroidBridge && AndroidBridge[name]) AndroidBridge[name](a, b, c); } catch (e) {}
   }
 
-  // 由 Android 端呼叫：設定底圖與 DEM 來源（0 元、免金鑰的 URL）。
+  // Android 端呼叫：設定底圖與 DEM 來源。
   function initSources(baseUrl, demUrl, encoding) {
     if (sourcesReady) return;
     sourcesReady = true;
@@ -74,37 +87,42 @@
     return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
   }
 
-  // geoJsonStr: GeoJSON Feature(LineString) 的 JSON 字串（Android 端以 JSON 引號包好傳入）。
-  function setRoute(geoJsonStr) {
+  // geoJsonStr: GeoJSON Feature(LineString)；hudJsonStr: [[speedKmh, altitudeM], ...]
+  function setRoute(geoJsonStr, hudJsonStr) {
     var feature = JSON.parse(geoJsonStr);
     coords = feature.geometry.coordinates || [];
-    route.geometry.coordinates = coords;
+    hudData = hudJsonStr ? JSON.parse(hudJsonStr) : [];
     cum = [0];
     total = 0;
     for (var i = 1; i < coords.length; i++) {
       total += haversine(coords[i - 1], coords[i]);
       cum.push(total);
     }
-    if (map.getSource("route")) {
-      map.getSource("route").setData(route);
-    } else {
-      map.addSource("route", { type: "geojson", data: route });
+    if (!routeAdded && coords.length > 0) {
+      routeAdded = true;
+      map.addSource("planned", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } } });
       map.addLayer({
-        id: "route-line", type: "line", source: "route",
+        id: "planned-line", type: "line", source: "planned",
         layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#00E676", "line-width": 5, "line-opacity": 0.95 }
+        paint: { "line-color": "#ffffff", "line-width": 4, "line-opacity": 0.35, "line-dasharray": [2, 2] }
+      });
+      map.addSource("traveled", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } } });
+      map.addLayer({
+        id: "traveled-line", type: "line", source: "traveled",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#00E676", "line-width": 6, "line-opacity": 0.98 }
       });
       map.addSource("marker", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: "marker-dot", type: "circle", source: "marker",
-        paint: {
-          "circle-radius": 9, "circle-color": "#FF3D00",
-          "circle-stroke-color": "#ffffff", "circle-stroke-width": 3
-        }
+        paint: { "circle-radius": 9, "circle-color": "#FF3D00", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 }
       });
+    } else if (routeAdded) {
+      map.getSource("planned").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
     }
     progress = 0;
     fitView();
+    applyFrame(true);
   }
 
   function fitView() {
@@ -124,23 +142,54 @@
 
   function pointAt(f) {
     if (coords.length === 0) return null;
-    if (coords.length === 1 || total === 0) return { pos: coords[0], bearing: 0 };
+    if (coords.length === 1 || total === 0) return { pos: coords[0], bearing: 0, i: 0, t: 0 };
     var target = f * total;
     var i = 1;
     while (i < cum.length && cum[i] < target) i++;
-    var a = coords[i - 1], b = coords[i] || coords[i - 1];
+    i = Math.min(i, coords.length - 1);
+    var a = coords[i - 1], b = coords[i];
     var segLen = cum[i] - cum[i - 1];
     var t = segLen > 0 ? (target - cum[i - 1]) / segLen : 0;
     var lon = a[0] + (b[0] - a[0]) * t;
     var lat = a[1] + (b[1] - a[1]) * t;
-    return { pos: [lon, lat], bearing: bearingBetween(a, b) };
+    return { pos: [lon, lat], bearing: bearingBetween(a, b), i: i, t: t };
   }
 
-  function applyFrame() {
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function updateHud(p) {
+    var distKm = (progress * total) / 1000.0;
+    document.getElementById("hud-dist").textContent = distKm.toFixed(2);
+    var spd = 0, alt = null;
+    if (hudData.length >= 2 && p && p.i >= 1) {
+      var s0 = hudData[p.i - 1] ? hudData[p.i - 1][0] : 0;
+      var s1 = hudData[p.i] ? hudData[p.i][0] : s0;
+      spd = lerp(s0, s1, p.t);
+      var a0 = hudData[p.i - 1] ? hudData[p.i - 1][1] : null;
+      var a1 = hudData[p.i] ? hudData[p.i][1] : a0;
+      if (a0 !== null && a1 !== null) alt = lerp(a0, a1, p.t);
+    }
+    document.getElementById("hud-speed").textContent = Math.round(spd);
+    document.getElementById("hud-alt").textContent = alt === null ? "--" : Math.round(alt);
+    bridge("onHud", distKm, spd, alt === null ? 0 : alt);
+  }
+
+  function updateTraveled(p, force) {
+    var now = performance.now();
+    if (!force && now - lastTravel < 60) return;
+    lastTravel = now;
+    if (!routeAdded || !p) return;
+    var line = coords.slice(0, p.i).concat([p.pos]);
+    map.getSource("traveled").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: line } });
+    map.getSource("marker").setData({ type: "Feature", geometry: { type: "Point", coordinates: p.pos }, properties: {} });
+  }
+
+  function applyFrame(force) {
     var p = pointAt(progress);
     if (!p) return;
     map.jumpTo({ center: p.pos, bearing: p.bearing, pitch: 60, zoom: 15.2 });
-    map.getSource("marker").setData({ type: "Feature", geometry: { type: "Point", coordinates: p.pos }, properties: {} });
+    updateTraveled(p, force);
+    updateHud(p);
   }
 
   function tick(ts) {
@@ -149,12 +198,13 @@
     var dt = (ts - lastTs) / 1000.0;
     lastTs = ts;
     progress = Math.min(1, progress + dt * 0.035 * speed);
-    applyFrame();
+    applyFrame(false);
     if (ts - lastReport > 100) { lastReport = ts; bridge("onProgress", progress); }
     if (progress < 1) {
       requestAnimationFrame(tick);
     } else {
       playing = false;
+      applyFrame(true);
       bridge("onProgress", 1.0);
       bridge("onFinished");
     }
@@ -174,7 +224,7 @@
 
   function seek(f) {
     progress = Math.max(0, Math.min(1, f));
-    applyFrame();
+    applyFrame(true);
     bridge("onProgress", progress);
   }
 
