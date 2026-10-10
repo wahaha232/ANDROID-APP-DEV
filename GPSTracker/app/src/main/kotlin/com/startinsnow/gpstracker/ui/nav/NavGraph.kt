@@ -15,6 +15,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.startinsnow.gpstracker.ui.detail.TrackDetailScreen
+import com.startinsnow.gpstracker.ui.flythrough.FlythroughScreen
 import com.startinsnow.gpstracker.ui.history.HistoryScreen
 import com.startinsnow.gpstracker.ui.home.HomeScreen
 import com.startinsnow.gpstracker.ui.recording.RecordingScreen
@@ -26,7 +27,9 @@ object Routes {
     const val HISTORY = "history"
     const val SETTINGS = "settings"
     const val DETAIL = "detail/{trackId}"
+    const val FLYTHROUGH = "flythrough/{trackId}"
     fun detail(trackId: String) = "detail/$trackId"
+    fun flythrough(trackId: String) = "flythrough/$trackId"
     fun recording(resumeTrackId: String? = null) =
         if (resumeTrackId == null) "recording" else "recording?resumeTrackId=$resumeTrackId"
 }
@@ -96,7 +99,18 @@ fun GpsTrackerNavHost(navController: NavHostController = rememberNavController()
                 arguments = listOf(navArgument("trackId") { })
             ) { entry ->
                 val trackId = entry.arguments?.getString("trackId") ?: return@composable
-                TrackDetailScreen(trackId = trackId, onBack = { navController.popBackStack() })
+                TrackDetailScreen(
+                    trackId = trackId,
+                    onBack = { navController.popBackStack() },
+                    onOpenFlythrough = { navController.navigate(Routes.flythrough(it)) }
+                )
+            }
+            composable(
+                Routes.FLYTHROUGH,
+                arguments = listOf(navArgument("trackId") { })
+            ) { entry ->
+                val trackId = entry.arguments?.getString("trackId") ?: return@composable
+                FlythroughScreen(trackId = trackId, onBack = { navController.popBackStack() })
             }
         }
     }

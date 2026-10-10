@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
@@ -92,7 +93,7 @@ private data class StatItem(
 )
 
 @Composable
-fun TrackDetailScreen(trackId: String, onBack: () -> Unit) {
+fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (String) -> Unit = {}) {
     val context = LocalContext.current
     val app = context.applicationContext as GpsTrackerApplication
     val viewModel: TrackDetailViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
@@ -217,6 +218,15 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit) {
                     .clip(MaterialTheme.shapes.large)
             ) {
                 GpsMapView(modifier = Modifier.fillMaxSize()) { controller -> mapController = controller }
+            }
+
+            FilledTonalButton(
+                onClick = { onOpenFlythrough(trackId) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("3D 飛越（開源 globe，可分享社群）")
             }
 
             track?.let { t ->

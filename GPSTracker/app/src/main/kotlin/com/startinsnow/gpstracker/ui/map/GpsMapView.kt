@@ -1,5 +1,6 @@
 package com.startinsnow.gpstracker.ui.map
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -9,9 +10,11 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.startinsnow.gpstracker.export.TerrainProviderConfig
 import com.startinsnow.gpstracker.export.TileProviderConfig
 import org.json.JSONArray
 import org.json.JSONObject
+import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -56,6 +59,26 @@ class GpsMapController {
         map?.easeCamera(CameraUpdateFactory.newLatLng(LatLng(lat, lon)), 300)
     }
 
+    /**
+     * 3D 飛越用：直接把相機放到指定座標上方（含俯角 tilt 與方位 bearing），
+     * 用立即移動（非動畫）以便逐格驅動出平順的飛行。
+     */
+    fun flyTo(lat: Double, lon: Double, zoom: Double, tilt: Double, bearing: Double) {
+        val position = CameraPosition.Builder()
+            .target(LatLng(lat, lon))
+            .zoom(zoom)
+            .tilt(tilt)
+            .bearing(bearing)
+            .build()
+        map?.moveCamera(CameraUpdateFactory.newCameraPosition(position))
+    }
+
+    /** 抓取目前地圖畫面（供分享快照）。 */
+    fun snapshot(onReady: (Bitmap) -> Unit) {
+        val current = map ?: return
+        current.snapshot { bitmap -> onReady(bitmap) }
+    }
+
     companion object {
         const val SOURCE_ROUTE = "route-source"
         const val SOURCE_START = "start-source"
@@ -82,27 +105,40 @@ class GpsMapController {
     }
 }
 
-private fun buildStyleJson(tileProvider: TileProviderConfig): String = """
-{
-  "version": 8,
-  "sources": {
-    "base-tiles": {
-      "type": "raster",
-      "tiles": ["${tileProvider.tileUrlTemplate}"],
-      "tileSize": 256,
-      "attribution": "${tileProvider.attributionHtml.replace("\"", "\\\"")}"
+private fun buildStyleJson(tileProvider: TileProviderConfig, terrain: TerrainProviderConfig?): String {
+    val attribution = tileProvider.attributionHtml.replace("\"", "\\\"")
+    val sources = StringBuilder()
+    sources.append(
+        """"base-tiles": { "type": "raster", "tiles": ["${tileProvider.tileUrlTemplate}"], "tileSize": 256, "attribution": "$attribution" }"""
+    )
+    val layers = StringBuilder()
+    layers.append("""{ "id": "base-tiles-layer", "type": "raster", "source": "base-tiles" }""")
+
+    var terrainBlock = ""
+    if (terrain != null) {
+        val terrainAttribution = terrain.attributionHtml.replace("\"", "\\\"")
+        sources.append(
+            """, "terrain-dem": { "type": "raster-dem", "tiles": ["${terrain.demUrlTemplate}"], "encoding": "${terrain.encoding}", "tileSize": 256, "attribution": "$terrainAttribution" }"""
+        )
+        // 山體陰影讓 3D 地形更有立體感。
+        layers.append(""", { "id": "hillshade-layer", "type": "hillshade", "source": "terrain-dem" }""")
+        terrainBlock = """, "terrain": { "source": "terrain-dem", "exaggeration": 1.3 }"""
     }
-  },
-  "layers": [
-    { "id": "base-tiles-layer", "type": "raster", "source": "base-tiles" }
-  ]
+
+    return """
+    {
+      "version": 8,
+      "sources": { $sources },
+      "layers": [ $layers ]$terrainBlock
+    }
+    """.trimIndent()
 }
-""".trimIndent()
 
 @Composable
 fun GpsMapView(
     modifier: Modifier = Modifier,
     tileProvider: TileProviderConfig = TileProviderConfig.DEFAULT_OSM,
+    terrain: TerrainProviderConfig? = null,
     onMapReady: (GpsMapController) -> Unit = {}
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -133,7 +169,7 @@ fun GpsMapView(
                 view.onCreate(null)
                 view.getMapAsync { mapLibreMap ->
                     controller.map = mapLibreMap
-                    mapLibreMap.setStyle(Style.Builder().fromJson(buildStyleJson(tileProvider))) { style ->
+                    mapLibreMap.setStyle(Style.Builder().fromJson(buildStyleJson(tileProvider, terrain))) { style ->
                         style.addSource(GeoJsonSource(GpsMapController.SOURCE_ROUTE))
                         style.addSource(GeoJsonSource(GpsMapController.SOURCE_START))
                         style.addSource(GeoJsonSource(GpsMapController.SOURCE_END))
