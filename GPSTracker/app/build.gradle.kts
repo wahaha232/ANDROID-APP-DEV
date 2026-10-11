@@ -146,9 +146,10 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.3.4")
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
-    // CameraX 的 ProcessCameraProvider 回傳 ListenableFuture；此類別原先由 GMS 相依間接帶入，
-    // 移除 Google Fit 相關相依後需明確提供，否則 Kotlin 編譯找不到 ListenableFuture。
-    implementation("com.google.guava:listenablefuture:1.0")
+    // CameraX 的 ProcessCameraProvider 回傳 com.google.common.util.concurrent.ListenableFuture。
+    // 該類別由 guava 提供（已透過其他相依間接引入 runtime，但未在編譯期可見），
+    // 因此明確加入 guava 讓編譯期也能解析（單一副本，不使用 listenablefuture 空殼版本避免重複類別）。
+    implementation("com.google.guava:guava:31.1-android")
 
     // ---------- MapLibre (NO Google Maps) ----------
     implementation("org.maplibre.gl:android-sdk:11.6.1")
@@ -174,14 +175,4 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-}
-
-// CameraX 需要 com.google.common.util.concurrent.ListenableFuture。某些相依會把它請求成空殼版本
-// (9999.0-empty-to-avoid-conflict-with-guava)，使編譯期找不到該類別；強制改回真正含類別的 1.0。
-configurations.all {
-    resolutionStrategy.eachDependency {
-        if (requested.group == "com.google.guava" && requested.name == "listenablefuture") {
-            useVersion("1.0")
-        }
-    }
 }
