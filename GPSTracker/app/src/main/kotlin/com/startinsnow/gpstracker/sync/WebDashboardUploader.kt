@@ -78,11 +78,14 @@ class WebDashboardUploader(
     }
 
     private fun putContent(token: String, repo: String, branch: String, path: String, content: String, message: String, sha: String? = null) {
+        // 未提供 sha 時先查既有檔案：GitHub Contents API 對「路徑已存在但未帶 sha」的更新會回 422，
+        // 造成同一筆紀錄重複上傳或失敗重試時無法寫入。補上 sha 讓上傳具冪等性。
+        val effectiveSha = sha ?: getContent(token, repo, branch, path)?.sha
         val body = JSONObject().apply {
             put("message", message)
             put("content", Base64.encodeToString(content.toByteArray(Charsets.UTF_8), Base64.NO_WRAP))
             put("branch", branch)
-            if (sha != null) put("sha", sha)
+            if (effectiveSha != null) put("sha", effectiveSha)
         }.toString()
         val request = Request.Builder()
             .url("https://api.github.com/repos/$repo/contents/$path")
