@@ -23,12 +23,9 @@ class GoogleAuthManager(private val context: Context) {
 
     private val driveScope = Scope("https://www.googleapis.com/auth/drive.file")
 
-    /** Google Fit 步數讀取授權（只讀活動/步數，不寫入）。 */
-    private val fitnessScope = Scope("https://www.googleapis.com/auth/fitness.activity.read")
-
     private val signInClient: GoogleSignInClient by lazy {
         val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestScopes(driveScope, fitnessScope)
+            .requestScopes(driveScope)
             .requestEmail()
             .build()
         GoogleSignIn.getClient(context, options)
@@ -37,12 +34,6 @@ class GoogleAuthManager(private val context: Context) {
     fun signInIntent(): Intent = signInClient.signInIntent
 
     fun lastSignedInAccount(): GoogleSignInAccount? = GoogleSignIn.getLastSignedInAccount(context)
-
-    /** 目前登入帳號是否已同意 Google Fit 步數讀取授權。 */
-    fun hasFitnessPermission(): Boolean {
-        val account = lastSignedInAccount() ?: return false
-        return GoogleSignIn.hasPermissions(account, fitnessScope)
-    }
 
     fun signOut(onComplete: () -> Unit) {
         signInClient.signOut().addOnCompleteListener { onComplete() }

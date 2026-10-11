@@ -48,9 +48,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.OutlinedButton
 import androidx.core.content.ContextCompat
-import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.startinsnow.gpstracker.data.prefs.StepSource
-import com.startinsnow.gpstracker.sync.GoogleAuthManager
 import com.startinsnow.gpstracker.sync.HealthConnectStepReader
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
@@ -63,27 +61,14 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     var offlineMapStatus by remember { mutableStateOf<String?>(null) }
     var offlineDownloadJob by remember { mutableStateOf<Job?>(null) }
 
-    val authManager = remember { GoogleAuthManager(context) }
-    var fitStatus by remember { mutableStateOf<String?>(null) }
+    var hcStatus by remember { mutableStateOf<String?>(null) }
 
     val activityPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (!granted) fitStatus = "未取得「活動辨識」權限，Google Fit 步數可能無法讀取"
+        if (!granted) hcStatus = "未取得「活動辨識」權限，Health Connect 步數可能無法讀取"
     }
 
-    val fitSignInLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-        fitStatus = if (task.isSuccessful) {
-            "已連接 Google 帳號（含 Google Fit 授權）"
-        } else {
-            "連接 Google 失敗：${task.exception?.message ?: "未知錯誤"}"
-        }
-    }
-
-    var hcStatus by remember { mutableStateOf<String?>(null) }
     val hcLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract()
     ) { granted ->
@@ -167,14 +152,24 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     when (settings.stepSource) {
                         StepSource.GOOGLE_FIT -> {
                             OutlinedButton(
-                                onClick = { fitSignInLauncher.launch(authManager.signInIntent()) },
+                                onClick = { hcLauncher.launch(setOf(HealthConnectStepReader.READ_PERMISSION)) },
                                 modifier = Modifier.fillMaxWidth()
-                            ) { Text("連接 Google Fit") }
+                            ) { Text("授權 Health Connect 讀取步數") }
                             Text(
-                                "需在 Google Cloud 專案啟用 Fitness API，並同意 fitness.activity.read 授權，Google Fit 才會回傳步數。",
+                                "Google Fit 的步數會同步到 Health Connect（免 Google OAuth）；本 App 只讀取 Google Fit 來源的步數。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            if (!healthConnectAvailable(context)) {
+                                Text(
+                                    "此裝置未偵測到 Health Connect，請先安裝並啟用。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            hcStatus?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                         StepSource.ZEPP_LIFE -> {
                             OutlinedButton(
@@ -204,9 +199,6 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-                    fitStatus?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }

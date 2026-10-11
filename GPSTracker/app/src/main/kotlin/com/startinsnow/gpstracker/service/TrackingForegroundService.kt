@@ -28,8 +28,6 @@ import com.startinsnow.gpstracker.location.LocationTracker
 import com.startinsnow.gpstracker.movement.MovementDetector
 import com.startinsnow.gpstracker.movement.MovementSample
 import com.startinsnow.gpstracker.sensor.StepCounterManager
-import com.startinsnow.gpstracker.sync.GoogleAuthManager
-import com.startinsnow.gpstracker.sync.GoogleFitStepReader
 import com.startinsnow.gpstracker.sync.HealthConnectStepReader
 import com.startinsnow.gpstracker.sync.WebDashboardUploader
 import kotlinx.coroutines.CancellationException
@@ -610,31 +608,26 @@ class TrackingForegroundService : LifecycleService() {
         activeDurationMs + if (!isPaused) SystemClock.elapsedRealtime() - activeSegmentStartElapsedMs else 0L
 
     /**
-     * 決定要寫入資料庫的步數：依設定的來源（Google Fit 或小米 Zepp Life／Health Connect）讀取該趟步數，
-     * 讀取失敗、未授權或未設定時退回裝置感測器累積的步數（不影響其他功能）。
+     * 決定要寫入資料庫的步數：依設定來源（Google Fit 或小米 Zepp Life）經 Health Connect 讀取該趟步數，
+     * 讀取失敗／未授權／未設定時退回裝置感測器累積的步數（不影響其他功能）。
      */
     private suspend fun resolveFinalStepCount(trackId: String, sensorSteps: Long): Long {
         val settings = runCatching { app.settingsRepository.settings.first() }.getOrNull() ?: return sensorSteps
         val startMs = app.trackRepository.getTrack(trackId)?.startTimeMs ?: return sensorSteps
         val endMs = System.currentTimeMillis()
         return when (settings.stepSource) {
-            StepSource.GOOGLE_FIT -> {
-                val auth = GoogleAuthManager(this)
-                val account = auth.lastSignedInAccount()
-                if (account != null && auth.hasFitnessPermission()) {
-                    val steps = GoogleFitStepReader(this).stepsBetween(account, startMs, endMs).getOrNull()
-                    if (steps != null && steps > 0) steps else sensorSteps
-                } else sensorSteps
-            }
-            StepSource.ZEPP_LIFE -> {
-                val reader = HealthConnectStepReader(this)
-                if (reader.isAvailable()) {
-                    val steps = reader.stepsBetween(startMs, endMs).getOrNull()
-                    if (steps != null && steps > 0) steps else sensorSteps
-                } else sensorSteps
-            }
+            StepSource.GOOGLE_FIT -> stepsFromHealthConnect(googleFit = true, startMs, endMs) ?: sensorSteps
+            StepSource.ZEPP_LIFE -> stepsFromHealthConnect(googleFit = false, startMs, endMs) ?: sensorSteps
             StepSource.DEVICE_SENSOR -> sensorSteps
         }
+    }
+
+    /** 經 Health Connect 讀取指定來源步數；不可用或無資料時回傳 null，讓呼叫端退回感測器。 */
+    private suspend fun stepsFromHealthConnect(googleFit: Boolean, startMs: Long, endMs: Long): Long? {
+        val reader = HealthConnectStepReader(this)
+        if (!reader.isAvailable()) return null
+        val steps = (if (googleFit) reader.googleFitSteps(startMs, endMs) else reader.zeppSteps(startMs, endMs)).getOrNull()
+        return if (steps != null && steps > 0) steps else null
     }
 
     private fun resetAggregation() {

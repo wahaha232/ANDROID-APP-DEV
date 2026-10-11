@@ -153,11 +153,7 @@ dependencies {
     // ---------- Google Sign-In (Drive OAuth only, never for the map/GPS engine) ----------
     implementation("com.google.android.gms:play-services-auth:21.2.0")
 
-    // ---------- Google Fit（步數來源；記錄結束時讀取該趟步數） ----------
-    implementation("com.google.android.gms:play-services-fitness:21.2.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
-
-    // ---------- Health Connect（小米 Zepp Life 步數來源） ----------
+    // ---------- Health Connect（步數來源：Google Fit / 小米 Zepp Life，皆經 Health Connect 讀取） ----------
     implementation("androidx.health.connect:connect-client:1.1.0")
 
     // ---------- Retrofit/OkHttp (Drive REST v3 batch upload, not used by the GPS engine) ----------
