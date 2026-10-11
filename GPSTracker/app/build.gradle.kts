@@ -154,7 +154,8 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:21.2.0")
 
     // ---------- Health Connect（步數來源：Google Fit / 小米 Zepp Life，皆經 Health Connect 讀取） ----------
-    implementation("androidx.health.connect:connect-client:1.1.0")
+    // 1.1.0 需要 compileSdk 36 + AGP 8.9.1；本專案為 compileSdk 35 / AGP 8.6.1，故使用相容的 alpha10。
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha10")
 
     // ---------- Retrofit/OkHttp (Drive REST v3 batch upload, not used by the GPS engine) ----------
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
