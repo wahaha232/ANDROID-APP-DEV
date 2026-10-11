@@ -1,14 +1,17 @@
 package com.startinsnow.gpstracker.photo
 
 import android.content.Context
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.camera.core.ZoomState
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.Observer
 import com.startinsnow.gpstracker.core.model.LocationSample
 import com.startinsnow.gpstracker.core.model.PhotoType
 import java.io.File
@@ -17,6 +20,9 @@ import java.util.Date
 import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
@@ -26,11 +32,48 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  */
 class TrackPhotoManager(private val context: Context) {
 
+    /** 目前變焦狀態；給 UI 顯示倍率與上下限，並在相機回報後自動更新。 */
+    data class CameraZoom(val ratio: Float = 1f, val minRatio: Float = 1f, val maxRatio: Float = 1f)
+
     private var cameraProvider: ProcessCameraProvider? = null
     private var imageCapture: ImageCapture? = null
+    private var camera: Camera? = null
+    private var zoomState: androidx.lifecycle.LiveData<ZoomState>? = null
+    private var zoomObserver: Observer<ZoomState>? = null
+
+    private val _zoom = MutableStateFlow(CameraZoom())
+
+    /** 變焦狀態流；綁定相機後會持續反映實際倍率，供 UI collectAsState。 */
+    val zoom: StateFlow<CameraZoom> = _zoom.asStateFlow()
 
     /** 相機是否已完成綁定，可以拍照。 */
     val isBound: Boolean get() = imageCapture != null
+
+    /** 設定變焦倍率，超出相機支援範圍時自動夾限。相機尚未綁定時為 no-op。 */
+    fun setZoomRatio(ratio: Float) {
+        val active = camera ?: return
+        val state = active.cameraInfo.zoomState.value ?: return
+        active.cameraControl.setZoomRatio(ratio.coerceIn(state.minZoomRatio, state.maxZoomRatio))
+    }
+
+    /** 以目前倍率為基準放大 / 縮小（factor > 1 放大，< 1 縮小）。 */
+    fun zoomBy(factor: Float) = setZoomRatio(zoomRatio * factor)
+
+    /** 目前變焦倍率。 */
+    val zoomRatio: Float get() = _zoom.value.ratio
+
+    private fun observeZoom(lifecycleOwner: LifecycleOwner) {
+        // 重新綁定時先移除舊的觀察者，避免重複註冊。
+        zoomState?.let { old -> zoomObserver?.let(old::removeObserver) }
+        val state = camera?.cameraInfo?.zoomState ?: return
+        val observer = Observer<ZoomState> { zs ->
+            if (zs != null) _zoom.value = CameraZoom(zs.zoomRatio, zs.minZoomRatio, zs.maxZoomRatio)
+        }
+        zoomState = state
+        zoomObserver = observer
+        state.observe(lifecycleOwner, observer)
+        state.value?.let { _zoom.value = CameraZoom(it.zoomRatio, it.minZoomRatio, it.maxZoomRatio) }
+    }
 
     /**
      * 綁定相機預覽與拍照 use case。
@@ -54,18 +97,31 @@ class TrackPhotoManager(private val context: Context) {
                     .build()
                 imageCapture = capture
                 provider.unbindAll()
-                provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture)
+                camera = provider.bindToLifecycle(
+                    lifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    capture
+                )
+                observeZoom(lifecycleOwner)
                 onResult(Result.success(Unit))
             } catch (e: Exception) {
                 imageCapture = null
+                camera = null
+                _zoom.value = CameraZoom()
                 onResult(Result.failure(e))
             }
         }, ContextCompat.getMainExecutor(context))
     }
 
     fun unbind() {
+        zoomState?.let { state -> zoomObserver?.let(state::removeObserver) }
+        zoomState = null
+        zoomObserver = null
         cameraProvider?.unbindAll()
         imageCapture = null
+        camera = null
+        _zoom.value = CameraZoom()
     }
 
     /**

@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -28,16 +30,21 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -47,6 +54,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -69,9 +79,13 @@ import com.startinsnow.gpstracker.ui.components.InfoBanner
 import com.startinsnow.gpstracker.ui.components.StatusChip
 import com.startinsnow.gpstracker.ui.components.formatDuration
 import com.startinsnow.gpstracker.ui.theme.gpsQualityColor
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class PhotoPromptStage { NONE, START, END }
+
+/** 每次按下縮放鍵的倍率變化量。 */
+private const val ZOOM_STEP = 1.5f
 
 private fun Context.hasPermission(permission: String): Boolean =
     ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
@@ -96,7 +110,38 @@ fun RecordingScreen(
     var photoPromptStage by rememberSaveable { mutableStateOf(PhotoPromptStage.NONE) }
     var hasPromptedStart by rememberSaveable { mutableStateOf(false) }
 
+    // 變焦（縮放）：直接 collect TrackPhotoManager 的即時變焦狀態（由 CameraX zoomState 驅動）。
+    val cameraZoom by viewModel.photoManager.zoom.collectAsState()
+    // 拍照快門閃光：counter 遞增會觸發一次短暫白畫面，讓使用者知道「按下去了」。
+    var flashCounter by remember { mutableIntStateOf(0) }
+    var flashAlpha by remember { mutableFloatStateOf(0f) }
+    // 對話框內的錯誤（相機未就緒 / 拍照失敗），就近顯示，不依賴畫面頂端的橫幅。
+    var dialogError by remember { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
     val hasLocationPermission = hasFineLocation || hasCoarseLocation
+
+    /** 綁定預覽 + 拍照 use case；失敗時留下可顯示的錯誤。 */
+    fun bindPreview(previewView: PreviewView) {
+        cameraReady = false
+        viewModel.photoManager.bindCamera(lifecycleOwner, previewView) { result ->
+            cameraReady = result.isSuccess
+            cameraError = result.exceptionOrNull()?.let {
+                "相機無法使用：${it.message ?: it::class.java.simpleName}"
+            }
+        }
+    }
+
+    /** 以目前倍率為基準放大（factor > 1）/ 縮小（factor < 1）。 */
+    fun changeZoom(factor: Float) {
+        viewModel.photoManager.zoomBy(factor)
+    }
+
+    /** 拍照的唯一入口：觸發閃光並回傳結果，UI 各處（主畫面 / 對話框）共用同一條路徑。 */
+    suspend fun takePhoto(type: PhotoType): Result<Unit> {
+        flashCounter++
+        return viewModel.capturePhoto(type)
+    }
 
     /** 只有「確實需要」才啟動記錄：權限不足時先要權限，避免同時要權限又啟動造成競態。 */
     fun startOrResumeRecording() {
@@ -197,8 +242,17 @@ fun RecordingScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // 每次按下快門時短暫顯示白畫面，讓使用者確定「有按下」。
+    LaunchedEffect(flashCounter) {
+        if (flashCounter == 0) return@LaunchedEffect
+        flashAlpha = 0.85f
+        delay(150)
+        flashAlpha = 0f
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -301,48 +355,111 @@ fun RecordingScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
+                        .height(320.dp)
                         .clip(MaterialTheme.shapes.large)
+                        .background(Color.Black)
                 ) {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
-                            PreviewView(ctx).also { previewView ->
-                                viewModel.photoManager.bindCamera(lifecycleOwner, previewView) { result ->
-                                    cameraReady = result.isSuccess
-                                    cameraError = result.exceptionOrNull()?.let {
-                                        "相機無法使用：${it.message ?: it::class.java.simpleName}"
-                                    }
-                                }
-                            }
+                            PreviewView(ctx).also { previewView -> bindPreview(previewView) }
                         }
                     )
-                }
-            }
 
-            FilledTonalButton(
-                onClick = {
-                    when {
-                        !hasCameraPermission -> permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
-                        !cameraReady -> TrackingStateHolder.postMessage(cameraError ?: "相機正在準備中，請稍候再試")
-                        else -> scope.launch {
-                            viewModel.capturePhoto(PhotoType.NORMAL).onFailure { error ->
-                                TrackingStateHolder.postMessage("拍照失敗：${error.message ?: error::class.java.simpleName}")
-                            }
+                    // 快門白畫面回饋
+                    if (flashAlpha > 0f) {
+                        Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = flashAlpha)))
+                    }
+
+                    // 相機狀態（準備中 / 錯誤），就近顯示在預覽畫面上
+                    val statusLabel = when {
+                        cameraReady -> null
+                        cameraError != null -> cameraError
+                        else -> "相機準備中…"
+                    }
+                    if (statusLabel != null) {
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.55f),
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.align(Alignment.Center)
+                        ) {
+                            Text(
+                                statusLabel,
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            )
                         }
                     }
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp)
-            ) {
-                Icon(Icons.Filled.PhotoCamera, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    when {
-                        !hasCameraPermission -> "允許相機權限"
-                        !cameraReady -> "相機準備中…"
-                        else -> "拍照"
+
+                    // 縮放鍵（右上角）
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledIconButton(
+                            onClick = { changeZoom(ZOOM_STEP) },
+                            enabled = cameraReady && cameraZoom.ratio < cameraZoom.maxRatio - 0.001f
+                        ) {
+                            Icon(Icons.Filled.ZoomIn, contentDescription = "放大")
+                        }
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.55f),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text(
+                                "%.1fx".format(cameraZoom.ratio),
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                        FilledIconButton(
+                            onClick = { changeZoom(1f / ZOOM_STEP) },
+                            enabled = cameraReady && cameraZoom.ratio > cameraZoom.minRatio + 0.001f
+                        ) {
+                            Icon(Icons.Filled.ZoomOut, contentDescription = "縮小")
+                        }
                     }
-                )
+
+                    // 快門鍵（底部中央）
+                    FilledIconButton(
+                        onClick = {
+                            scope.launch {
+                                val error = takePhoto(PhotoType.NORMAL).exceptionOrNull()
+                                if (error == null) {
+                                    snackbarHostState.showSnackbar("已儲存照片")
+                                } else {
+                                    snackbarHostState.showSnackbar(
+                                        "拍照失敗：${error.message ?: error::class.java.simpleName}"
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 16.dp)
+                            .size(68.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.PhotoCamera,
+                            contentDescription = "拍照",
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) },
+                    modifier = Modifier.fillMaxWidth().height(54.dp)
+                ) {
+                    Icon(Icons.Filled.PhotoCamera, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("允許相機權限以拍照")
+                }
             }
 
             Text(
@@ -363,30 +480,41 @@ fun RecordingScreen(
             onFinished(finishedTrackId)
         }
 
+        // 每次開啟對話框都清掉上一次的錯誤訊息。
+        LaunchedEffect(photoPromptStage) { dialogError = null }
+
         AlertDialog(
             onDismissRequest = { },
             title = { Text(if (type == PhotoType.START) "拍攝出發點照片" else "拍攝終點照片") },
             text = {
-                Text(
-                    if (!cameraReady) "相機尚未準備完成，可稍候再拍或直接跳過。" else "是否要拍攝這張照片？"
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (!cameraReady) "相機尚未準備完成，可稍候再拍或直接跳過。" else "是否要拍攝這張照片？"
+                    )
+                    dialogError?.let { message ->
+                        Text(message, color = MaterialTheme.colorScheme.error)
+                    }
+                }
             },
             confirmButton = {
+                // 永遠可按：即使相機還沒好也會顯示原因，避免「按了卻完全沒反應」。
                 Button(
-                    enabled = cameraReady,
                     onClick = {
+                        if (!cameraReady) {
+                            dialogError = cameraError ?: "相機準備中，請稍候再試"
+                            return@Button
+                        }
                         scope.launch {
-                            val result = viewModel.capturePhoto(type)
-                            val error = result.exceptionOrNull()
-                            if (error != null) {
-                                // 拍照失敗時不再靜默關閉對話框：明確顯示原因，讓使用者可以選擇跳過。
-                                TrackingStateHolder.postMessage("拍照失敗：${error.message ?: error::class.java.simpleName}")
-                                return@launch
-                            }
-                            if (type == PhotoType.END) {
-                                finishTrack()
-                            } else {
-                                photoPromptStage = PhotoPromptStage.NONE
+                            val result = takePhoto(type)
+                            result.onSuccess {
+                                dialogError = null
+                                if (type == PhotoType.END) {
+                                    finishTrack()
+                                } else {
+                                    photoPromptStage = PhotoPromptStage.NONE
+                                }
+                            }.onFailure { error ->
+                                dialogError = "拍照失敗：${error.message ?: error::class.java.simpleName}"
                             }
                         }
                     }
