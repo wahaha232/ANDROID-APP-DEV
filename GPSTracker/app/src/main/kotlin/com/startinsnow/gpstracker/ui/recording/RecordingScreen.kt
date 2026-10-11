@@ -196,6 +196,11 @@ fun RecordingScreen(
                 add(Manifest.permission.ACCESS_COARSE_LOCATION)
             }
             if (!hasCameraPermission) add(Manifest.permission.CAMERA)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+                !context.hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            ) {
+                add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 !context.hasPermission(Manifest.permission.POST_NOTIFICATIONS)
             ) {

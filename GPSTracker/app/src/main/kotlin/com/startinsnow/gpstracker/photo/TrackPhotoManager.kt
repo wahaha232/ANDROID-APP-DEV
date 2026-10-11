@@ -1,6 +1,10 @@
 package com.startinsnow.gpstracker.photo
 
+import android.content.ContentValues
 import android.content.Context
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -20,10 +24,12 @@ import java.util.Date
 import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 /**
  * 對應規格「76. Photo Engine / TrackPhotoManager」。
@@ -129,7 +135,15 @@ class TrackPhotoManager(private val context: Context) {
      * @param sample 拍照當下的 GPS 樣本；會一併寫入 EXIF GPS（緯度 / 經度 / 高度 / 時間），
      *   讓匯出的照片本身也帶有定位資訊，而不是只有資料庫裡有座標。GPS 尚未取得時傳 null，不可因此崩潰。
      */
-    suspend fun capturePhoto(trackId: String, type: PhotoType, sample: LocationSample? = null): File =
+    suspend fun capturePhoto(trackId: String, type: PhotoType, sample: LocationSample? = null): File {
+        val file = captureToFile(trackId, type, sample)
+        // 另外寫一份到系統相簿（MediaStore）；App 私有目錄的檔案不會被相簿掃到，
+        // 使用者會以為「照片沒存下來」。相簿寫入失敗不影響既有檔案與資料庫記錄。
+        publishToGallery(file)
+        return file
+    }
+
+    private suspend fun captureToFile(trackId: String, type: PhotoType, sample: LocationSample? = null): File =
         suspendCancellableCoroutine { cont ->
             val capture = imageCapture
             if (capture == null) {
@@ -158,6 +172,39 @@ class TrackPhotoManager(private val context: Context) {
                 }
             )
         }
+
+    /** 把拍好的檔案複製進 MediaStore.Images，讓它出現在手機相簿（Pictures/GPS Tracker）。 */
+    private suspend fun publishToGallery(file: File) = withContext(Dispatchers.IO) {
+        runCatching {
+            val resolver = context.contentResolver
+            val now = System.currentTimeMillis()
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, file.name)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.DATE_ADDED, now / 1000)
+                put(MediaStore.Images.Media.DATE_TAKEN, now)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/GPS Tracker")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            }
+            val uri = resolver.insert(collection, values)
+            if (uri == null) return@runCatching
+            resolver.openOutputStream(uri)?.use { out ->
+                file.inputStream().use { input -> input.copyTo(out) }
+            } ?: return@runCatching
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
+                resolver.update(uri, done, null, null)
+            }
+        }
+        Unit
+    }
 
     private fun LocationSample.toAndroidLocation(): android.location.Location =
         android.location.Location(android.location.LocationManager.GPS_PROVIDER).apply {

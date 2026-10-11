@@ -8,6 +8,14 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// git commit 總數（versionCode/versionName 序號來源）。CI 需 fetch-depth: 0 才能取得完整歷史。
+val gitCommitCount: Int = runCatching {
+    providers.exec {
+        workingDir = rootProject.projectDir
+        commandLine("git", "rev-list", "--count", "HEAD")
+    }.standardOutput.asText.get().trim().toInt()
+}.getOrDefault(0)
+
 android {
     namespace = "com.startinsnow.gpstracker"
     compileSdk = 35
@@ -16,8 +24,10 @@ android {
         applicationId = "com.startinsnow.gpstracker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // 版號自動進版：以 git commit 數為序號，每次提交都會遞增，
+        // 避免不同建置卻同版號而無法辨識或更新。git 不可用時回退為 0。
+        versionCode = 1_000_000 + gitCommitCount
+        versionName = "1.0.$gitCommitCount"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

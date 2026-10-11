@@ -16,6 +16,11 @@
     <!-- 拍照（出發/一般/終點照片） -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- 將照片寫入系統相簿：Android 10（Q）以下才需要此權限，Q 以上用 MediaStore 免權限 -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <!-- 僅供 Google Drive 批次同步與地圖圖磚下載使用，GPS 記錄本身不依賴網路 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
