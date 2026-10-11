@@ -1,23 +1,26 @@
-// GPS Tracker 網頁儀表板：讀取 repo 內的 data/manifest.json 與各筆 <trackId>.json，
+// GPS Tracker 網頁儀表板：讀取同源的 data/manifest.json 與各筆 <trackId>.json，
 // 全部使用 0 元、免金鑰的圖資（Esri 衛星 + AWS Terrarium DEM），純前端、無後端。
 (function () {
   "use strict";
 
-  var params = new URLSearchParams(location.search);
-  var CONFIG = {
-    repo: params.get("repo") || "wahaha232/ANDROID-APP-DEV",
-    branch: params.get("branch") || "main",
-    dataPath: params.get("data") || "gpstracker-web/data"
-  };
-  var RAW = "https://raw.githubusercontent.com/" + CONFIG.repo + "/" + CONFIG.branch + "/" + CONFIG.dataPath + "/";
+  var CONFIG = GPST.resolveConfig();
+  var DATA_BASE = CONFIG.dataBase;
 
   var BASE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   var DEM_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+  var BASE_ATTR = "Esri, Maxar, Earthstar Geographics, GIS User Community";
+  var DEM_ATTR = "Elevation: Mapzen / AWS Terrain Tiles";
+
+  var MAX_ALL_ROUTE_POINTS = 400; // 「顯示全部」每筆最多取樣點數，避免大檔拖慢渲染
+  var ALL_CONCURRENCY = 4;        // 「顯示全部」同時下載的軌跡檔數上限
+  var SEARCH_DEBOUNCE_MS = 150;
 
   var manifest = { tracks: [] };
   var trackCache = {};
   var selected = null;
+  var currentTrack = null;
   var map = null;
+  var allRoutesLoaded = false;
 
   var MODE_EMOJI = {
     WALKING: "🚶", RUNNING: "🏃", BICYCLE: "🚲", CYCLING: "🚲", VEHICLE: "🚗", DRIVING: "🚗",
@@ -48,34 +51,39 @@
       style: {
         version: 8, projection: { type: "globe" }, sky: {},
         sources: {
-          base: { type: "raster", tiles: [BASE_TILES], tileSize: 256 },
-          dem: { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256 }
+          base: { type: "raster", tiles: [BASE_TILES], tileSize: 256, attribution: BASE_ATTR },
+          dem: { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256, attribution: DEM_ATTR }
         },
         layers: [
           { id: "base", type: "raster", source: "base" },
           { id: "hillshade", type: "hillshade", source: "dem" }
         ]
       },
-      center: [121.0, 23.5], zoom: 1.6, pitch: 0, attributionControl: false, antialias: true
+      center: [121.0, 23.5], zoom: 1.6, pitch: 0, antialias: true
     });
     map.on("load", function () {
       map.setTerrain({ source: "dem", exaggeration: 1.3 });
-      map.addSource("route", { type: "geojson", data: emptyLine() });
+      map.addSource("route", { type: "geojson", data: GPST.emptyLine() });
       map.addLayer({ id: "route-line", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#00E676", "line-width": 5 } });
-      map.addSource("allroutes", { type: "geojson", data: emptyFC() });
+      map.addSource("allroutes", { type: "geojson", data: GPST.emptyFC() });
       map.addLayer({ id: "allroutes-line", type: "line", source: "allroutes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#2F6BFF", "line-width": 3, "line-opacity": 0.8 } });
-      map.addSource("photos", { type: "geojson", data: emptyFC() });
+      map.addSource("photos", { type: "geojson", data: GPST.emptyFC() });
       map.addLayer({ id: "photos-dot", type: "circle", source: "photos", paint: { "circle-radius": 5, "circle-color": "#FFB300", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
       loadManifest();
     });
   }
-  function emptyLine() { return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } }; }
-  function emptyFC() { return { type: "FeatureCollection", features: [] }; }
 
   // ---- 資料 ----
+  function fetchJson(name, revalidate) {
+    var opts = revalidate ? { cache: "no-cache" } : undefined;
+    return fetch(DATA_BASE + name, opts).then(function (r) {
+      if (!r.ok) throw new Error(name + " " + r.status);
+      return r.json();
+    });
+  }
+
   function loadManifest() {
-    fetch(RAW + "manifest.json?_=" + Date.now())
-      .then(function (r) { if (!r.ok) throw new Error("manifest " + r.status); return r.json(); })
+    fetchJson("manifest.json", true)
       .then(function (m) {
         manifest = m || { tracks: [] };
         manifest.tracks = (manifest.tracks || []).slice().sort(function (a, b) { return b.startTimeMs - a.startTimeMs; });
@@ -84,15 +92,13 @@
         renderList();
       })
       .catch(function (e) {
-        $("summary").textContent = "讀取 manifest 失敗：" + e.message + "（請確認 repo/branch/data 路徑與 PAT 設定）";
+        $("summary").textContent = "讀取 manifest 失敗：" + e.message;
       });
   }
 
   function loadTrack(trackId) {
     if (trackCache[trackId]) return Promise.resolve(trackCache[trackId]);
-    return fetch(RAW + trackId + ".json?_=" + Date.now())
-      .then(function (r) { if (!r.ok) throw new Error("track " + r.status); return r.json(); })
-      .then(function (t) { trackCache[trackId] = t; return t; });
+    return fetchJson(trackId + ".json", false).then(function (t) { trackCache[trackId] = t; return t; });
   }
 
   function renderSummary() {
@@ -108,6 +114,7 @@
     var set = {};
     manifest.tracks.forEach(function (t) { if (t.dominantMode) set[t.dominantMode] = true; });
     var sel = $("modeFilter");
+    sel.length = 1; // 只保留「全部模式」
     Object.keys(set).forEach(function (m) {
       var o = document.createElement("option");
       o.value = m; o.textContent = modeEmoji(m) + " " + modeName(m);
@@ -128,12 +135,22 @@
     filtered.forEach(function (t) {
       var li = document.createElement("li");
       li.dataset.id = t.trackId;
+      li.tabIndex = 0;
+      li.setAttribute("role", "button");
       if (selected === t.trackId) li.className = "active";
-      li.innerHTML =
-        '<div class="t-date">' + fmtDate(t.startTimeMs) + '</div>' +
-        '<div class="t-main">' + modeEmoji(t.dominantMode) + " " + ((t.distanceMeters || 0) / 1000).toFixed(2) + ' km</div>' +
-        '<div class="t-sub">' + fmtDur(t.durationMs || 0) + ' · ' + modeName(t.dominantMode) + '</div>';
+
+      var d = document.createElement("div");
+      d.className = "t-date"; d.textContent = fmtDate(t.startTimeMs);
+      var m = document.createElement("div");
+      m.className = "t-main"; m.textContent = modeEmoji(t.dominantMode) + " " + ((t.distanceMeters || 0) / 1000).toFixed(2) + " km";
+      var s = document.createElement("div");
+      s.className = "t-sub"; s.textContent = fmtDur(t.durationMs || 0) + " · " + modeName(t.dominantMode);
+      li.appendChild(d); li.appendChild(m); li.appendChild(s);
+
       li.onclick = function () { selectTrack(t.trackId); };
+      li.onkeydown = function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectTrack(t.trackId); }
+      };
       list.appendChild(li);
     });
     $("listEmpty").style.display = filtered.length ? "none" : "block";
@@ -144,6 +161,7 @@
     $("hint").style.display = "none";
     renderList();
     loadTrack(trackId).then(function (t) {
+      currentTrack = t;
       drawTrack(t);
       renderDetail(t);
     }).catch(function (e) {
@@ -181,20 +199,16 @@
       stat((t.gpsPointCount || 0), "定位點") +
       stat((t.photoCount || 0), "照片");
 
-    var pts = t.points || [];
-    drawChart($("speedChart"), pts.map(function (p) { return p[3] || 0; }), "#2F6BFF", "km/h");
-    drawChart($("altChart"), pts.map(function (p) { return p[2] || 0; }), "#00E676", "m");
+    drawCharts(t);
 
     var actions = $("detailActions");
     actions.innerHTML = "";
     var a3d = document.createElement("a");
     a3d.className = "btn";
     a3d.textContent = "▶ 3D 回放";
-    a3d.href = "flythrough.html?track=" + encodeURIComponent(t.trackId) +
-      "&repo=" + encodeURIComponent(CONFIG.repo) +
-      "&branch=" + encodeURIComponent(CONFIG.branch) +
-      "&data=" + encodeURIComponent(CONFIG.dataPath);
+    a3d.href = "flythrough.html?track=" + encodeURIComponent(t.trackId) + linkOverrideParams();
     a3d.target = "_blank";
+    a3d.rel = "noopener";
     actions.appendChild(a3d);
     var gpxBtn = document.createElement("button");
     gpxBtn.className = "btn secondary";
@@ -212,27 +226,46 @@
     }
   }
 
+  // 只有使用自訂 repo/branch/data 時才把參數帶給 3D 回放頁；預設同源相對路徑不需傳。
+  function linkOverrideParams() {
+    if (!CONFIG.repo && CONFIG.dataPath === "data" && CONFIG.branch === "main") return "";
+    return "&repo=" + encodeURIComponent(CONFIG.repo) +
+      "&branch=" + encodeURIComponent(CONFIG.branch) +
+      "&data=" + encodeURIComponent(CONFIG.dataPath);
+  }
+
+  function drawCharts(t) {
+    var pts = t.points || [];
+    var speed = new Array(pts.length), alt = new Array(pts.length);
+    for (var i = 0; i < pts.length; i++) { speed[i] = pts[i][3] || 0; alt[i] = pts[i][2] || 0; }
+    drawChart($("speedChart"), speed, "#2F6BFF", "km/h");
+    drawChart($("altChart"), alt, "#00E676", "m");
+  }
+
   function drawChart(canvas, values, color, unit) {
     var dpr = window.devicePixelRatio || 1;
     var w = canvas.clientWidth || 600;
-    var h = canvas.height / dpr || 140;
+    var h = 140;
     canvas.width = w * dpr; canvas.height = h * dpr;
     var ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     if (!values.length) return;
-    var min = Math.min.apply(null, values), max = Math.max.apply(null, values);
+    var min = values[0], max = values[0];
+    for (var i = 1; i < values.length; i++) {
+      if (values[i] < min) min = values[i];
+      if (values[i] > max) max = values[i];
+    }
     if (max === min) max = min + 1;
     var pad = 8;
     ctx.beginPath();
     ctx.strokeStyle = color; ctx.lineWidth = 2;
-    values.forEach(function (v, i) {
-      var x = pad + (w - 2 * pad) * (i / Math.max(1, values.length - 1));
-      var y = h - pad - (h - 2 * pad) * ((v - min) / (max - min));
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
+    for (var j = 0; j < values.length; j++) {
+      var x = pad + (w - 2 * pad) * (j / Math.max(1, values.length - 1));
+      var y = h - pad - (h - 2 * pad) * ((values[j] - min) / (max - min));
+      if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
     ctx.stroke();
-    // 填色
     ctx.lineTo(w - pad, h - pad); ctx.lineTo(pad, h - pad); ctx.closePath();
     ctx.fillStyle = color + "22"; ctx.fill();
     ctx.fillStyle = "#9aa7bd"; ctx.font = "11px sans-serif";
@@ -263,25 +296,76 @@
     URL.revokeObjectURL(url);
   }
 
-  function renderAllRoutes() {
-    var on = $("showAll").checked;
-    $("hint").style.display = on ? "none" : (selected ? "none" : "block");
-    if (!on) { map.getSource("allroutes").setData(emptyFC()); return; }
-    var features = [];
-    var pending = manifest.tracks.map(function (t) { return loadTrack(t.trackId); });
-    Promise.all(pending).then(function (all) {
-      all.forEach(function (t) {
-        var coords = (t.points || []).map(function (p) { return [p[0], p[1]]; });
-        if (coords.length) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
-      });
-      map.getSource("allroutes").setData({ type: "FeatureCollection", features: features });
+  function downsampleCoords(coords, max) {
+    if (coords.length <= max) return coords;
+    var out = [], step = (coords.length - 1) / (max - 1);
+    for (var i = 0; i < max; i++) out.push(coords[Math.round(i * step)]);
+    return out;
+  }
+
+  // 限制同時下載數量，避免一次開太多請求。
+  function loadTracksLimited(ids, limit) {
+    return new Promise(function (resolve) {
+      var results = new Array(ids.length), i = 0, active = 0, done = 0;
+      if (!ids.length) { resolve(results); return; }
+      function kick() {
+        while (active < limit && i < ids.length) {
+          (function (idx) {
+            active++;
+            loadTrack(ids[idx])
+              .then(function (t) { results[idx] = t; })
+              .catch(function () { results[idx] = null; })
+              .then(function () { active--; done++; if (done === ids.length) resolve(results); else kick(); });
+          })(i++);
+        }
+      }
+      kick();
     });
   }
 
-  $("search").addEventListener("input", renderList);
+  function renderAllRoutes() {
+    var on = $("showAll").checked;
+    $("hint").style.display = on ? "none" : (selected ? "none" : "block");
+    if (!on) {
+      map.getSource("allroutes").setData(GPST.emptyFC());
+      return;
+    }
+    if (allRoutesLoaded) return;
+    $("hint").textContent = "載入全部軌跡中…";
+    $("hint").style.display = "block";
+    var ids = manifest.tracks.map(function (t) { return t.trackId; });
+    loadTracksLimited(ids, ALL_CONCURRENCY).then(function (all) {
+      var features = [];
+      all.forEach(function (t) {
+        if (!t) return;
+        var coords = downsampleCoords((t.points || []).map(function (p) { return [p[0], p[1]]; }), MAX_ALL_ROUTE_POINTS);
+        if (coords.length) features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
+      });
+      map.getSource("allroutes").setData({ type: "FeatureCollection", features: features });
+      allRoutesLoaded = true;
+      $("hint").textContent = "← 選擇左側紀錄以查看分析，或勾選「顯示全部軌跡」。";
+      $("hint").style.display = selected ? "none" : "block";
+    });
+  }
+
+  // 搜尋輸入 debounce，避免每個按鍵都重繪清單。
+  var searchTimer = null;
+  $("search").addEventListener("input", function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderList, SEARCH_DEBOUNCE_MS);
+  });
   $("modeFilter").addEventListener("change", renderList);
   $("showAll").addEventListener("change", renderAllRoutes);
   $("closeDetail").addEventListener("click", function () { $("detail").classList.add("hidden"); });
+
+  // 視窗尺寸改變時重繪圖表（圖表寬度依容器而定）。
+  var resizeTimer = null;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (currentTrack && !$("detail").classList.contains("hidden")) drawCharts(currentTrack);
+    }, 150);
+  });
 
   if (typeof maplibregl === "undefined") {
     $("summary").textContent = "找不到 MapLibre（請確認 vendor/maplibre-gl.js 是否存在）";

@@ -32,4 +32,4 @@
 
 ## 注意
 - 資料以 JSON 形式存在 repo（公開）。若不想公開，請改用需要後端的方案（例如 Cloudflare Worker）。
-- 儀表板即時以 `raw.githubusercontent.com` 讀取資料；GitHub Pages 只負責放前端程式（約 1 分鐘 CDN 快取）。
+- 儀表板以「同源相對路徑」`data/` 讀取資料（由 GitHub Pages CDN 提供，較快且免跨網域）；只有指定 `?repo=owner/name` 時才改用 `raw.githubusercontent.com`。

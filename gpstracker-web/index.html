@@ -3,10 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="GPS Tracker 紀錄儀表板：地圖軌跡、統計、速度/海拔圖表、3D 回放與 GPX 匯出。" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">🛰️</text></svg>' />
   <title>GPS Tracker 紀錄儀表板</title>
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
   <link href="style.css" rel="stylesheet" />
-  <script src="vendor/maplibre-gl.js"></script>
+  <script defer src="common.js"></script>
+  <script defer src="vendor/maplibre-gl.js"></script>
 </head>
 <body>
   <header>
@@ -57,6 +61,6 @@
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script defer src="app.js"></script>
 </body>
 </html>

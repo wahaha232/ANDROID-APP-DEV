@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>GPS Tracker 3D 回放</title>
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
+  <script src="common.js"></script>
   <script src="vendor/maplibre-gl.js"></script>
   <style>
     html, body { height: 100%; margin: 0; background: #000; overflow: hidden; color: #fff;
@@ -51,15 +52,13 @@
 (function () {
   "use strict";
   var params = new URLSearchParams(location.search);
-  var CONFIG = {
-    repo: params.get("repo") || "wahaha232/ANDROID-APP-DEV",
-    branch: params.get("branch") || "main",
-    dataPath: params.get("data") || "gpstracker-web/data"
-  };
+  var CONFIG = GPST.resolveConfig();
   var trackId = params.get("track");
-  var RAW = "https://raw.githubusercontent.com/" + CONFIG.repo + "/" + CONFIG.branch + "/" + CONFIG.dataPath + "/";
+  var RAW = CONFIG.dataBase;
   var BASE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   var DEM_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+  var BASE_ATTR = "Esri, Maxar, Earthstar Geographics, GIS User Community";
+  var DEM_ATTR = "Elevation: Mapzen / AWS Terrain Tiles";
   var SPEEDS = [1, 2, 4, 8, 16];
 
   var coords = [], hudData = [], cum = [], total = 0;
@@ -72,14 +71,14 @@
     container: "map",
     style: { version: 8, projection: { type: "globe" }, sky: {},
       sources: {
-        base: { type: "raster", tiles: [BASE_TILES], tileSize: 256 },
-        dem: { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256 }
+        base: { type: "raster", tiles: [BASE_TILES], tileSize: 256, attribution: BASE_ATTR },
+        dem: { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256, attribution: DEM_ATTR }
       },
       layers: [
         { id: "base", type: "raster", source: "base" },
         { id: "hillshade", type: "hillshade", source: "dem", paint: { "hillshade-exaggeration": 0.5 } }
       ] },
-    center: [121, 23.5], zoom: 1.6, pitch: 0, bearing: 0, attributionControl: false, antialias: true
+    center: [121, 23.5], zoom: 1.6, pitch: 0, bearing: 0, antialias: true
   });
 
   map.on("load", function () {
@@ -98,7 +97,7 @@
 
   function loadTrack() {
     if (!trackId) { $("status").textContent = "缺少 ?track= 參數"; return; }
-    fetch(RAW + trackId + ".json?_=" + Date.now())
+    fetch(RAW + trackId + ".json", { cache: "no-cache" })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function (t) {
         var pts = t.points || [];
@@ -132,9 +131,11 @@
   function pointAt(f) {
     if (!coords.length) return null;
     if (coords.length === 1 || total === 0) return { pos: coords[0], bearing: 0, i: 0, t: 0 };
-    var target = f * total, i = 1;
-    while (i < cum.length && cum[i] < target) i++;
-    i = Math.min(i, coords.length - 1);
+    var target = f * total;
+    // 二分搜尋：找出第一個 cum[i] >= target 的 i（cum 為累積距離，遞增）。
+    var lo = 1, hi = cum.length - 1;
+    while (lo < hi) { var mid = (lo + hi) >> 1; if (cum[mid] < target) lo = mid + 1; else hi = mid; }
+    var i = Math.min(lo, coords.length - 1);
     var a = coords[i - 1], b = coords[i], segLen = cum[i] - cum[i - 1];
     var t = segLen > 0 ? (target - cum[i - 1]) / segLen : 0;
     return { pos: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], bearing: bearing(a, b), i: i, t: t };
