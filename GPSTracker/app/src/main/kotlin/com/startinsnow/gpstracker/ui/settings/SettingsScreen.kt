@@ -51,6 +51,9 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.startinsnow.gpstracker.data.prefs.StepSource
 import com.startinsnow.gpstracker.sync.GoogleAuthManager
+import com.startinsnow.gpstracker.sync.HealthConnectStepReader
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
@@ -77,6 +80,17 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
             "已連接 Google 帳號（含 Google Fit 授權）"
         } else {
             "連接 Google 失敗：${task.exception?.message ?: "未知錯誤"}"
+        }
+    }
+
+    var hcStatus by remember { mutableStateOf<String?>(null) }
+    val hcLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract()
+    ) { granted ->
+        hcStatus = if (granted.contains(HealthConnectStepReader.READ_PERMISSION)) {
+            "已授權 Health Connect 讀取步數"
+        } else {
+            "未授權 Health Connect 讀取步數"
         }
     }
 
@@ -117,32 +131,80 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
             }
 
             SettingsSection(title = "步數") {
-                SwitchRow(
-                    title = "步數來源：Google Fit",
-                    subtitle = "記錄結束時以 Google Fit 讀取該趟步數；未連接時自動改用裝置感測器",
-                    checked = settings.stepSource == StepSource.GOOGLE_FIT
-                ) { enabled ->
-                    viewModel.setStepSource(if (enabled) StepSource.GOOGLE_FIT else StepSource.DEVICE_SENSOR)
-                    if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                        ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
-                    }
+                Text(
+                    "記錄結束時讀取該趟步數；讀取失敗或未授權時自動改用裝置感測器。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = settings.stepSource == StepSource.GOOGLE_FIT,
+                        onClick = {
+                            viewModel.setStepSource(StepSource.GOOGLE_FIT)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                            }
+                        },
+                        label = { Text("Google Fit") }
+                    )
+                    FilterChip(
+                        selected = settings.stepSource == StepSource.ZEPP_LIFE,
+                        onClick = { viewModel.setStepSource(StepSource.ZEPP_LIFE) },
+                        label = { Text("小米 Zepp Life") }
+                    )
                 }
                 SectionDivider()
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = { fitSignInLauncher.launch(authManager.signInIntent()) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("連接 Google Fit") }
-                    Text(
-                        "需在 Google Cloud 專案啟用 Fitness API，並同意 fitness.activity.read 授權，Google Fit 才會回傳步數。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    when (settings.stepSource) {
+                        StepSource.GOOGLE_FIT -> {
+                            OutlinedButton(
+                                onClick = { fitSignInLauncher.launch(authManager.signInIntent()) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("連接 Google Fit") }
+                            Text(
+                                "需在 Google Cloud 專案啟用 Fitness API，並同意 fitness.activity.read 授權，Google Fit 才會回傳步數。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        StepSource.ZEPP_LIFE -> {
+                            OutlinedButton(
+                                onClick = { hcLauncher.launch(setOf(HealthConnectStepReader.READ_PERMISSION)) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("授權 Health Connect 讀取步數") }
+                            Text(
+                                "小米 Zepp Life（Mi Fitness）的步數會同步到 Health Connect；本 App 只讀取 Zepp Life／Mi Fitness 來源的步數。請先在 Zepp Life 開啟同步。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (!healthConnectAvailable(context)) {
+                                Text(
+                                    "此裝置未偵測到 Health Connect，請先安裝並啟用。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            hcStatus?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        StepSource.DEVICE_SENSOR -> {
+                            Text(
+                                "使用手機內建步數感測器（最省電、不需額外授權）。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     fitStatus?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
@@ -312,3 +374,6 @@ private fun SettingsTextField(
         )
     }
 }
+
+private fun healthConnectAvailable(context: android.content.Context): Boolean =
+    runCatching { HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE }.getOrDefault(false)

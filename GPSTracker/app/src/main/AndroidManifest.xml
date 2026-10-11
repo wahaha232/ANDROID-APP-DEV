@@ -19,6 +19,9 @@
     <!-- Google Fit 步數讀取：Android 10（Q）以上需活動辨識權限 -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
+    <!-- Health Connect 步數讀取：小米 Zepp Life 的步數會同步到 Health Connect -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+
     <!-- 將照片寫入系統相簿：Android 10（Q）以下才需要此權限，Q 以上用 MediaStore 免權限 -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -37,6 +40,11 @@
     <uses-feature
         android:name="android.hardware.sensor.stepcounter"
         android:required="false" />
+
+    <!-- Android 13（含）以下需要宣告才能偵測 Health Connect App -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
 
     <application
         android:name=".GpsTrackerApplication"
