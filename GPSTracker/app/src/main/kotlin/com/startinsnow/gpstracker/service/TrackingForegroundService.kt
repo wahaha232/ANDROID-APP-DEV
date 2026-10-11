@@ -20,6 +20,7 @@ import com.startinsnow.gpstracker.core.model.PointReliability
 import com.startinsnow.gpstracker.core.model.TrackStatus
 import com.startinsnow.gpstracker.core.geo.GeoMath
 import com.startinsnow.gpstracker.data.prefs.GpsMode
+import com.startinsnow.gpstracker.data.prefs.StepSource
 import com.startinsnow.gpstracker.export.ExportTrackData
 import com.startinsnow.gpstracker.location.AdaptiveSamplingPolicy
 import com.startinsnow.gpstracker.location.LocationQualityManager
@@ -27,6 +28,8 @@ import com.startinsnow.gpstracker.location.LocationTracker
 import com.startinsnow.gpstracker.movement.MovementDetector
 import com.startinsnow.gpstracker.movement.MovementSample
 import com.startinsnow.gpstracker.sensor.StepCounterManager
+import com.startinsnow.gpstracker.sync.GoogleAuthManager
+import com.startinsnow.gpstracker.sync.GoogleFitStepReader
 import com.startinsnow.gpstracker.sync.WebDashboardUploader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -546,10 +549,11 @@ class TrackingForegroundService : LifecycleService() {
                     app.trackRepository.endOutageIfNeeded(id, System.currentTimeMillis())
                     hasOpenOutage = false
                 }
+                val stepsForSave = resolveFinalStepCount(id, finalSteps)
                 app.trackRepository.finalizeTrack(
                     trackId = id,
                     endTimestampMs = System.currentTimeMillis(),
-                    stepCount = finalSteps,
+                    stepCount = stepsForSave,
                     activeDurationMs = finalActiveDurationMs,
                     snapshotDistanceMeters = finalDistanceMeters,
                     snapshotAvgSpeedMps = finalAvgSpeedMps,
@@ -603,6 +607,22 @@ class TrackingForegroundService : LifecycleService() {
 
     private fun currentDurationMs(): Long =
         activeDurationMs + if (!isPaused) SystemClock.elapsedRealtime() - activeSegmentStartElapsedMs else 0L
+
+    /**
+     * 決定要寫入資料庫的步數：設定為 Google Fit 且已授權時，改用該趟時間區間的 Google Fit 步數，
+     * 讀取失敗或未授權則退回裝置感測器累積的步數（不影響其他功能）。
+     */
+    private suspend fun resolveFinalStepCount(trackId: String, sensorSteps: Long): Long {
+        val settings = runCatching { app.settingsRepository.settings.first() }.getOrNull() ?: return sensorSteps
+        if (settings.stepSource != StepSource.GOOGLE_FIT) return sensorSteps
+        val auth = GoogleAuthManager(this)
+        val account = auth.lastSignedInAccount() ?: return sensorSteps
+        if (!auth.hasFitnessPermission()) return sensorSteps
+        val startMs = app.trackRepository.getTrack(trackId)?.startTimeMs ?: return sensorSteps
+        val endMs = System.currentTimeMillis()
+        val fitSteps = GoogleFitStepReader(this).stepsBetween(account, startMs, endMs).getOrNull()
+        return if (fitSteps != null && fitSteps > 0) fitSteps else sensorSteps
+    }
 
     private fun resetAggregation() {
         distanceMeters = 0.0

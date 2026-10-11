@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.startinsnow.gpstracker.GpsTrackerApplication
 import com.startinsnow.gpstracker.data.prefs.AppSettings
 import com.startinsnow.gpstracker.data.prefs.GpsMode
+import com.startinsnow.gpstracker.data.prefs.StepSource
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -19,6 +20,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun setGpsMode(mode: GpsMode) = viewModelScope.launch { app.settingsRepository.setGpsMode(mode) }
     fun setAutoPause(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setAutoPauseEnabled(enabled) }
+    fun setStepSource(source: StepSource) = viewModelScope.launch { app.settingsRepository.setStepSource(source) }
     fun setDriveSync(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setDriveSyncEnabled(enabled) }
     fun setWifiOnly(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setWifiOnlySync(enabled) }
     fun setRetentionDays(days: Int) = viewModelScope.launch { app.settingsRepository.setDataRetentionDays(days) }

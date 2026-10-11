@@ -16,6 +16,9 @@
     <!-- 拍照（出發/一般/終點照片） -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- Google Fit 步數讀取：Android 10（Q）以上需活動辨識權限 -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
     <!-- 將照片寫入系統相簿：Android 10（Q）以下才需要此權限，Q 以上用 MediaStore 免權限 -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"

@@ -13,9 +13,13 @@ private val Context.dataStore by preferencesDataStore(name = "gps_tracker_settin
 
 enum class GpsMode { ADAPTIVE, HIGH_ACCURACY }
 
+/** 步數來源：裝置感測器，或 Google Fit。 */
+enum class StepSource { DEVICE_SENSOR, GOOGLE_FIT }
+
 data class AppSettings(
     val gpsMode: GpsMode = GpsMode.ADAPTIVE,
     val autoPauseEnabled: Boolean = true,
+    val stepSource: StepSource = StepSource.GOOGLE_FIT,
     val driveSyncEnabled: Boolean = false,
     val wifiOnlySync: Boolean = true,
     val dataRetentionDays: Int = 0, // 0 = 永久保留
@@ -36,6 +40,7 @@ class SettingsRepository(private val context: Context) {
     private object Keys {
         val GPS_MODE = stringPreferencesKey("gps_mode")
         val AUTO_PAUSE = booleanPreferencesKey("auto_pause_enabled")
+        val STEP_SOURCE = stringPreferencesKey("step_source")
         val DRIVE_SYNC = booleanPreferencesKey("drive_sync_enabled")
         val WIFI_ONLY = booleanPreferencesKey("wifi_only_sync")
         val RETENTION_DAYS = intPreferencesKey("data_retention_days")
@@ -53,6 +58,7 @@ class SettingsRepository(private val context: Context) {
         AppSettings(
             gpsMode = runCatching { GpsMode.valueOf(prefs[Keys.GPS_MODE] ?: GpsMode.ADAPTIVE.name) }.getOrDefault(GpsMode.ADAPTIVE),
             autoPauseEnabled = prefs[Keys.AUTO_PAUSE] ?: true,
+            stepSource = runCatching { StepSource.valueOf(prefs[Keys.STEP_SOURCE] ?: StepSource.GOOGLE_FIT.name) }.getOrDefault(StepSource.GOOGLE_FIT),
             driveSyncEnabled = prefs[Keys.DRIVE_SYNC] ?: false,
             wifiOnlySync = prefs[Keys.WIFI_ONLY] ?: true,
             dataRetentionDays = prefs[Keys.RETENTION_DAYS] ?: 0,
@@ -69,6 +75,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setGpsMode(mode: GpsMode) = context.dataStore.edit { it[Keys.GPS_MODE] = mode.name }
     suspend fun setAutoPauseEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.AUTO_PAUSE] = enabled }
+    suspend fun setStepSource(source: StepSource) = context.dataStore.edit { it[Keys.STEP_SOURCE] = source.name }
     suspend fun setDriveSyncEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.DRIVE_SYNC] = enabled }
     suspend fun setWifiOnlySync(enabled: Boolean) = context.dataStore.edit { it[Keys.WIFI_ONLY] = enabled }
     suspend fun setDataRetentionDays(days: Int) = context.dataStore.edit { it[Keys.RETENTION_DAYS] = days }

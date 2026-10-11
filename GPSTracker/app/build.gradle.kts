@@ -153,6 +153,10 @@ dependencies {
     // ---------- Google Sign-In (Drive OAuth only, never for the map/GPS engine) ----------
     implementation("com.google.android.gms:play-services-auth:21.2.0")
 
+    // ---------- Google Fit（步數來源；記錄結束時讀取該趟步數） ----------
+    implementation("com.google.android.gms:play-services-fitness:21.2.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+
     // ---------- Retrofit/OkHttp (Drive REST v3 batch upload, not used by the GPS engine) ----------
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")

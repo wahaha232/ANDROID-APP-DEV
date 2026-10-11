@@ -41,6 +41,16 @@ import com.startinsnow.gpstracker.ui.map.OfflineDownloadProgress
 import com.startinsnow.gpstracker.ui.map.OfflineMapManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.OutlinedButton
+import androidx.core.content.ContextCompat
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.startinsnow.gpstracker.data.prefs.StepSource
+import com.startinsnow.gpstracker.sync.GoogleAuthManager
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
@@ -49,6 +59,26 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     var offlineMapStatus by remember { mutableStateOf<String?>(null) }
     var offlineDownloadJob by remember { mutableStateOf<Job?>(null) }
+
+    val authManager = remember { GoogleAuthManager(context) }
+    var fitStatus by remember { mutableStateOf<String?>(null) }
+
+    val activityPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) fitStatus = "未取得「活動辨識」權限，Google Fit 步數可能無法讀取"
+    }
+
+    val fitSignInLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        fitStatus = if (task.isSuccessful) {
+            "已連接 Google 帳號（含 Google Fit 授權）"
+        } else {
+            "連接 Google 失敗：${task.exception?.message ?: "未知錯誤"}"
+        }
+    }
 
     // 離開設定畫面時取消仍在進行的離線地圖下載，避免背景 collector 洩漏。
     DisposableEffect(Unit) {
@@ -84,6 +114,39 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     subtitle = "靜止超過 1 分鐘後自動暫停記錄",
                     checked = settings.autoPauseEnabled
                 ) { viewModel.setAutoPause(it) }
+            }
+
+            SettingsSection(title = "步數") {
+                SwitchRow(
+                    title = "步數來源：Google Fit",
+                    subtitle = "記錄結束時以 Google Fit 讀取該趟步數；未連接時自動改用裝置感測器",
+                    checked = settings.stepSource == StepSource.GOOGLE_FIT
+                ) { enabled ->
+                    viewModel.setStepSource(if (enabled) StepSource.GOOGLE_FIT else StepSource.DEVICE_SENSOR)
+                    if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                    }
+                }
+                SectionDivider()
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { fitSignInLauncher.launch(authManager.signInIntent()) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("連接 Google Fit") }
+                    Text(
+                        "需在 Google Cloud 專案啟用 Fitness API，並同意 fitness.activity.read 授權，Google Fit 才會回傳步數。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    fitStatus?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
             }
 
             SettingsSection(title = "雲端同步") {
