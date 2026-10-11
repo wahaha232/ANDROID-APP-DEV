@@ -622,12 +622,14 @@ class TrackingForegroundService : LifecycleService() {
         }
     }
 
-    /** 經 Health Connect 讀取指定來源步數；不可用或無資料時回傳 null，讓呼叫端退回感測器。 */
+    /** 經 Health Connect 讀取步數：先取指定來源，無資料時退回全部來源；皆不可用時回傳 null。 */
     private suspend fun stepsFromHealthConnect(googleFit: Boolean, startMs: Long, endMs: Long): Long? {
         val reader = HealthConnectStepReader(this)
         if (!reader.isAvailable()) return null
-        val steps = (if (googleFit) reader.googleFitSteps(startMs, endMs) else reader.zeppSteps(startMs, endMs)).getOrNull()
-        return if (steps != null && steps > 0) steps else null
+        val preferred = (if (googleFit) reader.googleFitSteps(startMs, endMs) else reader.zeppSteps(startMs, endMs)).getOrNull()
+        if (preferred != null && preferred > 0) return preferred
+        val all = reader.allSteps(startMs, endMs).getOrNull()
+        return if (all != null && all > 0) all else null
     }
 
     private fun resetAggregation() {

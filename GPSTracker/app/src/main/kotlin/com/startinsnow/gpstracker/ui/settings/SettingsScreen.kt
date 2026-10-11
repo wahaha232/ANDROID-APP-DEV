@@ -79,6 +79,24 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
         }
     }
 
+    val runHcDiagnostics: () -> Unit = {
+        val reader = HealthConnectStepReader(context)
+        scope.launch {
+            hcStatus = "檢查中…"
+            hcStatus = when {
+                !reader.isAvailable() -> "此裝置未提供 Health Connect。"
+                !reader.hasPermission() -> "尚未授權 Health Connect 讀取步數，請先按上方授權。"
+                else -> reader.stepsByOriginLastDays(7).fold(
+                    onSuccess = { m ->
+                        if (m.isEmpty()) "近 7 天 Health Connect 沒有任何步數資料（請確認來源 App 已同步到 Health Connect）。"
+                        else "近 7 天步數來源：\n" + m.entries.joinToString("\n") { "• ${it.key}：${it.value} 步" }
+                    },
+                    onFailure = { "檢查失敗：${it.message}" }
+                )
+            }
+        }
+    }
+
     // 離開設定畫面時取消仍在進行的離線地圖下載，避免背景 collector 洩漏。
     DisposableEffect(Unit) {
         onDispose { offlineDownloadJob?.cancel() }
@@ -140,7 +158,14 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     )
                     FilterChip(
                         selected = settings.stepSource == StepSource.ZEPP_LIFE,
-                        onClick = { viewModel.setStepSource(StepSource.ZEPP_LIFE) },
+                        onClick = {
+                            viewModel.setStepSource(StepSource.ZEPP_LIFE)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                            }
+                        },
                         label = { Text("小米 Zepp Life") }
                     )
                 }
@@ -150,54 +175,40 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     when (settings.stepSource) {
-                        StepSource.GOOGLE_FIT -> {
-                            OutlinedButton(
-                                onClick = { hcLauncher.launch(setOf(HealthConnectStepReader.READ_PERMISSION)) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("授權 Health Connect 讀取步數") }
+                        StepSource.GOOGLE_FIT -> Text(
+                            "Google Fit 的步數會同步到 Health Connect（免 Google OAuth）；本 App 會讀取 Google Fit 來源的步數。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        StepSource.ZEPP_LIFE -> Text(
+                            "小米 Zepp Life / Mi Fitness 的步數會同步到 Health Connect；請先在 Zepp Life 開啟同步。本 App 會讀取 Zepp Life／Mi Fitness 來源的步數。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        StepSource.DEVICE_SENSOR -> Text(
+                            "使用手機內建步數感測器（最省電、不需額外授權）。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (settings.stepSource != StepSource.DEVICE_SENSOR) {
+                        OutlinedButton(
+                            onClick = { hcLauncher.launch(setOf(HealthConnectStepReader.READ_PERMISSION)) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("授權 Health Connect 讀取步數") }
+                        OutlinedButton(
+                            onClick = { runHcDiagnostics() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("檢查 Health Connect 資料") }
+                        if (!healthConnectAvailable(context)) {
                             Text(
-                                "Google Fit 的步數會同步到 Health Connect（免 Google OAuth）；本 App 只讀取 Google Fit 來源的步數。",
+                                "此裝置未偵測到 Health Connect，請先安裝並啟用。",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.error
                             )
-                            if (!healthConnectAvailable(context)) {
-                                Text(
-                                    "此裝置未偵測到 Health Connect，請先安裝並啟用。",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                            hcStatus?.let {
-                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                            }
                         }
-                        StepSource.ZEPP_LIFE -> {
-                            OutlinedButton(
-                                onClick = { hcLauncher.launch(setOf(HealthConnectStepReader.READ_PERMISSION)) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("授權 Health Connect 讀取步數") }
-                            Text(
-                                "小米 Zepp Life（Mi Fitness）的步數會同步到 Health Connect；本 App 只讀取 Zepp Life／Mi Fitness 來源的步數。請先在 Zepp Life 開啟同步。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (!healthConnectAvailable(context)) {
-                                Text(
-                                    "此裝置未偵測到 Health Connect，請先安裝並啟用。",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                            hcStatus?.let {
-                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                        StepSource.DEVICE_SENSOR -> {
-                            Text(
-                                "使用手機內建步數感測器（最省電、不需額外授權）。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        hcStatus?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
