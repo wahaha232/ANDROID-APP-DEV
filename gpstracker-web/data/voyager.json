@@ -1,0 +1,16 @@
+{
+  "updatedAt": 1791735594863,
+  "generatedAt": "2026-10-11",
+  "source": "NASA/JPL Horizons (https://ssd.jpl.nasa.gov/api/horizons.api)",
+  "units": "km",
+  "reference": {
+    "fromSun": "CENTER=500@10 (Sun)",
+    "fromEarth": "CENTER=500@399 (Earth geocenter)",
+    "auKm": 149597870.7,
+    "note": "delta 由 AU 換算為 km；參考中心分別為太陽與地球質心，與玩家累積里程定義不同（玩家為地表移動里程）。"
+  },
+  "probes": {
+    "voyager1": { "horizonsId": "-31", "fromSunKm": 25731569460, "fromEarthKm": 25794004533, "au": 172.004917844849 },
+    "voyager2": { "horizonsId": "-32", "fromSunKm": 21566810490, "fromEarthKm": 21560406105, "au": 144.165223669332 }
+  }
+}

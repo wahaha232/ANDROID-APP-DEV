@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="GPS TRACKER 太陽系征服計畫：用你的累積里程征服九大天體關卡，並追逐航海家一號與二號。" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">🚀</text></svg>' />
+  <title>太陽系征服計畫</title>
+  <link href="style.css" rel="stylesheet" />
+  <link href="solar.css" rel="stylesheet" />
+  <script defer src="common.js"></script>
+  <script defer src="solar-levels.js"></script>
+  <script defer src="solar-core.js"></script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">🚀</span>
+      <div>
+        <h1>太陽系征服計畫</h1>
+        <div id="summary" class="summary">載入中…</div>
+      </div>
+    </div>
+    <div class="header-actions" style="display:flex;gap:8px">
+      <a class="btn secondary" href="challenges.html">🏆 競賽中心</a>
+      <a class="btn secondary" href="index.html">← 返回紀錄</a>
+    </div>
+  </header>
+
+  <main class="solar-main">
+    <div id="solarCards" class="solar-cards"></div>
+    <div id="nextProgress"></div>
+
+    <div class="solar-filters" id="filters">
+      <button data-f="all" class="active">全部</button>
+      <button data-f="conquered">已征服</button>
+      <button data-f="locked">未征服</button>
+      <button id="recalc">🔄 重新計算進度</button>
+    </div>
+
+    <div id="bodyGrid" class="body-grid"></div>
+
+    <div class="section-h">🛰️ 探測器追逐賽（航海家）</div>
+    <div id="voyager" class="voyager-row"></div>
+
+    <div class="section-h">🌌 我的宇宙旅程</div>
+    <div id="journey"></div>
+
+    <div class="solar-empty" id="emptyNote" style="display:none"></div>
+  </main>
+
+  <script defer src="solar.js"></script>
+</body>
+</html>
