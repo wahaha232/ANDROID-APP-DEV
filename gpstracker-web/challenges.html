@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="GPS TRACKER 趣味競賽中心：成就徽章、個人最佳、期間挑戰、里程統計、虛擬環遊與軌跡藝術。" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">🏆</text></svg>' />
+  <title>GPS 競賽中心</title>
+  <link href="vendor/maplibre-gl.css" rel="stylesheet" />
+  <link href="style.css" rel="stylesheet" />
+  <link href="challenges.css" rel="stylesheet" />
+  <script defer src="common.js"></script>
+  <script defer src="vendor/maplibre-gl.js"></script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">🏆</span>
+      <div>
+        <h1>GPS 競賽中心</h1>
+        <div id="summary" class="summary">載入中…</div>
+      </div>
+    </div>
+    <div class="ch-header-actions">
+      <a class="btn" href="index.html">← 返回紀錄</a>
+    </div>
+  </header>
+
+  <nav id="tabs" class="tabs"></nav>
+
+  <main class="ch-main">
+    <section id="panel-overview" class="panel"></section>
+    <section id="panel-badges" class="panel"></section>
+    <section id="panel-best" class="panel"></section>
+    <section id="panel-period" class="panel"></section>
+    <section id="panel-king" class="panel"></section>
+    <section id="panel-tour" class="panel"></section>
+    <section id="panel-history" class="panel"></section>
+    <section id="panel-photos" class="panel"></section>
+    <section id="panel-bingo" class="panel"></section>
+    <section id="panel-art" class="panel"></section>
+  </main>
+
+  <script defer src="challenges.js"></script>
+</body>
+</html>

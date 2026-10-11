@@ -6,6 +6,7 @@
 ## 網址
 - 儀表板：`https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/`
 - 3D 回放：`.../gpstracker-web/flythrough.html?track=<trackId>`
+- 競賽中心：`.../gpstracker-web/challenges.html`（成就徽章、個人最佳、期間挑戰、里程王、虛擬環遊、歷史上的今天、攝影挑戰、距離賓果、軌跡藝術）
 
 > 本 repo 的 GitHub Pages 已啟用並以「分支 main / 根目錄」發佈，因此本資料夾會自動被
 > 發佈到 `/gpstracker-web/`。**不需要**額外設定 Pages（也移除了先前的 GitHub Actions Pages workflow，避免兩種來源互相覆蓋）。

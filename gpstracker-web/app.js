@@ -31,6 +31,16 @@
     CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車", BUS: "公車", BOAT: "船", STATIONARY: "靜止", UNKNOWN: "未知"
   };
 
+  // 趣味競賽／里程碑：距離以公里為單位（總里程進度）。
+  var QUESTS = [
+    { name: "🌕 走到月球", km: 384400 },
+    { name: "☀️ 走到太陽", km: 149597870 },
+    { name: "🌍 繞地球一圈", km: 40075 },
+    { name: "🛰️ 爬上 ISS 軌道", km: 400 },
+    { name: "🏃 跑完一場馬拉松", km: 42.195 },
+    { name: "💡 光走 1 秒", km: 299792 }
+  ];
+
   function $(id) { return document.getElementById(id); }
   function modeEmoji(m) { return MODE_EMOJI[m] || "❓"; }
   function modeName(m) { return MODE_NAME[m] || m || "未知"; }
@@ -90,6 +100,9 @@
         buildModeFilter();
         renderSummary();
         renderList();
+        // 支援從競賽中心以 ?track=<id> 直接開啟某筆紀錄。
+        var want = new URLSearchParams(location.search).get("track");
+        if (want && manifest.tracks.some(function (t) { return t.trackId === want; })) selectTrack(want);
       })
       .catch(function (e) {
         $("summary").textContent = "讀取 manifest 失敗：" + e.message;
@@ -108,6 +121,53 @@
     });
     $("summary").textContent = manifest.tracks.length + " 筆紀錄 · 總里程 " + (totalDist / 1000).toFixed(2) +
       " km · 總時間 " + fmtDur(totalDur) + " · 總爬升 " + Math.round(totalAscent) + " m";
+    renderQuests(totalDist / 1000);
+  }
+
+  function fmtKm(v) { return v.toLocaleString("zh-Hant", { maximumFractionDigits: 1 }); }
+
+  function fmtPct(pct) {
+    if (pct >= 100) return "100%";
+    if (pct >= 1) return pct.toFixed(2) + "%";
+    if (pct >= 0.01) return pct.toFixed(4) + "%";
+    return pct.toFixed(6) + "%";
+  }
+
+  function renderQuests(totalKm) {
+    var box = $("quests");
+    box.innerHTML = "";
+    var title = document.createElement("div");
+    title.className = "quests-title";
+    title.textContent = "🎮 趣味競賽（依總里程）";
+    box.appendChild(title);
+    QUESTS.forEach(function (q) {
+      var pct = Math.min(100, (totalKm / q.km) * 100);
+      var done = totalKm >= q.km;
+
+      var el = document.createElement("div");
+      el.className = "quest" + (done ? " done" : "");
+
+      var head = document.createElement("div");
+      head.className = "q-head";
+      var t = document.createElement("span");
+      t.className = "q-title"; t.textContent = q.name;
+      var p = document.createElement("span");
+      p.className = "q-pct"; p.textContent = fmtPct(pct);
+      head.appendChild(t); head.appendChild(p);
+
+      var bar = document.createElement("div");
+      bar.className = "q-bar";
+      var fill = document.createElement("i");
+      fill.style.width = pct.toFixed(2) + "%";
+      bar.appendChild(fill);
+
+      var sub = document.createElement("div");
+      sub.className = "q-sub";
+      sub.textContent = done ? "已達成！🎉" : "還要 " + fmtKm(q.km - totalKm) + " km";
+
+      el.appendChild(head); el.appendChild(bar); el.appendChild(sub);
+      box.appendChild(el);
+    });
   }
 
   function buildModeFilter() {
