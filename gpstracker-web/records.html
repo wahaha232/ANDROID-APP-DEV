@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="GPS TRACKER 紀錄管理：瀏覽、下載、編輯備註與刪除已上傳的活動紀錄。" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">📁</text></svg>' />
+  <title>紀錄管理</title>
+  <link href="style.css" rel="stylesheet" />
+  <link href="records.css" rel="stylesheet" />
+  <script defer src="common.js"></script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">📁</span>
+      <div>
+        <h1>紀錄管理</h1>
+        <div id="summary" class="summary">載入中…</div>
+      </div>
+    </div>
+    <div class="rec-header-actions">
+      <a class="btn secondary" href="index.html">地圖儀表板</a>
+      <a class="btn secondary" href="challenges.html">🏆 競賽中心</a>
+      <a class="btn secondary" href="earth.html">🌍 地球征服</a>
+      <a class="btn secondary" href="solar.html">🚀 太陽系征服</a>
+      <a class="btn secondary" href="progress.html">📈 全挑戰進度</a>
+    </div>
+  </header>
+
+  <main class="rec-main">
+    <div id="statusNote" class="rec-note">載入中…</div>
+
+    <details class="rec-settings" id="settings">
+      <summary>⚙️ GitHub 寫入設定（編輯 / 刪除需要；Token 只存在你的瀏覽器）</summary>
+      <div class="grid">
+        <label>儲存庫 (owner/repo)<input id="cfgRepo" placeholder="wahaha232/ANDROID-APP-DEV" /></label>
+        <label>分支<input id="cfgBranch" placeholder="main" /></label>
+        <label>資料夾路徑<input id="cfgData" placeholder="gpstracker-web/data" /></label>
+        <label>GitHub Token（fine-grained PAT，Contents: Read and write）<input id="cfgToken" type="password" autocomplete="off" placeholder="github_pat_..." /></label>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="saveCfg">儲存設定</button>
+        <button class="btn secondary" id="clearCfg">清除 Token</button>
+        <span class="badge-sel" id="cfgState"></span>
+      </div>
+      <div class="rec-note warn" style="margin-top:10px">⚠️ Token 具備此 repo 的寫入權限，請使用僅限此 repo、Contents: Read and write 的 fine-grained PAT，並勿在公用電腦使用。無 Token 時僅能瀏覽與下載。</div>
+    </details>
+
+    <div class="rec-toolbar">
+      <input id="search" type="search" placeholder="搜尋日期 / 模式 / 備註…" />
+      <select id="modeFilter"><option value="">全部模式</option></select>
+      <select id="sortSel">
+        <option value="date_desc">日期（新→舊）</option>
+        <option value="date_asc">日期（舊→新）</option>
+        <option value="dist_desc">距離（大→小）</option>
+        <option value="dur_desc">時間（長→短）</option>
+      </select>
+      <span class="spacer"></span>
+      <button class="btn secondary" id="selectAll">全選</button>
+      <button class="btn secondary" id="downloadSel">⬇ 下載選取</button>
+      <button class="btn secondary" id="deleteSel">🗑️ 刪除選取</button>
+      <button class="btn secondary" id="refresh">🔄 重新整理</button>
+      <span class="badge-sel" id="selCount"></span>
+    </div>
+
+    <div id="tableWrap"></div>
+  </main>
+
+  <script defer src="records.js"></script>
+</body>
+</html>

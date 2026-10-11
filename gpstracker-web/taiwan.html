@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="GPS TRACKER 台灣征服計畫：台灣里程征服、環島挑戰、地理探索、縣市制霸、高山與垂直挑戰、四極點挑戰。" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">🇹🇼</text></svg>' />
+  <title>台灣征服計畫</title>
+  <link href="style.css" rel="stylesheet" />
+  <link href="earth.css" rel="stylesheet" />
+  <link href="taiwan.css" rel="stylesheet" />
+  <script defer src="common.js"></script>
+  <script defer src="solar-levels.js"></script>
+  <script defer src="solar-core.js"></script>
+  <script defer src="earth-levels.js"></script>
+  <script defer src="earth-core.js"></script>
+  <script defer src="taiwan-levels.js"></script>
+  <script defer src="taiwan-core.js"></script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">🇹🇼</span>
+      <div>
+        <h1>台灣征服計畫</h1>
+        <div id="summary" class="summary">載入中…</div>
+      </div>
+    </div>
+    <div class="e-header-actions">
+      <a class="btn secondary" href="earth.html">🌍 地球征服</a>
+      <a class="btn secondary" href="solar.html">🚀 太陽系征服</a>
+      <a class="btn secondary" href="challenges.html">🏆 成就中心</a>
+      <a class="btn secondary" href="records.html">📁 紀錄管理</a>
+      <a class="btn secondary" href="progress.html">📈 全挑戰進度</a>
+      <a class="btn secondary" href="index.html">← 返回紀錄</a>
+    </div>
+  </header>
+
+  <nav id="tabs" class="e-tabs"></nav>
+
+  <main class="earth-main">
+    <section id="panel-overview" class="e-panel"></section>
+    <section id="panel-mileage" class="e-panel"></section>
+    <section id="panel-loop" class="e-panel"></section>
+    <section id="panel-geo" class="e-panel"></section>
+    <section id="panel-county" class="e-panel"></section>
+    <section id="panel-vertical" class="e-panel"></section>
+    <section id="panel-extremes" class="e-panel"></section>
+  </main>
+
+  <script defer src="taiwan.js"></script>
+</body>
+</html>

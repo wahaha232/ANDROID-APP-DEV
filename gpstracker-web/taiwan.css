@@ -1,0 +1,15 @@
+/* 台灣征服計畫：沿用 style.css + earth.css 的元件樣式，僅補充少量專屬樣式。 */
+.chip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.chip { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.chip.hit { border-color: var(--green); background: #10241a; }
+.chip.unknown { opacity: .6; }
+.chip .dot { width: 10px; height: 10px; border-radius: 50%; background: #3a4a66; }
+.chip.hit .dot { background: var(--green); }
+.ext-list { list-style: none; margin: 0; padding: 0; }
+.ext-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.ext-list li.hit { border-color: var(--green); }
+.ext-list .e-mid { flex: 1; min-width: 0; }
+.ext-list .e-t1 { font-size: 13px; font-weight: 600; }
+.ext-list .e-t2 { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.ext-list .e-tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.ext-list li.hit .e-tag { background: var(--green); color: #04160d; font-weight: 700; }
