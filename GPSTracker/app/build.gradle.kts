@@ -146,6 +146,9 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.3.4")
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
+    // CameraX 的 ProcessCameraProvider 回傳 ListenableFuture；此類別原先由 GMS 相依間接帶入，
+    // 移除 Google Fit 相關相依後需明確提供，否則 Kotlin 編譯找不到 ListenableFuture。
+    implementation("com.google.guava:listenablefuture:1.0")
 
     // ---------- MapLibre (NO Google Maps) ----------
     implementation("org.maplibre.gl:android-sdk:11.6.1")
