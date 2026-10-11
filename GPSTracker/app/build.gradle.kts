@@ -175,3 +175,13 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
+
+// CameraX 需要 com.google.common.util.concurrent.ListenableFuture。某些相依會把它請求成空殼版本
+// (9999.0-empty-to-avoid-conflict-with-guava)，使編譯期找不到該類別；強制改回真正含類別的 1.0。
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "com.google.guava" && requested.name == "listenablefuture") {
+            useVersion("1.0")
+        }
+    }
+}
