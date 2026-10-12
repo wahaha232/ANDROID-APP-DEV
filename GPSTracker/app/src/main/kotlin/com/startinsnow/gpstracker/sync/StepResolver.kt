@@ -51,6 +51,24 @@ class StepResolver(context: Context) {
         }
     }
 
+    /** 今日各來源明細（package -> 步數）；掃描失敗回傳 failure。 */
+    suspend fun readOriginBreakdown(startMs: Long, endMs: Long): Result<Map<String, Long>> {
+        if (!reader.isAvailable()) return Result.failure(IllegalStateException("Health Connect unavailable"))
+        return runCatching {
+            val result = linkedMapOf<String, Long>()
+            reader.originsInRange(startMs, endMs).getOrThrow().forEach { pkg ->
+                result[pkg] = reader.stepsForOrigin(pkg, startMs, endMs).getOrDefault(0L)
+            }
+            result
+        }
+    }
+
+    /** 所有來源去除重複後的合計（Health Connect 依優先順序合併）。 */
+    suspend fun readHealthConnectAll(startMs: Long, endMs: Long): Result<Long> {
+        if (!reader.isAvailable()) return Result.failure(IllegalStateException("Health Connect unavailable"))
+        return reader.allSteps(startMs, endMs)
+    }
+
     suspend fun resolve(source: StepSource, startMs: Long, endMs: Long, sensorSteps: Long): ResolvedSteps {
         if (source == StepSource.DEVICE_SENSOR) return ResolvedSteps(sensorSteps, StepSourceTag.SENSOR)
         val hc = readHealthConnect(source, startMs, endMs).getOrNull()

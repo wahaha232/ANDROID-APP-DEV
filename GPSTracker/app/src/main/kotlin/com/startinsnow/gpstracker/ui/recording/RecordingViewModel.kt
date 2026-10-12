@@ -4,10 +4,23 @@ import com.startinsnow.gpstracker.R
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import com.startinsnow.gpstracker.GpsTrackerApplication
+import androidx.lifecycle.viewModelScope
+import com.startinsnow.gpstracker.core.model.LocationSample
+import com.startinsnow.gpstracker.core.model.MovementMode
 import com.startinsnow.gpstracker.core.model.PhotoType
+import com.startinsnow.gpstracker.location.LocationTracker
+import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import com.startinsnow.gpstracker.photo.TrackPhotoManager
 import com.startinsnow.gpstracker.service.TrackingForegroundService
 import com.startinsnow.gpstracker.service.TrackingStateHolder
+
+private const val PENDING_DIR = "pending"
 
 class RecordingViewModel(application: Application) : AndroidViewModel(application) {
     private val app get() = getApplication<GpsTrackerApplication>()
@@ -23,9 +36,56 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
     var startedNewTrackFromThisScreen: Boolean = false
         private set
 
-    fun startRecording() {
+    /** 開始記錄「之前」拍的照片：此時還沒有 Track，先存起來，Track 建立後再歸入這趟紀錄。 */
+    data class PendingPhoto(val file: File, val type: PhotoType, val timestampMs: Long, val sample: LocationSample?)
+
+    private val _pendingPhotos = MutableStateFlow<List<PendingPhoto>>(emptyList())
+    val pendingPhotos: StateFlow<List<PendingPhoto>> = _pendingPhotos
+    private var waitingToAttach = false
+
+    init {
+        // 使用者按下「開始記錄」、服務建立好 Track（出現 trackId）後，把先前拍的照片歸入這個 Track。
+        viewModelScope.launch {
+            state.map { it.trackId }.filterNotNull().distinctUntilChanged().collect { id ->
+                if (waitingToAttach) attachPendingPhotos(id)
+            }
+        }
+    }
+
+    /** [manualMode] 為 null 代表「自動」（依移動速度判斷）。 */
+    fun startRecording(manualMode: MovementMode? = null) {
         startedNewTrackFromThisScreen = true
-        TrackingForegroundService.start(app)
+        waitingToAttach = _pendingPhotos.value.isNotEmpty()
+        TrackingForegroundService.start(app, manualMode)
+    }
+
+    private suspend fun attachPendingPhotos(trackId: String) {
+        val photos = _pendingPhotos.value
+        if (photos.isEmpty()) {
+            waitingToAttach = false
+            return
+        }
+        val destDir = TrackPhotoManager.photoDir(app, trackId).apply { mkdirs() }
+        photos.forEach { p ->
+            val dest = File(destDir, p.file.name)
+            val finalFile = runCatching {
+                p.file.copyTo(dest, overwrite = true)
+                p.file.delete()
+                dest
+            }.getOrDefault(p.file)
+            runCatching {
+                app.trackRepository.addPhoto(trackId, p.type, finalFile.absolutePath, p.timestampMs, p.sample)
+            }
+        }
+        _pendingPhotos.value = emptyList()
+        waitingToAttach = false
+        runCatching { TrackPhotoManager.photoDir(app, PENDING_DIR).delete() }
+    }
+
+    override fun onCleared() {
+        // 拍了照卻沒開始記錄就離開：丟掉暫存的照片檔，不留孤兒檔案。
+        if (!waitingToAttach) _pendingPhotos.value.forEach { runCatching { it.file.delete() } }
+        super.onCleared()
     }
 
     /** 續錄（Crash Recovery）：以既有的 Track ID 重新啟動記錄服務。 */
@@ -41,7 +101,16 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
     /** 拍照；失敗時回傳可顯示給使用者的訊息，而不是靜默失敗。 */
     suspend fun capturePhoto(type: PhotoType): Result<Unit> {
         val trackId = state.value.trackId
-            ?: return Result.failure(IllegalStateException(app.getString(R.string.recording_vm_001)))
+        if (trackId == null) {
+            // 尚未開始記錄（準備畫面）：拍到暫存資料夾，第一張當出發點照片，之後的當一般照片。
+            return runCatching {
+                val sample = runCatching { LocationTracker(app).getLastKnownBestLocation() }.getOrNull()
+                val pendingType = if (_pendingPhotos.value.isEmpty()) PhotoType.START else PhotoType.NORMAL
+                val file = photoManager.capturePhoto(PENDING_DIR, pendingType, sample)
+                _pendingPhotos.value = _pendingPhotos.value + PendingPhoto(file, pendingType, System.currentTimeMillis(), sample)
+                Unit
+            }
+        }
         val sample = lastLocation.value
         return runCatching {
             val file = photoManager.capturePhoto(trackId, type, sample)

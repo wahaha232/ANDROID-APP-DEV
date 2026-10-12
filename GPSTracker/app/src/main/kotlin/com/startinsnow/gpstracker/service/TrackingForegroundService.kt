@@ -62,6 +62,9 @@ class TrackingForegroundService : LifecycleService() {
     /** 防止重複建立 Track（MainActivity 的 Crash Recovery 與 UI 的開始記錄可能同時送 ACTION_START）。 */
     private var isStarting = false
 
+    /** 手動指定的移動方式（記錄前選擇）；null = 自動。 */
+    private var manualMode: MovementMode? = null
+
     /** 仍在寫入資料庫／上傳的收尾協程數：期間重複的「結束」必須忽略，且 Service 不可提前 stopSelf()。 */
     private var finalizingCount = 0
 
@@ -102,7 +105,10 @@ class TrackingForegroundService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
-            ACTION_START -> startRecording(intent.getStringExtra(EXTRA_RESUME_TRACK_ID))
+            ACTION_START -> startRecording(
+                intent.getStringExtra(EXTRA_RESUME_TRACK_ID),
+                intent.getStringExtra(EXTRA_MANUAL_MODE)
+            )
             ACTION_PAUSE -> pauseRecording(auto = false)
             ACTION_RESUME -> resumeRecording(auto = false)
             ACTION_STOP -> stopRecording()
@@ -128,8 +134,10 @@ class TrackingForegroundService : LifecycleService() {
         }
     }
 
-    private fun startRecording(resumeTrackId: String?) {
+    private fun startRecording(resumeTrackId: String?, manualModeName: String? = null) {
         if (trackId != null || isStarting) return
+        // 使用者在開始前手動指定的移動方式；null 代表「自動」（由移動速度判斷）。
+        manualMode = manualModeName?.let { name -> runCatching { MovementMode.valueOf(name) }.getOrNull() }
         isStarting = true
         TrackingStateHolder.update { it.copy(isStarting = true) }
 
@@ -333,16 +341,19 @@ class TrackingForegroundService : LifecycleService() {
         // 先處理自動暫停/恢復：若因移動而自動恢復，isPaused 會在這裡被清為 false，
         // 之後才會正確建立新的交通模式區段並記錄這個點。
         handleAutoPause(movementResult.mode)
+        // 手動指定移動方式時，記錄用的模式（區段、點位、畫面）以手動為準；
+        // 靜止／自動暫停仍用偵測器的結果，避免手動模式下原地不動也一直累積。
+        val recordedMode = manualMode ?: movementResult.mode
         // 用獨立的最後區段模式判斷（而非 UI 的 movementMode）：暫停期間 UI 的 movementMode 仍會更新，
         // 若拿它比較，恢復後若模式剛好相同就不會建立新區段，導致該段時間從模式統計中消失。
-        if (!isPaused && lastSegmentMode != movementResult.mode) {
-            app.trackRepository.startMovementSegment(id, movementResult.mode, filtered.sample.timestampMs)
-            lastSegmentMode = movementResult.mode
+        if (!isPaused && lastSegmentMode != recordedMode) {
+            app.trackRepository.startMovementSegment(id, recordedMode, filtered.sample.timestampMs)
+            lastSegmentMode = recordedMode
         }
 
         TrackingStateHolder.update {
             it.copy(
-                movementMode = movementResult.mode,
+                movementMode = recordedMode,
                 currentSpeedKmh = GeoMath.msToKmh(effectiveSpeedMps)
             )
         }
@@ -352,7 +363,7 @@ class TrackingForegroundService : LifecycleService() {
 
         if (filtered.reliability != PointReliability.TRUSTED) {
             // 低可信度 / 異常點仍寫入資料庫供除錯與 Browser Playback 顯示，但不計入距離/速度聚合。
-            app.trackRepository.appendPoint(filtered, movementResult.mode)
+            app.trackRepository.appendPoint(filtered, recordedMode)
             TrackingStateHolder.update { it.copy(pointCount = it.pointCount + 1) }
             return
         }
@@ -375,7 +386,7 @@ class TrackingForegroundService : LifecycleService() {
         val shouldAggregate = anchor == null || timeSinceMs >= plan.minIntervalMs || distanceGatePassed
         if (!shouldAggregate) {
             // 取樣策略擋掉的點仍然要落地（Crash Recovery / Playback 完整度），但不計入統計。
-            app.trackRepository.appendPoint(filtered, movementResult.mode)
+            app.trackRepository.appendPoint(filtered, recordedMode)
             TrackingStateHolder.update { it.copy(pointCount = it.pointCount + 1) }
             return
         }
@@ -393,7 +404,7 @@ class TrackingForegroundService : LifecycleService() {
         lastAggregatedLocation = filtered.sample
         gpsPointCount += 1
 
-        app.trackRepository.appendPoint(filtered, movementResult.mode)
+        app.trackRepository.appendPoint(filtered, recordedMode)
 
         // 即時統計快照節流：不再每個 GPS 點都做一次 read + update transaction。
         val nowElapsed = SystemClock.elapsedRealtime()
@@ -712,6 +723,7 @@ class TrackingForegroundService : LifecycleService() {
         const val TICK_INTERVAL_MS = 5_000L
         const val AUTO_PAUSE_THRESHOLD_MS = 60_000L
         const val EXTRA_RESUME_TRACK_ID = "extra_resume_track_id"
+        const val EXTRA_MANUAL_MODE = "extra_manual_mode"
 
         /** 即時統計寫回資料庫的最小間隔，避免每個 GPS 點都產生一次 DB transaction。 */
         const val STATS_SNAPSHOT_INTERVAL_MS = 10_000L
@@ -719,7 +731,11 @@ class TrackingForegroundService : LifecycleService() {
         /** 高精度 GPS 模式下的 GNSS 更新間隔（比預設的省電模式更頻繁、更耗電）。 */
         const val HIGH_ACCURACY_GPS_INTERVAL_MS = 1_000L
 
-        fun start(context: Context) = context.startServiceCompat(ACTION_START, foreground = true)
+        /** [manualMode] 為 null 代表「自動」（依移動速度判斷移動方式）。 */
+        fun start(context: Context, manualMode: MovementMode? = null) =
+            context.startServiceCompat(ACTION_START, foreground = true) {
+                manualMode?.let { putExtra(EXTRA_MANUAL_MODE, it.name) }
+            }
         fun startResume(context: Context, trackId: String) =
             context.startServiceCompat(ACTION_START, foreground = true) { putExtra(EXTRA_RESUME_TRACK_ID, trackId) }
         fun pause(context: Context) = context.startServiceCompat(ACTION_PAUSE)

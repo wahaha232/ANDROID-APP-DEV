@@ -1,5 +1,8 @@
 package com.startinsnow.gpstracker.ui.recording
 
+import com.startinsnow.gpstracker.core.model.MovementMode
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.horizontalScroll
 import com.startinsnow.gpstracker.R
 import androidx.compose.ui.res.stringResource
 import android.Manifest
@@ -110,7 +113,10 @@ fun RecordingScreen(
     var cameraReady by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     var photoPromptStage by rememberSaveable { mutableStateOf(PhotoPromptStage.NONE) }
-    var hasPromptedStart by rememberSaveable { mutableStateOf(false) }
+    // 準備階段：手動指定的移動方式（null = 自動，由移動速度判斷）；按下「開始記錄」才真正開始。
+    var selectedModeName by rememberSaveable { mutableStateOf<String?>(null) }
+    var startPressed by rememberSaveable { mutableStateOf(false) }
+    val pendingPhotos by viewModel.pendingPhotos.collectAsStateWithLifecycle()
     // 本畫面是否已經送出過「開始記錄」：之後（例如從通知列按「結束」再回到 App）ON_RESUME 不可再自動開新一筆。
     var hasRequestedStart by rememberSaveable { mutableStateOf(false) }
 
@@ -124,6 +130,10 @@ fun RecordingScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val hasLocationPermission = hasFineLocation || hasCoarseLocation
+
+    // 準備階段：還沒開始記錄（也不是在接續未完成記錄）。此時可以拍照、選移動方式，按「開始記錄」才開始。
+    val isActiveRecording = state.status == TrackStatus.RECORDING || state.status == TrackStatus.PAUSED || state.isStarting
+    val isPrepare = resumeTrackId == null && !isActiveRecording && !startPressed
 
     /** 綁定預覽 + 拍照 use case；失敗時留下可顯示的錯誤。 */
     fun bindPreview(previewView: PreviewView) {
@@ -149,14 +159,12 @@ fun RecordingScreen(
 
     /** 只有「確實需要」才啟動記錄：權限不足時先要權限，避免同時要權限又啟動造成競態。 */
     fun startOrResumeRecording() {
+        // 新的記錄一律由使用者按「開始記錄」才開始；只有「接續未完成記錄」才會自動啟動。
+        if (resumeTrackId == null) return
         val current = viewModel.state.value
         if (current.status == TrackStatus.RECORDING || current.status == TrackStatus.PAUSED || current.isStarting) return
         hasRequestedStart = true
-        if (resumeTrackId != null) {
-            viewModel.startResumeRecording(resumeTrackId)
-        } else {
-            viewModel.startRecording()
-        }
+        viewModel.startResumeRecording(resumeTrackId)
     }
 
     val backgroundLocationLauncher = rememberLauncherForActivityResult(
@@ -196,6 +204,19 @@ fun RecordingScreen(
         }
     }
 
+    /** 準備畫面的「開始記錄」：沒有定位權限就先要權限；有的話才真正啟動記錄服務。 */
+    fun startNewRecording() {
+        if (!(hasFineLocation || hasCoarseLocation)) {
+            permissionLauncher.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            )
+            return
+        }
+        startPressed = true
+        hasRequestedStart = true
+        viewModel.startRecording(selectedModeName?.let { runCatching { MovementMode.valueOf(it) }.getOrNull() })
+    }
+
     LaunchedEffect(Unit) {
         val missing = buildList {
             if (!hasFineLocation && !hasCoarseLocation) {
@@ -221,15 +242,10 @@ fun RecordingScreen(
         }
     }
 
-    // 只在「本畫面真的新建了一筆 Track」時才提示拍出發點照片；
-    // 續錄（Crash Recovery）回來的 Track 不應再被要求拍出發點照片。
-    LaunchedEffect(state.trackId, state.status) {
-        if (state.trackId != null && !hasPromptedStart &&
-            state.status == TrackStatus.RECORDING && viewModel.startedNewTrackFromThisScreen
-        ) {
-            hasPromptedStart = true
-            photoPromptStage = PhotoPromptStage.START
-        }
+    // 啟動失敗（服務回報訊息、狀態沒進入記錄中）時，回到準備畫面讓使用者可以再按一次。
+    LaunchedEffect(state.message) {
+        val active = state.status == TrackStatus.RECORDING || state.status == TrackStatus.PAUSED || state.isStarting
+        if (state.message != null && !active) startPressed = false
     }
 
     // 離開畫面時釋放相機資源，避免下次進來時 use case 仍被佔用而無法拍照。
@@ -271,8 +287,9 @@ fun RecordingScreen(
             TopAppBar(
                 title = {
                     Text(
-                        when (state.status) {
-                            TrackStatus.PAUSED -> stringResource(R.string.recording_004)
+                        when {
+                            isPrepare -> stringResource(R.string.recording_prepare_title)
+                            state.status == TrackStatus.PAUSED -> stringResource(R.string.recording_004)
                             else -> stringResource(R.string.recording_005)
                         },
                         style = MaterialTheme.typography.titleLarge
@@ -288,7 +305,20 @@ fun RecordingScreen(
         },
         bottomBar = {
             Surface(color = MaterialTheme.colorScheme.background) {
-                Row(
+                if (isPrepare) {
+                    Button(
+                        onClick = { startNewRecording() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .height(56.dp)
+                    ) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.recording_start_button), style = MaterialTheme.typography.titleMedium)
+                    }
+                } else Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
@@ -328,18 +358,26 @@ fun RecordingScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                StatusChip(
-                    text = state.accuracyLabel,
-                    color = gpsQualityColor(state.gpsQuality)
-                )
-                StatusChip(
-                    text = "${state.movementMode.emoji} ${state.movementMode.name}",
+            if (isPrepare) {
+                InfoBanner(
+                    text = stringResource(R.string.recording_prepare_hint),
                     color = MaterialTheme.colorScheme.primary
                 )
-            }
+                ModeSelectorCard(selectedName = selectedModeName, onSelect = { selectedModeName = it })
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    StatusChip(
+                        text = state.accuracyLabel,
+                        color = gpsQualityColor(state.gpsQuality)
+                    )
+                    StatusChip(
+                        text = "${state.movementMode.emoji} ${state.movementMode.name}",
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
 
-            TrackMetricsCard(state)
+                TrackMetricsCard(state)
+            }
 
             if (state.isAutoPaused) {
                 InfoBanner(
@@ -498,7 +536,8 @@ fun RecordingScreen(
             }
 
             Text(
-                stringResource(R.string.recording_022, state.pointCount),
+                if (isPrepare) stringResource(R.string.recording_pending_photos, pendingPhotos.size)
+                else stringResource(R.string.recording_022, state.pointCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -565,6 +604,53 @@ fun RecordingScreen(
                 }) { Text(stringResource(R.string.recording_028)) }
             }
         )
+    }
+}
+
+/** 手動移動方式（不含「靜止」；「其他」對應 UNKNOWN）。第一個選項「自動」代表由移動速度判斷。 */
+private val MANUAL_MODES = listOf(
+    MovementMode.WALKING, MovementMode.BICYCLE, MovementMode.MOTORCYCLE,
+    MovementMode.CAR, MovementMode.PUBLIC_TRANSPORT, MovementMode.AIRPLANE, MovementMode.UNKNOWN
+)
+
+private fun modeLabelRes(mode: MovementMode): Int = when (mode) {
+    MovementMode.WALKING -> R.string.mode_walking
+    MovementMode.BICYCLE -> R.string.mode_bicycle
+    MovementMode.MOTORCYCLE -> R.string.mode_motorcycle
+    MovementMode.CAR -> R.string.mode_car
+    MovementMode.PUBLIC_TRANSPORT -> R.string.mode_public_transport
+    MovementMode.AIRPLANE -> R.string.mode_airplane
+    else -> R.string.mode_other
+}
+
+@Composable
+private fun ModeSelectorCard(selectedName: String?, onSelect: (String?) -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.recording_mode_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(R.string.recording_mode_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = selectedName == null,
+                    onClick = { onSelect(null) },
+                    label = { Text(stringResource(R.string.recording_mode_auto)) }
+                )
+                MANUAL_MODES.forEach { mode ->
+                    FilterChip(
+                        selected = selectedName == mode.name,
+                        onClick = { onSelect(mode.name) },
+                        label = { Text(mode.emoji + " " + stringResource(modeLabelRes(mode))) }
+                    )
+                }
+            }
+        }
     }
 }
 

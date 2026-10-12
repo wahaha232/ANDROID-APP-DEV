@@ -72,6 +72,17 @@ fun HomeScreen(
     val state by viewModel.recordingState.collectAsStateWithLifecycle()
     val tracks by viewModel.recentTracks.collectAsStateWithLifecycle()
     val pendingRecovery by viewModel.pendingRecovery.collectAsStateWithLifecycle()
+    val todaySteps by viewModel.todaySteps.collectAsStateWithLifecycle()
+
+    // 回到前景（含從設定頁授權 Health Connect 回來）就重新讀取今日步數。
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.refreshTodaySteps()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val isActive = state.status == TrackStatus.RECORDING || state.status == TrackStatus.PAUSED
     val dateFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()) }
 
@@ -90,6 +101,8 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { StatusHero(state = state, isActive = isActive) }
+
+            item { TodayStepsCard(state = todaySteps, onRefresh = { viewModel.refreshTodaySteps() }) }
 
             item {
                 Button(

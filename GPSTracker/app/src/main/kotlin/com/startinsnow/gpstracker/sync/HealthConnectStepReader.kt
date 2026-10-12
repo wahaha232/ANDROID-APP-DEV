@@ -70,6 +70,39 @@ class HealthConnectStepReader(private val context: Context) {
     /** Google Fit 來源步數（經 Health Connect，免 Google OAuth）。 */
     suspend fun googleFitSteps(startMs: Long, endMs: Long): Result<Long> = aggregateSteps(startMs, endMs, googleFitOrigins)
 
+    /** 區間內「有步數記錄」的所有來源 App 的 package（逐頁掃描原始記錄）。 */
+    suspend fun originsInRange(startMs: Long, endMs: Long): Result<Set<String>> = runCatching {
+        val client = HealthConnectClient.getOrCreate(context)
+        val range = TimeRangeFilter.between(Instant.ofEpochMilli(startMs), Instant.ofEpochMilli(endMs))
+        val found = sortedSetOf<String>()
+        var pageToken: String? = null
+        var pages = 0
+        do {
+            val response = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = StepsRecord::class,
+                    timeRangeFilter = range,
+                    pageSize = PAGE_SIZE,
+                    pageToken = pageToken
+                )
+            )
+            response.records.forEach { found += it.metadata.dataOrigin.packageName }
+            pageToken = response.pageToken
+            pages++
+        } while (!pageToken.isNullOrEmpty() && pages < MAX_PAGES)
+        found
+    }
+
+    /** 單一來源 App 在區間內的步數（aggregate，依時間比例切分）。 */
+    suspend fun stepsForOrigin(packageName: String, startMs: Long, endMs: Long): Result<Long> =
+        aggregateSteps(startMs, endMs, setOf(DataOrigin(packageName)))
+
+    /**
+     * 所有來源的合計：不指定來源，由 Health Connect 依使用者設定的優先順序「去除重複」後計算。
+     * 同一段路被手環與手機同時記錄時只算一次——這和把各來源的數字直接相加不同（相加會重複計算）。
+     */
+    suspend fun allSteps(startMs: Long, endMs: Long): Result<Long> = aggregateSteps(startMs, endMs, emptySet())
+
     /** 診斷用：近 [days] 天各來源 App 的步數統計（package -> 步數），會逐頁讀完全部記錄。 */
     suspend fun stepsByOriginLastDays(days: Int): Result<Map<String, Long>> = runCatching {
         val client = HealthConnectClient.getOrCreate(context)
@@ -112,6 +145,16 @@ class HealthConnectStepReader(private val context: Context) {
     companion object {
         val READ_PERMISSION: String = HealthPermission.getReadPermission(StepsRecord::class)
         const val BACKGROUND_PERMISSION = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
+
+        // 來源分類。「手機本身」是 Health Connect 內建的系統計步來源，package 為
+        // com.android.healthconnect.phone.<每支手機不同的隨機碼>，所以只能用前綴判斷。
+        private const val PHONE_PREFIX = "com.android.healthconnect.phone"
+        private val ZEPP_PACKAGES = setOf("com.xiaomi.hm.health", "com.xiaomi.wearable", "com.huami.watch.hmwatchmanager")
+        private const val GOOGLE_FIT_PACKAGE = "com.google.android.apps.fitness"
+
+        fun isZepp(pkg: String) = pkg in ZEPP_PACKAGES
+        fun isGoogleFit(pkg: String) = pkg == GOOGLE_FIT_PACKAGE
+        fun isPhone(pkg: String) = pkg.startsWith(PHONE_PREFIX)
         private const val PAGE_SIZE = 5000
         private const val MAX_PAGES = 40
     }

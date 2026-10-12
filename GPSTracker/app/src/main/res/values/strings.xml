@@ -238,4 +238,36 @@
     <string name="step_source_google">Google Fit（Health Connect）</string>
     <string name="step_source_sensor_fallback">手機感測器（Health Connect 尚無資料，可稍後重新同步）</string>
     <string name="step_source_sensor">手機感測器</string>
+    <!-- home: today's steps (Health Connect) -->
+    <string name="today_steps_title">今日步數</string>
+    <string name="today_steps_refresh">重新整理</string>
+    <string name="today_steps_loading">讀取中…</string>
+    <string name="today_steps_sensor_source">目前步數來源為手機感測器，只有記錄期間才會計步。請到「設定」改選 Zepp Life 或 Google Fit，即可在這裡看到今日步數。</string>
+    <string name="today_steps_unavailable">此裝置未提供 Health Connect，無法讀取 Zepp Life／Google Fit 的步數。</string>
+    <string name="today_steps_no_permission">尚未授權 Health Connect 讀取步數。請到「設定」授權，回到首頁就會更新。</string>
+    <string name="today_steps_error">讀取今日步數失敗：%1$s</string>
+    <string name="today_steps_source">來源：%1$s</string>
+    <string name="today_steps_no_data">Health Connect 目前沒有今天的步數。請先開啟 Zepp Life（或 Google Fit）讓手環同步，再按「重新整理」。</string>
+    <string name="today_steps_row_zepp">Zepp Life：%1$s 步</string>
+    <string name="today_steps_row_google">Google Fit：%1$s 步</string>
+    <string name="today_steps_row_phone">手機本身（系統計步）：%1$s 步</string>
+    <string name="today_steps_row_other">%1$s：%2$s 步</string>
+    <string name="today_steps_zepp_missing">Health Connect 裡沒有 Zepp Life／小米的步數：它尚未把步數寫入 Health Connect。請在 Zepp Life 的設定中開啟「同步到 Health Connect」並授權寫入步數，再讓手環同步一次。</string>
+    <string name="today_steps_row_total">合計（Health Connect 去除重複）：%1$s 步</string>
+    <string name="today_steps_total_note">合計不是各來源相加：同一段路被多個來源同時記錄時，Health Connect 依優先順序只算一次。若某個來源的數字明顯偏高（例如 Google Fit 與手機實際步數差很多），請到系統「Health Connect → 資料來源優先順序」把「手機」排在前面。</string>
+    <!-- recording: prepare screen -->
+    <string name="recording_prepare_title">準備記錄</string>
+    <string name="recording_start_button">開始記錄</string>
+    <string name="recording_prepare_hint">可以先拍照、選移動方式，準備好再按「開始記錄」，按下之前不會開始記錄。</string>
+    <string name="recording_mode_title">移動方式</string>
+    <string name="recording_mode_hint">預設為「自動」，由移動速度判斷；也可以先手動指定。</string>
+    <string name="recording_mode_auto">自動（依速度判斷）</string>
+    <string name="recording_pending_photos">已拍 %1$d 張照片，開始記錄後會加入這趟紀錄</string>
+    <string name="mode_walking">走路</string>
+    <string name="mode_bicycle">腳踏車</string>
+    <string name="mode_motorcycle">機車</string>
+    <string name="mode_car">汽車</string>
+    <string name="mode_public_transport">大眾運輸</string>
+    <string name="mode_airplane">飛機</string>
+    <string name="mode_other">其他</string>
 </resources>
