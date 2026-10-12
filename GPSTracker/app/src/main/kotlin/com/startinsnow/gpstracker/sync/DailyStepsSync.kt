@@ -1,6 +1,5 @@
 package com.startinsnow.gpstracker.sync
 
-import android.content.Context
 import com.startinsnow.gpstracker.GpsTrackerApplication
 import java.security.MessageDigest
 import java.time.LocalDate
@@ -21,8 +20,6 @@ object DailyStepsSync {
 
     enum class Outcome { NOT_CONFIGURED, SKIPPED_WIFI_ONLY, UNCHANGED, UPLOADED }
 
-    private const val PREFS = "daily_steps_sync"
-    private const val KEY_LAST_HASH = "last_hash"
     /** 一次涵蓋的天數：Health Connect 能讀到多少就同步多少（沒有資料的天會是 0）。 */
     const val DEFAULT_DAYS = 1095 // 3 年
 
@@ -37,26 +34,62 @@ object DailyStepsSync {
 
         // 完全沒有資料的日子不上傳（網站把缺少的日期當 0），歷史很長時檔案才不會被零灌大。
         val rows = reader.dailySteps(days).getOrThrow().filter { it.total > 0L || it.perOrigin.isNotEmpty() }
-        val daysJson = buildDaysJson(rows)
-        val hash = sha1(daysJson.toString())
-        val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (!force && prefs.getString(KEY_LAST_HASH, null) == hash) return@runCatching Outcome.UNCHANGED
+        val fresh = toMap(buildDaysJson(rows))
+
+        // 持續累計：合併進網站上現有的 steps.json，而不是整份覆寫。
+        // 已上傳的天數永遠保留——就算 Health Connect 日後不再保留舊資料、或超出同步範圍，累計也不會變少。
+        val uploader = WebDashboardUploader()
+        val path = "${settings.webDataPath.trim('/')}/steps.json"
+        val existingText = uploader.getFileText(settings.githubToken, settings.webRepo, settings.webBranch, path).getOrThrow()
+        val existing = existingText?.let { runCatching { toMap(JSONObject(it).getJSONArray("days")) }.getOrNull() } ?: emptyMap()
+        val merged = mergeByDate(existing, fresh) { hasData(it) }
+        val mergedJson = JSONArray().also { arr -> merged.toSortedMap().values.forEach { arr.put(it) } }
+
+        if (!force && existingText != null && existing.isNotEmpty() && sha1(mergedJson.toString()) == sha1(toJsonArray(existing).toString())) {
+            return@runCatching Outcome.UNCHANGED
+        }
 
         val json = JSONObject()
             .put("updatedAt", System.currentTimeMillis())
             .put("timezone", java.time.ZoneId.systemDefault().id)
-            .put("days", daysJson)
-        WebDashboardUploader().putFile(
+            .put("days", mergedJson)
+        uploader.putFile(
             token = settings.githubToken,
             repo = settings.webRepo,
             branch = settings.webBranch,
-            path = "${settings.webDataPath.trim('/')}/steps.json",
+            path = path,
             content = json.toString(),
             message = "GPS Tracker: update daily steps"
         ).getOrThrow()
-        prefs.edit().putString(KEY_LAST_HASH, hash).apply()
         Outcome.UPLOADED
     }
+
+    /**
+     * 依日期合併，只增不減：[fresh] 該日有資料就以它為準（Health Connect 可能回頭修正當天數字）；
+     * 沒有資料的日子保留 [existing] 原本的，[existing] 有而 [fresh] 完全沒有的日子也一律保留。
+     */
+    fun <T> mergeByDate(existing: Map<String, T>, fresh: Map<String, T>, hasData: (T) -> Boolean): Map<String, T> {
+        val result = LinkedHashMap<String, T>(existing)
+        fresh.forEach { (date, value) ->
+            if (hasData(value) || !result.containsKey(date)) result[date] = value
+        }
+        return result
+    }
+
+    private fun hasData(day: JSONObject): Boolean =
+        day.optLong("total", 0L) > 0L || (day.optJSONObject("sources")?.length() ?: 0) > 0
+
+    private fun toMap(arr: JSONArray): Map<String, JSONObject> {
+        val m = LinkedHashMap<String, JSONObject>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            m[o.getString("date")] = o
+        }
+        return m
+    }
+
+    private fun toJsonArray(map: Map<String, JSONObject>): JSONArray =
+        JSONArray().also { arr -> map.toSortedMap().values.forEach { arr.put(it) } }
 
     /** 網站讀的格式：每天一筆，來源分成 phone／googleFit／zepp／others{package: 步數}。 */
     fun buildDaysJson(rows: List<DailyStepsRow>): JSONArray {

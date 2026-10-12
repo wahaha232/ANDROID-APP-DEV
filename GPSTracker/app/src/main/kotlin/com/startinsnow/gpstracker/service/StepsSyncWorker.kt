@@ -29,11 +29,11 @@ class StepsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
         private const val WORK_NAME = "daily_steps_sync"
 
         fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<StepsSyncWorker>(6, TimeUnit.HOURS)
+            val request = PeriodicWorkRequestBuilder<StepsSyncWorker>(3, TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
         }
     }
 }

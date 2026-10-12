@@ -87,6 +87,10 @@ class WebDashboardUploader(
         }
     }
 
+    /** 讀取 repo 內檔案的文字內容；檔案不存在回傳 null。 */
+    suspend fun getFileText(token: String, repo: String, branch: String, path: String): Result<String?> =
+        withContext(Dispatchers.IO) { runCatching { getContent(token, repo, branch, path)?.content } }
+
     /** 寫入（新增或覆寫）repo 內的任意檔案，例如逐日步數 steps.json。 */
     suspend fun putFile(
         token: String,
