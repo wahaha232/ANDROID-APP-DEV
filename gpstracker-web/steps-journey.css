@@ -1,0 +1,71 @@
+/* 步數環遊里程：獨立頁面，沿用 style.css 的設計變數。 */
+.sj-main { display: block; flex: 1; overflow-y: auto; min-height: 0; padding: 18px 20px 56px; }
+.sj-header-actions { display: flex; gap: 6px; }
+
+.sj-note {
+  font-size: 12.5px; color: var(--muted); background: var(--surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--primary); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 16px;
+}
+.sj-note strong { color: var(--text); }
+
+.sj-title { font-size: 15px; font-weight: 700; margin: 24px 0 12px; display: flex; align-items: center; gap: 8px; }
+.sj-title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border), transparent); }
+.sj-title small { font-size: 12px; font-weight: 500; color: var(--muted); }
+
+.sj-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.sj-row label { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.sj-row input[type=number] {
+  width: 92px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font-size: 13px; font-family: inherit;
+}
+.sj-chip {
+  background: var(--surface); color: var(--muted); border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 14px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.sj-chip:hover { color: var(--text); border-color: var(--border-strong); }
+.sj-chip.on { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 4px 14px rgba(76, 141, 255, .3); }
+
+.sj-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.sj-card {
+  position: relative; overflow: hidden; background: linear-gradient(160deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 15px;
+}
+.sj-card::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 2px; background: var(--grad); opacity: .7; }
+.sj-card .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sj-card .l { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.sj-card .s { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.sj-card.big .v { font-size: 26px; }
+
+.sj-chart { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+.sj-chart svg { width: 100%; height: auto; display: block; }
+.sj-chart .axis { stroke: var(--border-strong); stroke-width: 1; }
+.sj-chart .grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 4; }
+.sj-chart .line { fill: none; stroke: url(#sjGrad); stroke-width: 2.5; stroke-linejoin: round; }
+.sj-chart .area { fill: url(#sjArea); }
+.sj-chart text { fill: var(--muted); font-size: 11px; }
+.sj-chart .ms { stroke: rgba(251, 191, 36, .7); stroke-width: 1; stroke-dasharray: 5 4; }
+.sj-chart .ms-label { fill: #fbbf24; font-size: 11px; }
+
+.sj-group { margin-bottom: 18px; }
+.sj-group-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; margin: 0 0 8px; }
+.sj-group-head .cnt { font-size: 12px; color: var(--muted); font-weight: 500; }
+.sj-list { list-style: none; margin: 0; padding: 0; }
+.sj-list li {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px; margin-bottom: 6px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.sj-list li.done { border-color: rgba(52, 211, 153, .6); background: linear-gradient(90deg, var(--green-soft), var(--surface) 60%); }
+.sj-list li.next { border-color: rgba(76, 141, 255, .7); }
+.sj-list .st { width: 26px; text-align: center; font-size: 16px; }
+.sj-list .mid { flex: 1; min-width: 0; }
+.sj-list .t1 { font-size: 13px; font-weight: 600; }
+.sj-list .t2 { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.sj-list .val { font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.sj-bar { height: 6px; border-radius: 3px; background: var(--track); margin-top: 6px; overflow: hidden; }
+.sj-bar > i { display: block; height: 100%; width: 0; background: var(--grad-progress); border-radius: 3px; }
+
+.sj-empty { color: var(--muted); font-size: 13px; padding: 24px; text-align: center; background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); }
+.sj-foot { font-size: 11.5px; color: var(--muted); margin-top: 18px; }
+
+@media (max-width: 900px) { .sj-main { padding: 14px 14px 48px; } }

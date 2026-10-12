@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="用累計步數換算成里程，看看在太陽系、地球、台灣征服計畫中能走到哪裡。" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">👟</text></svg>' />
+  <title>步數環遊里程</title>
+  <link href="style.css?v=8f353ed8" rel="stylesheet" />
+  <link href="steps-journey.css?v=b6802f39" rel="stylesheet" />
+  <script defer src="common.js?v=d579a5fd"></script>
+  <script defer src="solar-levels.js?v=85d1c1e3"></script>
+  <script defer src="earth-levels.js?v=afdd6cf1"></script>
+  <script defer src="taiwan-levels.js?v=8483cc78"></script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">👟</span>
+      <div>
+        <h1>步數環遊里程</h1>
+        <div id="summary" class="summary">載入中…</div>
+      </div>
+    </div>
+    <div class="sj-header-actions">
+      <a class="btn secondary" href="index.html">← 返回首頁</a>
+    </div>
+  </header>
+
+  <main class="sj-main">
+    <div class="sj-note">
+      本頁<strong>獨立</strong>運作：只用「累計步數 × 步幅」換算成里程，再對照太陽系、地球、台灣征服計畫的關卡門檻。
+      與其他頁面的 GPS 里程完全分開，不會互相加總。里程為估算值，僅供遊戲樂趣參考。
+    </div>
+
+    <section id="sjControls"></section>
+    <section id="sjSummary"></section>
+    <section id="sjChart"></section>
+    <section id="sjGroups"></section>
+  </main>
+
+  <script defer src="steps-journey.js?v=1dbd85c2"></script>
+</body>
+</html>
