@@ -58,12 +58,17 @@ object StatsCalculator {
         // 海拔：加入輕量平滑，避免 GPS altitude noise 讓爬升/下降被誇大（規格 40）。
         val altitudes = trusted.mapNotNull { it.altitudeMeters }
         val smoothedAltitudes = smoothAltitude(altitudes)
+        // 以「基準高度」累積變化：高度相對基準累積超過門檻才計入並更新基準。
+        // 舊作法逐點比較相鄰點，1 Hz 取樣的緩坡每步都小於門檻，整段爬升幾乎全被當成雜訊而低估。
         var ascent = 0.0
         var descent = 0.0
-        for (i in 1 until smoothedAltitudes.size) {
-            val diff = smoothedAltitudes[i] - smoothedAltitudes[i - 1]
-            if (diff > ALTITUDE_NOISE_THRESHOLD_M) ascent += diff
-            else if (diff < -ALTITUDE_NOISE_THRESHOLD_M) descent += -diff
+        if (smoothedAltitudes.isNotEmpty()) {
+            var baseline = smoothedAltitudes[0]
+            for (i in 1 until smoothedAltitudes.size) {
+                val diff = smoothedAltitudes[i] - baseline
+                if (diff > ALTITUDE_NOISE_THRESHOLD_M) { ascent += diff; baseline = smoothedAltitudes[i] }
+                else if (diff < -ALTITUDE_NOISE_THRESHOLD_M) { descent += -diff; baseline = smoothedAltitudes[i] }
+            }
         }
 
         val modeDurations = mutableMapOf<MovementMode, Long>()
@@ -90,6 +95,17 @@ object StatsCalculator {
             modeDistributionPercent = modeDistribution
         )
     }
+
+    /** 平均速度 = 距離 ÷ 實際移動（非暫停）時間；不是各段瞬時速度的簡單平均（那會被短暫的高速段拉高）。 */
+    fun averageSpeedMps(distanceMeters: Double, activeDurationMs: Long): Double =
+        if (activeDurationMs <= 0L || distanceMeters <= 0.0) 0.0 else distanceMeters / (activeDurationMs / 1000.0)
+
+    /**
+     * 結束時採用的最終距離：Service 提供的「結束當下精確累計距離」（快照）不含暫停期間的位移，優先採用；
+     * 沒有快照（例如 Crash 後收尾）才用逐點直線累加的重算值（它會把暫停前後兩點之間的空白也算進去）。
+     */
+    fun chooseFinalDistance(recomputedMeters: Double, snapshotMeters: Double): Double =
+        if (snapshotMeters > 0.0) snapshotMeters else recomputedMeters
 
     private fun smoothAltitude(values: List<Double>): List<Double> {
         if (values.size < 3) return values

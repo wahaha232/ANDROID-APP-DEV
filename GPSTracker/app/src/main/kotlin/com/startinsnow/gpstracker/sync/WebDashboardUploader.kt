@@ -40,19 +40,31 @@ class WebDashboardUploader(
             putContent(token, repo, branch, "$dir/$trackId.json", payload.trackJson, "GPS Tracker: add track $trackId")
 
             val manifestPath = "$dir/manifest.json"
-            val existing = getContent(token, repo, branch, manifestPath)
-            val manifest = existing?.let { JSONObject(it.content) }
-                ?: JSONObject().put("updatedAt", 0L).put("tracks", JSONArray())
-            val oldTracks = manifest.optJSONArray("tracks") ?: JSONArray()
-            val merged = JSONArray()
-            for (i in 0 until oldTracks.length()) {
-                val entry = oldTracks.getJSONObject(i)
-                if (entry.optString("trackId") != trackId) merged.put(entry)
+            // 自動上傳與手動上傳（或兩台裝置）同時更新 manifest 時，GitHub 會回 409/422（sha 已過期）。
+            // 重新讀取最新 manifest 再合併重試，否則軌跡檔會成為孤兒、儀表板看不到。
+            var attempt = 0
+            while (true) {
+                try {
+                    val existing = getContent(token, repo, branch, manifestPath)
+                    val manifest = existing?.let { JSONObject(it.content) }
+                        ?: JSONObject().put("updatedAt", 0L).put("tracks", JSONArray())
+                    val oldTracks = manifest.optJSONArray("tracks") ?: JSONArray()
+                    val merged = JSONArray()
+                    for (i in 0 until oldTracks.length()) {
+                        val entry = oldTracks.getJSONObject(i)
+                        if (entry.optString("trackId") != trackId) merged.put(entry)
+                    }
+                    merged.put(payload.manifestEntry)
+                    manifest.put("tracks", merged)
+                    manifest.put("updatedAt", System.currentTimeMillis())
+                    putContent(token, repo, branch, manifestPath, manifest.toString(), "GPS Tracker: update manifest", existing?.sha)
+                    break
+                } catch (e: GitHubApiException) {
+                    attempt++
+                    if ((e.code == 409 || e.code == 422) && attempt < MAX_MANIFEST_ATTEMPTS) continue
+                    throw e
+                }
             }
-            merged.put(payload.manifestEntry)
-            manifest.put("tracks", merged)
-            manifest.put("updatedAt", System.currentTimeMillis())
-            putContent(token, repo, branch, manifestPath, manifest.toString(), "GPS Tracker: update manifest", existing?.sha)
         }
     }
 
@@ -103,6 +115,7 @@ class WebDashboardUploader(
 
     companion object {
         private const val MAX_POINTS = 20000
+        private const val MAX_MANIFEST_ATTEMPTS = 3
 
         private object SharedClient {
             val instance: OkHttpClient by lazy {
@@ -213,6 +226,8 @@ class WebDashboardUploader(
                 out.add(list[i.toInt()])
                 i += step
             }
+            // 固定步長取樣會漏掉最後一點（終點）；補上，避免軌跡少畫最後一段。
+            if (out.last() !== list.last()) out.add(list.last())
             return out
         }
 

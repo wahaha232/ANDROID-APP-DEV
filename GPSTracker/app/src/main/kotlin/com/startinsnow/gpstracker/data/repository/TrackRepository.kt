@@ -241,9 +241,11 @@ class TrackRepository(
         // 正常結束時，Service 傳入的是「結束當下的精確累計距離」，它不含暫停期間的位移；
         // 重算（逐點直線累加）會把暫停前後兩點之間的空白（例如暫停期間搭車）也算進去，所以以快照為準。
         // 只有沒有快照（例如 Crash 後收尾）才用重算結果。
-        val finalDistance = if (snapshotDistanceMeters > 0.0) snapshotDistanceMeters else stats.distanceMeters
+        val finalDistance = StatsCalculator.chooseFinalDistance(stats.distanceMeters, snapshotDistanceMeters)
         val finalMaxSpeed = maxOf(stats.maxSpeedMps, snapshotMaxSpeedMps)
-        val finalAvgSpeed = if (stats.avgSpeedMps > 0.0) stats.avgSpeedMps else snapshotAvgSpeedMps
+        // 平均速度以「距離 ÷ 實際移動時間」計；沒有移動時間才退回逐點平均／即時快照。
+        val finalAvgSpeed = StatsCalculator.averageSpeedMps(finalDistance, activeDurationMs).takeIf { it > 0.0 }
+            ?: if (stats.avgSpeedMps > 0.0) stats.avgSpeedMps else snapshotAvgSpeedMps
 
         trackDao.update(
             track.copy(

@@ -97,4 +97,27 @@ class StatsCalculatorTest {
         val stats = StatsCalculator.compute(points, emptyList())
         assertEquals(4.0, stats.avgSpeedMps, 0.001)
     }
+
+    @Test
+    fun `averageSpeed is distance over moving time`() {
+        // 10 km in 1 hour of moving time = 2.777... m/s (10 km/h)
+        assertEquals(10_000.0 / 3600.0, StatsCalculator.averageSpeedMps(10_000.0, 3_600_000L), 1e-9)
+    }
+
+    @Test
+    fun `averageSpeed is zero without moving time or distance`() {
+        assertEquals(0.0, StatsCalculator.averageSpeedMps(500.0, 0L), 0.0)
+        assertEquals(0.0, StatsCalculator.averageSpeedMps(0.0, 60_000L), 0.0)
+    }
+
+    @Test
+    fun `final distance prefers the exact snapshot and ignores pause gaps in the recomputed value`() {
+        // 重算值 5400 m 包含暫停期間搭車的 5000 m；快照 400 m 才是實際走的距離。
+        assertEquals(400.0, StatsCalculator.chooseFinalDistance(5_400.0, 400.0), 0.0)
+    }
+
+    @Test
+    fun `final distance falls back to the recomputed value when there is no snapshot`() {
+        assertEquals(1_234.0, StatsCalculator.chooseFinalDistance(1_234.0, 0.0), 0.0)
+    }
 }

@@ -28,7 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -54,8 +54,8 @@ fun HistoryScreen(
     onOpenTrack: (String) -> Unit,
     viewModel: HistoryViewModel = viewModel()
 ) {
-    val tracks by viewModel.tracks.collectAsState()
-    val filter by viewModel.filter.collectAsState()
+    val tracks by viewModel.tracks.collectAsStateWithLifecycle()
+    val filter by viewModel.filter.collectAsStateWithLifecycle()
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
 
     Scaffold(

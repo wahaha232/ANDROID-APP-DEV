@@ -122,6 +122,10 @@ class DriveSyncManager(
                 }
             } catch (e: Exception) {
                 lastError = e
+                // 4xx（401 token 過期、403 權限、404…）重試也不會成功，不要白等退避時間；429 才值得重試。
+                if (e is DriveApiException && e.code in 400..499 && e.code != 429) {
+                    return@withContext Result.failure(e)
+                }
                 if (attempt < maxRetries - 1) {
                     kotlinx.coroutines.delay(RETRY_BACKOFF_MS * (attempt + 1))
                 }

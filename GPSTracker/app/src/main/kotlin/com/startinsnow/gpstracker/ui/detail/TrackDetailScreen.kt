@@ -52,7 +52,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -106,11 +106,11 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
     )
     val scope = rememberCoroutineScope()
 
-    val track by viewModel.track.collectAsState()
-    val points by viewModel.points.collectAsState()
-    val photos by viewModel.photos.collectAsState()
-    val playback by viewModel.playback.collectAsState()
-    val outages by viewModel.outages.collectAsState()
+    val track by viewModel.track.collectAsStateWithLifecycle()
+    val points by viewModel.points.collectAsStateWithLifecycle()
+    val photos by viewModel.photos.collectAsStateWithLifecycle()
+    val playback by viewModel.playback.collectAsStateWithLifecycle()
+    val outages by viewModel.outages.collectAsStateWithLifecycle()
 
     var mapController by remember { mutableStateOf<GpsMapController?>(null) }
     var uploadStatusText by remember { mutableStateOf<String?>(null) }
@@ -154,7 +154,24 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                 app.trackRepository.setUploadStatus(trackId, UploadStatus.FAILED)
                 return@launch
             }
-            val uploadResult = driveSyncManager.uploadTrackPackage(token, exportDir, drivePath)
+            // 離開畫面使協程被取消時，狀態不能永遠停在 UPLOADING。
+            var uploadResult = try {
+                driveSyncManager.uploadTrackPackage(token, exportDir, drivePath)
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                withContext(kotlinx.coroutines.NonCancellable) {
+                    app.trackRepository.setUploadStatus(trackId, UploadStatus.FAILED)
+                }
+                throw c
+            }
+            // 401：access token 過期（或被撤銷）。清掉快取的 token、重取一次再試，而不是用同一個壞 token 重試。
+            val firstError = uploadResult.exceptionOrNull()
+            if (firstError is DriveSyncManager.DriveApiException && firstError.code == 401) {
+                authManager.clearAccessToken(account)
+                val freshToken = authManager.getAccessToken(account).getOrNull()
+                if (freshToken != null) {
+                    uploadResult = driveSyncManager.uploadTrackPackage(freshToken, exportDir, drivePath)
+                }
+            }
             if (uploadResult.isSuccess) {
                 uploadStatusText = "已上傳到 Google Drive"
                 app.trackRepository.setUploadStatus(trackId, UploadStatus.UPLOADED)

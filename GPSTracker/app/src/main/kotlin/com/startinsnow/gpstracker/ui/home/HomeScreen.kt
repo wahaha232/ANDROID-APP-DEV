@@ -34,7 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -66,9 +66,9 @@ fun HomeScreen(
     onOpenTrack: (String) -> Unit,
     viewModel: HomeViewModel = viewModel()
 ) {
-    val state by viewModel.recordingState.collectAsState()
-    val tracks by viewModel.recentTracks.collectAsState()
-    val pendingRecovery by viewModel.pendingRecovery.collectAsState()
+    val state by viewModel.recordingState.collectAsStateWithLifecycle()
+    val tracks by viewModel.recentTracks.collectAsStateWithLifecycle()
+    val pendingRecovery by viewModel.pendingRecovery.collectAsStateWithLifecycle()
     val isActive = state.status == TrackStatus.RECORDING || state.status == TrackStatus.PAUSED
     val dateFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()) }
 
@@ -118,7 +118,8 @@ fun HomeScreen(
                     InfoBanner(
                         text = message,
                         color = MaterialTheme.colorScheme.error,
-                        icon = Icons.Filled.ErrorOutline
+                        icon = Icons.Filled.ErrorOutline,
+                        onDismiss = { com.startinsnow.gpstracker.service.TrackingStateHolder.clearMessage() }
                     )
                 }
             }

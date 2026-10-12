@@ -145,15 +145,25 @@ fun GpsMapView(
     val controller = remember { GpsMapController() }
     val mapViewState = remember { androidx.compose.runtime.mutableStateOf<MapView?>(null) }
 
+    // MapView.onDestroy() 只能呼叫一次：ON_DESTROY 與 AndroidView.onRelease 兩條路徑都會走到，
+    // 且 release 時若還沒 onPause/onStop 必須先補上，否則 native 資源會留下洩漏或狀態錯亂。
+    val destroyed = remember { booleanArrayOf(false) }
+    val stopped = remember { booleanArrayOf(true) }
+    fun destroyOnce(view: MapView) {
+        if (destroyed[0]) return
+        destroyed[0] = true
+        view.onDestroy()
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             val view = mapViewState.value ?: return@LifecycleEventObserver
             when (event) {
-                Lifecycle.Event.ON_START -> view.onStart()
+                Lifecycle.Event.ON_START -> { stopped[0] = false; view.onStart() }
                 Lifecycle.Event.ON_RESUME -> view.onResume()
                 Lifecycle.Event.ON_PAUSE -> view.onPause()
-                Lifecycle.Event.ON_STOP -> view.onStop()
-                Lifecycle.Event.ON_DESTROY -> view.onDestroy()
+                Lifecycle.Event.ON_STOP -> { stopped[0] = true; view.onStop() }
+                Lifecycle.Event.ON_DESTROY -> destroyOnce(view)
                 else -> Unit
             }
         }
@@ -223,7 +233,17 @@ fun GpsMapView(
             // Compose 釋放 AndroidView 時務必呼叫 MapView.onDestroy()，
             // 否則 native 資源（GL context / tiles）會在每次進出畫面時累積洩漏。
             mapViewState.value = null
-            runCatching { view.onDestroy() }
+            runCatching {
+                if (!stopped[0]) {
+                    view.onPause()
+                    view.onStop()
+                    stopped[0] = true
+                }
+                destroyOnce(view)
+            }
+            // 地圖與樣式已釋放，不要讓 controller 繼續持有（避免之後對已銷毀的地圖下指令）。
+            controller.style = null
+            controller.map = null
         }
     )
 }

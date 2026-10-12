@@ -73,11 +73,8 @@ class LocationTracker(private val context: Context) {
                 val sample = location.toLocationSample(trackId)
                 if (sample.provider == LocationProvider.GPS) {
                     lastGpsElapsedMs = sample.elapsedRealtimeMs
-                } else if (sample.provider == LocationProvider.NETWORK && lastGpsElapsedMs != Long.MIN_VALUE &&
-                    sample.elapsedRealtimeMs - lastGpsElapsedMs < GPS_FRESH_WINDOW_MS
-                ) {
-                    // GPS 剛有定位時忽略網路定位：兩個來源交錯餵進同一個過濾器，網路點只要 accuracy 不差
-                    // 就會被當成可信，造成軌跡之字形、距離被灌水。
+                } else if (GpsSourcePolicy.shouldIgnoreNetworkFix(sample.provider, sample.elapsedRealtimeMs, lastGpsElapsedMs)) {
+                    // GPS 剛有定位時忽略網路定位（理由見 GpsSourcePolicy）。
                     return
                 }
                 qualityManager.onLocationReceived(sample.elapsedRealtimeMs)
@@ -127,9 +124,6 @@ class LocationTracker(private val context: Context) {
         const val GPS_MIN_DISTANCE_M = 0f
         const val NETWORK_MIN_TIME_MS = 5_000L
         const val NETWORK_MIN_DISTANCE_M = 0f
-
-        /** GPS 最近一次定位在此時間內，網路定位一律忽略。 */
-        const val GPS_FRESH_WINDOW_MS = 15_000L
 
         fun Location.toLocationSample(trackId: String): LocationSample = LocationSample(
             latitude = latitude,

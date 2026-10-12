@@ -128,7 +128,9 @@ fun InfoBanner(
     text: String,
     color: Color,
     modifier: Modifier = Modifier,
-    icon: ImageVector? = null
+    icon: ImageVector? = null,
+    /** 非 null 時右側顯示「關閉」，讓一次性提示可以被使用者收掉。 */
+    onDismiss: (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier
@@ -142,7 +144,15 @@ fun InfoBanner(
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
         }
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        if (onDismiss != null) {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("關閉") }
+        }
     }
 }
 

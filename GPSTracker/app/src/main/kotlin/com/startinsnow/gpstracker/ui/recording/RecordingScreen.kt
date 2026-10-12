@@ -52,7 +52,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -100,7 +100,7 @@ fun RecordingScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     var hasFineLocation by remember { mutableStateOf(context.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) }
     var hasCoarseLocation by remember { mutableStateOf(context.hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)) }
@@ -113,7 +113,7 @@ fun RecordingScreen(
     var hasRequestedStart by rememberSaveable { mutableStateOf(false) }
 
     // 變焦（縮放）：直接 collect TrackPhotoManager 的即時變焦狀態（由 CameraX zoomState 驅動）。
-    val cameraZoom by viewModel.photoManager.zoom.collectAsState()
+    val cameraZoom by viewModel.photoManager.zoom.collectAsStateWithLifecycle()
     // 拍照快門閃光：counter 遞增會觸發一次短暫白畫面，讓使用者知道「按下去了」。
     var flashCounter by remember { mutableIntStateOf(0) }
     var flashAlpha by remember { mutableFloatStateOf(0f) }
@@ -166,6 +166,8 @@ fun RecordingScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
+        // 只在「這次剛取得定位權限」時才接著要背景定位；只按「允許相機」不該連帶跳出背景定位請求。
+        val hadLocationBefore = hasFineLocation || hasCoarseLocation
         hasFineLocation = results[Manifest.permission.ACCESS_FINE_LOCATION]
             ?: context.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
         hasCoarseLocation = results[Manifest.permission.ACCESS_COARSE_LOCATION]
@@ -184,7 +186,7 @@ fun RecordingScreen(
             TrackingStateHolder.postMessage("需要定位權限才能記錄軌跡，請允許「精確位置」後再試一次")
         } else {
             startOrResumeRecording()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            if (!hadLocationBefore && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
                 !context.hasPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
             ) {
                 backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)

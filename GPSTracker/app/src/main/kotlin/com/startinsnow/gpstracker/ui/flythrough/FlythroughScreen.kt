@@ -54,7 +54,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,10 +100,10 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
         factory = TrackDetailViewModel.factory(app, trackId)
     )
 
-    val points by viewModel.points.collectAsState()
-    val track by viewModel.track.collectAsState()
-    val isRecording by FlyoverRecorderState.isRecording.collectAsState()
-    val lastFile by FlyoverRecorderState.lastFile.collectAsState()
+    val points by viewModel.points.collectAsStateWithLifecycle()
+    val track by viewModel.track.collectAsStateWithLifecycle()
+    val isRecording by FlyoverRecorderState.isRecording.collectAsStateWithLifecycle()
+    val lastFile by FlyoverRecorderState.lastFile.collectAsStateWithLifecycle()
 
     var webView by remember { mutableStateOf<WebView?>(null) }
     var mapReady by remember { mutableStateOf(false) }
@@ -113,10 +113,10 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
     val bridge: FlythroughBridge = remember {
         FlythroughBridge(onReady = { mapReady = true })
     }
-    val progress by bridge.progress.collectAsState()
-    val snapshotUrl by bridge.snapshotDataUrl.collectAsState()
-    val finishedCount by bridge.finishedCount.collectAsState()
-    val hudValues by bridge.hud.collectAsState()
+    val progress by bridge.progress.collectAsStateWithLifecycle()
+    val snapshotUrl by bridge.snapshotDataUrl.collectAsStateWithLifecycle()
+    val finishedCount by bridge.finishedCount.collectAsStateWithLifecycle()
+    val hudValues by bridge.hud.collectAsStateWithLifecycle()
     var showShareMenu by remember { mutableStateOf(false) }
 
     val baseConfig = TileProviderConfig.FREE_ESRI_SATELLITE

@@ -63,10 +63,10 @@ fun GpsTrackerNavHost(navController: NavHostController = rememberNavController()
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
-                    onStartRecording = { navController.navigate(Routes.recording()) },
-                    onResumeRecording = { trackId -> navController.navigate(Routes.recording(trackId)) },
-                    onOpenHistory = { navController.navigate(Routes.HISTORY) },
-                    onOpenTrack = { trackId -> navController.navigate(Routes.detail(trackId)) }
+                    onStartRecording = { navController.navigate(Routes.recording()) { launchSingleTop = true } },
+                    onResumeRecording = { trackId -> navController.navigate(Routes.recording(trackId)) { launchSingleTop = true } },
+                    onOpenHistory = { navController.navigate(Routes.HISTORY) { launchSingleTop = true } },
+                    onOpenTrack = { trackId -> navController.navigate(Routes.detail(trackId)) { launchSingleTop = true } }
                 )
             }
             composable(
@@ -84,12 +84,12 @@ fun GpsTrackerNavHost(navController: NavHostController = rememberNavController()
                     onClose = { navController.popBackStack() },
                     onFinished = { trackId ->
                         navController.popBackStack(Routes.HOME, inclusive = false)
-                        if (trackId != null) navController.navigate(Routes.detail(trackId))
+                        if (trackId != null) navController.navigate(Routes.detail(trackId)) { launchSingleTop = true }
                     }
                 )
             }
             composable(Routes.HISTORY) {
-                HistoryScreen(onOpenTrack = { trackId -> navController.navigate(Routes.detail(trackId)) })
+                HistoryScreen(onOpenTrack = { trackId -> navController.navigate(Routes.detail(trackId)) { launchSingleTop = true } })
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen()
@@ -102,7 +102,7 @@ fun GpsTrackerNavHost(navController: NavHostController = rememberNavController()
                 TrackDetailScreen(
                     trackId = trackId,
                     onBack = { navController.popBackStack() },
-                    onOpenFlythrough = { navController.navigate(Routes.flythrough(it)) }
+                    onOpenFlythrough = { navController.navigate(Routes.flythrough(it)) { launchSingleTop = true } }
                 )
             }
             composable(

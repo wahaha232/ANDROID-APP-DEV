@@ -94,6 +94,8 @@ class TrackDetailViewModel(
 
     fun play() {
         if (playbackEngine.isEmpty()) return
+        // 播到結尾後再按「播放」要從頭開始，否則會立刻又判定結束、看起來沒反應。
+        if (_playback.value.elapsedMs >= playbackEngine.totalDurationMs) seekTo(0L)
         _playback.value = _playback.value.copy(isPlaying = true)
         tickerJob?.cancel()
         tickerJob = viewModelScope.launch {
