@@ -7,6 +7,7 @@ import android.os.Build
 import com.startinsnow.gpstracker.data.db.AppDatabase
 import com.startinsnow.gpstracker.data.prefs.SettingsRepository
 import com.startinsnow.gpstracker.data.repository.TrackRepository
+import kotlinx.coroutines.launch
 
 class GpsTrackerApplication : Application() {
 
@@ -29,6 +30,10 @@ class GpsTrackerApplication : Application() {
         org.maplibre.android.MapLibre.getInstance(this)
         createNotificationChannels()
         com.startinsnow.gpstracker.service.AutoCleanupWorker.schedule(this)
+        // 舊版以明文存放的 GitHub Token 轉成加密格式（失敗不影響啟動）。
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching { settingsRepository.migrateLegacySecrets() }
+        }
     }
 
     private fun createNotificationChannels() {

@@ -12,6 +12,7 @@ import com.startinsnow.gpstracker.core.model.TrackStatus
 import com.startinsnow.gpstracker.data.prefs.StepSource
 import com.startinsnow.gpstracker.sync.StepResolver
 import com.startinsnow.gpstracker.sync.StepSourceTag
+import com.startinsnow.gpstracker.sync.WebDashboardSync
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.first
 
@@ -40,8 +41,14 @@ class StepResyncWorker(context: Context, params: WorkerParameters) : CoroutineWo
             ?.takeIf { it > 0 }
             ?: return Result.success()
         val tag = StepSourceTag.forSource(source)
-        if (steps != track.stepCount || tag != track.stepSource) {
-            app.trackRepository.updateSteps(trackId, steps, tag)
+        val changed = steps != track.stepCount || tag != track.stepSource
+        if (changed) app.trackRepository.updateSteps(trackId, steps, tag)
+
+        // 步數有更新（或上次上傳失敗重試）時，重傳到網頁儀表板，讓網站顯示補同步後的步數。
+        if (changed || runAttemptCount > 0) {
+            val outcome = WebDashboardSync.uploadIfConfigured(app, trackId)
+            val needRetry = outcome.isFailure || outcome.getOrNull() == WebDashboardSync.Outcome.SKIPPED_WIFI_ONLY
+            if (needRetry && runAttemptCount < MAX_RETRIES) return Result.retry()
         }
         return Result.success()
     }
@@ -49,6 +56,7 @@ class StepResyncWorker(context: Context, params: WorkerParameters) : CoroutineWo
     companion object {
         private const val KEY_TRACK_ID = "trackId"
         private val DELAYS_MINUTES = listOf(15L, 180L)
+        private const val MAX_RETRIES = 4
 
         fun schedule(context: Context, trackId: String) {
             val wm = WorkManager.getInstance(context)

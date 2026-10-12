@@ -31,10 +31,30 @@ class GpsDriftFilterTest {
     )
 
     @Test
-    fun `first sample is always trusted`() {
+    fun `first sample with good accuracy is trusted`() {
         val filter = GpsDriftFilter()
         val result = filter.evaluate(sample(25.0, 121.0, 0L, 8f))
         assertEquals(PointReliability.TRUSTED, result.reliability)
+    }
+
+    @Test
+    fun `first sample with poor accuracy is not trusted`() {
+        val filter = GpsDriftFilter()
+        val result = filter.evaluate(sample(25.0, 121.0, 0L, 1000f, LocationProvider.NETWORK))
+        assertEquals(PointReliability.LOW_CONFIDENCE, result.reliability)
+    }
+
+    @Test
+    fun `poor accuracy first fix does not become the anchor so the first real gps fix is trusted without phantom distance`() {
+        val filter = GpsDriftFilter()
+        // 粗略的網路定位點，離真實位置約 1.1 km。
+        filter.evaluate(sample(25.00, 121.00, 0L, 1000f, LocationProvider.NETWORK))
+        // 第一個精度合格的 GPS 點成為 anchor（TRUSTED），而不是被當成從粗略點「飛」過來的移動。
+        val real = filter.evaluate(sample(25.01, 121.00, 5_000L, 8f))
+        assertEquals(PointReliability.TRUSTED, real.reliability)
+        // 之後正常移動的點仍相對於這個真實 anchor 判斷。
+        val next = filter.evaluate(sample(25.0103, 121.00, 10_000L, 8f))
+        assertEquals(PointReliability.TRUSTED, next.reliability)
     }
 
     @Test

@@ -48,9 +48,38 @@ class LocationTracker(private val context: Context) {
         // qualityManager.reset() 會把基準清成 null，導致 GPS Lost / 尚未收到定位偵測永久失效。
         driftFilter.reset()
 
-        val listener = object : LocationListener {
+        val registered = mutableSetOf<String>()
+        var lastGpsElapsedMs = Long.MIN_VALUE
+        lateinit var listener: LocationListener
+
+        /** 註冊單一 provider；已註冊或目前未啟用則略過（之後被啟用時由 onProviderEnabled 再補註冊）。 */
+        fun register(provider: String) {
+            if (provider in registered) return
+            try {
+                if (!locationManager.isProviderEnabled(provider)) return
+                if (provider == LocationManager.GPS_PROVIDER) {
+                    locationManager.requestLocationUpdates(provider, gpsMinTimeMs, gpsMinDistanceM, listener, context.mainLooper)
+                } else {
+                    locationManager.requestLocationUpdates(provider, networkMinTimeMs, networkMinDistanceM, listener, context.mainLooper)
+                }
+                registered += provider
+            } catch (e: SecurityException) {
+                close(e)
+            }
+        }
+
+        listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 val sample = location.toLocationSample(trackId)
+                if (sample.provider == LocationProvider.GPS) {
+                    lastGpsElapsedMs = sample.elapsedRealtimeMs
+                } else if (sample.provider == LocationProvider.NETWORK && lastGpsElapsedMs != Long.MIN_VALUE &&
+                    sample.elapsedRealtimeMs - lastGpsElapsedMs < GPS_FRESH_WINDOW_MS
+                ) {
+                    // GPS 剛有定位時忽略網路定位：兩個來源交錯餵進同一個過濾器，網路點只要 accuracy 不差
+                    // 就會被當成可信，造成軌跡之字形、距離被灌水。
+                    return
+                }
                 qualityManager.onLocationReceived(sample.elapsedRealtimeMs)
                 val filtered = driftFilter.evaluate(sample)
                 trySend(filtered)
@@ -58,35 +87,13 @@ class LocationTracker(private val context: Context) {
 
             @Deprecated("Deprecated in Java")
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
-            override fun onProviderEnabled(provider: String) = Unit
+            // 開始記錄時定位功能是關的、之後才開啟：補註冊，否則整趟都收不到點。
+            override fun onProviderEnabled(provider: String) = register(provider)
             override fun onProviderDisabled(provider: String) = Unit
         }
 
-        val providers = mutableListOf<String>()
-        try {
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    gpsMinTimeMs,
-                    gpsMinDistanceM,
-                    listener,
-                    context.mainLooper
-                )
-                providers += LocationManager.GPS_PROVIDER
-            }
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    networkMinTimeMs,
-                    networkMinDistanceM,
-                    listener,
-                    context.mainLooper
-                )
-                providers += LocationManager.NETWORK_PROVIDER
-            }
-        } catch (e: SecurityException) {
-            close(e)
-        }
+        register(LocationManager.GPS_PROVIDER)
+        register(LocationManager.NETWORK_PROVIDER)
 
         awaitClose {
             locationManager.removeUpdates(listener)
@@ -120,6 +127,9 @@ class LocationTracker(private val context: Context) {
         const val GPS_MIN_DISTANCE_M = 0f
         const val NETWORK_MIN_TIME_MS = 5_000L
         const val NETWORK_MIN_DISTANCE_M = 0f
+
+        /** GPS 最近一次定位在此時間內，網路定位一律忽略。 */
+        const val GPS_FRESH_WINDOW_MS = 15_000L
 
         fun Location.toLocationSample(trackId: String): LocationSample = LocationSample(
             latitude = latitude,

@@ -109,6 +109,8 @@ fun RecordingScreen(
     var cameraError by remember { mutableStateOf<String?>(null) }
     var photoPromptStage by rememberSaveable { mutableStateOf(PhotoPromptStage.NONE) }
     var hasPromptedStart by rememberSaveable { mutableStateOf(false) }
+    // 本畫面是否已經送出過「開始記錄」：之後（例如從通知列按「結束」再回到 App）ON_RESUME 不可再自動開新一筆。
+    var hasRequestedStart by rememberSaveable { mutableStateOf(false) }
 
     // 變焦（縮放）：直接 collect TrackPhotoManager 的即時變焦狀態（由 CameraX zoomState 驅動）。
     val cameraZoom by viewModel.photoManager.zoom.collectAsState()
@@ -147,6 +149,7 @@ fun RecordingScreen(
     fun startOrResumeRecording() {
         val current = viewModel.state.value
         if (current.status == TrackStatus.RECORDING || current.status == TrackStatus.PAUSED || current.isStarting) return
+        hasRequestedStart = true
         if (resumeTrackId != null) {
             viewModel.startResumeRecording(resumeTrackId)
         } else {
@@ -238,7 +241,9 @@ fun RecordingScreen(
                 hasFineLocation = context.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 hasCoarseLocation = context.hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
                 hasCameraPermission = context.hasPermission(Manifest.permission.CAMERA)
-                if (hasFineLocation || hasCoarseLocation) {
+                // 只在「還沒開始過」時補啟動（例如先拒絕、到系統設定授權後回來）；
+                // 已經開始並結束的畫面不可因為回到前景又自動開始新記錄。
+                if ((hasFineLocation || hasCoarseLocation) && !hasRequestedStart) {
                     startOrResumeRecording()
                 }
             }

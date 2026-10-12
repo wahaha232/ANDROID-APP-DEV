@@ -13,7 +13,9 @@ import android.media.MediaRecorder
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import java.io.File
@@ -31,6 +33,7 @@ class FlyoverRecordingService : Service() {
     private var recorder: MediaRecorder? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var outputFile: File? = null
+    private var projectionCallback: MediaProjection.Callback? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -47,15 +50,34 @@ class FlyoverRecordingService : Service() {
         val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
         @Suppress("DEPRECATION")
         val data: Intent? = intent.getParcelableExtra(EXTRA_RESULT_DATA)
+        // 以 startForegroundService() 啟動就必須在 5 秒內呼叫 startForeground()，否則系統會丟
+        // ForegroundServiceDidNotStartInTimeException。因此不論授權結果，一律先進入前景再決定是否錄影。
+        try {
+            startForegroundCompat()
+        } catch (t: Throwable) {
+            FlyoverRecorderState.setRecording(false)
+            stopSelf()
+            return
+        }
         if (resultCode != Activity.RESULT_OK || data == null) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
         }
         try {
-            startForegroundCompat()
             val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             val proj = manager.getMediaProjection(resultCode, data)
             projection = proj
+            // Android 14（API 34）起，createVirtualDisplay() 之前必須先註冊 MediaProjection.Callback，
+            // 否則會丟 IllegalStateException（錄影功能在 targetSdk 34/35 上就完全失效）。
+            // 使用者從系統狀態列停止投影、或系統回收時，onStop() 也會走正常的收尾流程。
+            val callback = object : MediaProjection.Callback() {
+                override fun onStop() {
+                    handleStop()
+                }
+            }
+            projectionCallback = callback
+            proj.registerCallback(callback, Handler(Looper.getMainLooper()))
 
             val metrics = resources.displayMetrics
             // H.264 需要偶數尺寸。
@@ -115,6 +137,9 @@ class FlyoverRecordingService : Service() {
     }
 
     private fun cleanup() {
+        // 先取消註冊 callback，避免自己呼叫 projection.stop() 時又回呼 onStop() 造成重複收尾。
+        projectionCallback?.let { cb -> runCatching { projection?.unregisterCallback(cb) } }
+        projectionCallback = null
         runCatching { virtualDisplay?.release() }
         runCatching { recorder?.release() }
         runCatching { projection?.stop() }

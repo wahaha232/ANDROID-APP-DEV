@@ -20,6 +20,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /** 使用者選擇「不接續」時，把未完成的 Track 收尾（不會刪掉已記錄的資料）。 */
     fun abandonPendingRecovery() {
         val candidate = TrackingStateHolder.pendingRecovery.value ?: return
+        // 保險：候選就是目前正在錄的 Track 時，絕不收尾，只收起提示。
+        if (TrackingStateHolder.state.value.trackId == candidate.trackId) {
+            TrackingStateHolder.setPendingRecovery(null)
+            return
+        }
         viewModelScope.launch {
             runCatching { app.trackRepository.abandonTrack(candidate.trackId) }
             TrackingStateHolder.setPendingRecovery(null)

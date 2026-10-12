@@ -22,7 +22,12 @@ class MainActivity : ComponentActivity() {
         val app = application as GpsTrackerApplication
         lifecycleScope.launch {
             val recoverable = runCatching { app.trackRepository.findRecoverableTrack() }.getOrNull()
-            if (recoverable != null && recoverable.status != TrackStatus.FINISHED) {
+            // Service 仍在錄製（旋轉螢幕、按返回後重開 App 都會重建 Activity）時，進行中的 Track 不是「未完成記錄」，
+            // 不能提示使用者「結束這筆」，否則會把正在寫入的軌跡標成完成。
+            val live = TrackingStateHolder.state.value
+            val serviceBusy = live.trackId != null || live.isStarting ||
+                live.status == TrackStatus.RECORDING || live.status == TrackStatus.PAUSED
+            if (recoverable != null && recoverable.status != TrackStatus.FINISHED && !serviceBusy) {
                 TrackingStateHolder.setPendingRecovery(
                     TrackingStateHolder.RecoveryCandidate(
                         trackId = recoverable.trackId,

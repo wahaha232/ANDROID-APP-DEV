@@ -1,5 +1,8 @@
 package com.startinsnow.gpstracker.ui.settings
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -289,6 +292,19 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+                if (settings.dataRetentionDays != 0) {
+                    Text(
+                        if (settings.driveSyncEnabled) {
+                            "已開啟 Google Drive 同步：只會自動清理「已成功備份」的紀錄，尚未備份的不會被刪除。"
+                        } else {
+                            "⚠ 尚未開啟 Google Drive 同步：超過天數的紀錄會被永久刪除且無備份。"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (settings.driveSyncEnabled) MaterialTheme.colorScheme.onSurfaceVariant
+                        else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -380,11 +396,22 @@ private fun SettingsTextField(
     isSecret: Boolean = false,
     onValueChange: (String) -> Unit
 ) {
+    // 欄位以本地狀態顯示：設定值經 DataStore 非同步寫入、再（對 Token 還要經 Keystore 解密）回流，
+    // 若直接拿回流值當 value，快速輸入時會掉字、游標跳動。編輯中（有焦點）不接受外部值覆蓋，
+    // 失去焦點或首次載入時才與已儲存的值同步。
+    var text by remember { mutableStateOf(value) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    LaunchedEffect(value, focused) { if (!focused && text != value) text = value }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
         OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = text,
+            onValueChange = {
+                text = it
+                onValueChange(it)
+            },
+            interactionSource = interactionSource,
             modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             singleLine = true,
             visualTransformation = if (isSecret) PasswordVisualTransformation() else VisualTransformation.None

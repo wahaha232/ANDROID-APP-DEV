@@ -17,6 +17,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.startinsnow.gpstracker.sync.StepResolver
 import com.startinsnow.gpstracker.sync.StepSourceTag
+import com.startinsnow.gpstracker.sync.WebDashboardSync
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -127,7 +128,13 @@ class TrackDetailViewModel(
                     if (steps > 0) {
                         val tag = StepSourceTag.forSource(source)
                         app.trackRepository.updateSteps(trackId, steps, tag)
-                        "已更新步數為 $steps（來源：${StepSourceTag.label(tag)}）"
+                        val web = WebDashboardSync.uploadIfConfigured(app, trackId)
+                        val webNote = when {
+                            web.isFailure -> "；網頁上傳失敗：${web.exceptionOrNull()?.message}"
+                            web.getOrNull() == WebDashboardSync.Outcome.UPLOADED -> "，並已更新網頁儀表板"
+                            else -> ""
+                        }
+                        "已更新步數為 $steps（來源：${StepSourceTag.label(tag)}）$webNote"
                     } else {
                         "Health Connect 目前沒有這段時間的步數。請先開啟 Zepp Life（或 Google Fit）讓手環同步，再按一次。"
                     }
@@ -157,27 +164,25 @@ class TrackDetailViewModel(
         _playback.value = _playback.value.copy(speedMultiplier = multiplier)
     }
 
-    suspend fun buildExportZip(): File? {
-        val trackEntity = track.value ?: return null
-        val data = ExportTrackData(
-            track = trackEntity,
-            points = points.value,
-            photos = photos.value,
-            segments = app.trackRepository.getSegments(trackId),
-            outages = app.trackRepository.getOutages(trackId)
-        )
+    /** 產生匯出 ZIP。HTML/GPX/JSON/CSV 產生、照片複製與壓縮都是重 IO，一律在 IO 執行緒做，避免卡住主畫面（ANR）。 */
+    suspend fun buildExportZip(): File? = withContext(Dispatchers.IO) {
+        val data = buildExportData() ?: return@withContext null
         val exportDir = com.startinsnow.gpstracker.export.TrackZipExporter.buildExportDirectory(app.filesDir, data)
         val zipFile = File(app.filesDir, "exports/${trackId}.zip")
         com.startinsnow.gpstracker.export.TrackZipExporter.zipDirectory(exportDir, zipFile)
-        return zipFile
+        zipFile
     }
 
+    /**
+     * 匯出／上傳用資料：一律從資料庫現查。不可用 points.value——那是 WhileSubscribed 的 StateFlow，
+     * 剛進畫面、第一筆資料還沒送達時是 emptyList()，會匯出或上傳「空軌跡」。
+     */
     suspend fun buildExportData(): ExportTrackData? {
-        val trackEntity = track.value ?: return null
+        val trackEntity = app.trackRepository.getTrack(trackId) ?: return null
         return ExportTrackData(
             track = trackEntity,
-            points = points.value,
-            photos = photos.value,
+            points = app.trackRepository.getPoints(trackId),
+            photos = app.trackRepository.getPhotos(trackId),
             segments = app.trackRepository.getSegments(trackId),
             outages = app.trackRepository.getOutages(trackId)
         )

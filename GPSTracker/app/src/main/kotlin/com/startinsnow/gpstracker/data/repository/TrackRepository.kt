@@ -48,6 +48,11 @@ class TrackRepository(
     /** Auto Cleanup 用：取得指定時間點之前已完成的 Track ID（SQL 端篩選）。 */
     suspend fun getFinishedTrackIdsBefore(status: TrackStatus, cutoffTimestampMs: Long): List<String> =
         trackDao.getFinishedTrackIdsBefore(status, cutoffTimestampMs)
+
+    /** Auto Cleanup（已開啟雲端同步時）：只取已成功上傳備份的已完成 Track ID。 */
+    suspend fun getUploadedFinishedTrackIdsBefore(status: TrackStatus, cutoffTimestampMs: Long): List<String> =
+        trackDao.getUploadedFinishedTrackIdsBefore(status, UploadStatus.UPLOADED, cutoffTimestampMs)
+
     suspend fun getLastPoint(trackId: String) = trackPointDao.getLastForTrack(trackId)
     suspend fun getPoints(trackId: String): List<TrackPointEntity> = trackPointDao.getAllForTrack(trackId)
     suspend fun getPhotos(trackId: String): List<PhotoEntity> = photoDao.getAllForTrack(trackId)
@@ -233,8 +238,10 @@ class TrackRepository(
             JsonObject(stats.modeDistributionPercent.mapKeys { it.key.name }.mapValues { JsonPrimitive(it.value) })
         )
 
-        // 重算結果（以實際落地資料為準）不應小於記錄期間的即時快照，否則使用者會看到距離變少。
-        val finalDistance = maxOf(stats.distanceMeters, snapshotDistanceMeters)
+        // 正常結束時，Service 傳入的是「結束當下的精確累計距離」，它不含暫停期間的位移；
+        // 重算（逐點直線累加）會把暫停前後兩點之間的空白（例如暫停期間搭車）也算進去，所以以快照為準。
+        // 只有沒有快照（例如 Crash 後收尾）才用重算結果。
+        val finalDistance = if (snapshotDistanceMeters > 0.0) snapshotDistanceMeters else stats.distanceMeters
         val finalMaxSpeed = maxOf(stats.maxSpeedMps, snapshotMaxSpeedMps)
         val finalAvgSpeed = if (stats.avgSpeedMps > 0.0) stats.avgSpeedMps else snapshotAvgSpeedMps
 

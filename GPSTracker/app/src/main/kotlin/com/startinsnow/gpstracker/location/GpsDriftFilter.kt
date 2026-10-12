@@ -37,6 +37,11 @@ class GpsDriftFilter {
         val previous = lastTrusted
 
         if (previous == null) {
+            // 第一個點若精度太差（例如網路定位的粗略點）不能當 anchor：否則之後真正的 GPS 點會被當成
+            // 從這個誤差很大的位置「移動」過來，憑空多算幾百公尺。等到第一個精度合格的點才開始。
+            if (sample.accuracyMeters > ACCURACY_TRUST_THRESHOLD_M) {
+                return FilteredLocation(sample, PointReliability.LOW_CONFIDENCE, quality, "poor accuracy ${sample.accuracyMeters}m (no anchor yet)")
+            }
             lastTrusted = sample
             return FilteredLocation(sample, PointReliability.TRUSTED, quality)
         }

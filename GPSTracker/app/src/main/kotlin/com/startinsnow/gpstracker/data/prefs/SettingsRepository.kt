@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "gps_tracker_settings")
@@ -32,7 +34,15 @@ data class AppSettings(
     val webDataPath: String = "gpstracker-web/data",
     val githubToken: String = "",
     val webWifiOnly: Boolean = true
-)
+) {
+    // 刻意覆寫：data class 預設的 toString() 會把 GitHub Token 印出來（log、除錯輸出、例外訊息都可能帶到）。
+    override fun toString(): String =
+        "AppSettings(gpsMode=$gpsMode, autoPauseEnabled=$autoPauseEnabled, stepSource=$stepSource, " +
+            "driveSyncEnabled=$driveSyncEnabled, wifiOnlySync=$wifiOnlySync, dataRetentionDays=$dataRetentionDays, " +
+            "deleteLocalAfterUploadEnabled=$deleteLocalAfterUploadEnabled, offlineMapEnabled=$offlineMapEnabled, " +
+            "webUploadEnabled=$webUploadEnabled, webRepo=$webRepo, webBranch=$webBranch, webDataPath=$webDataPath, " +
+            "githubToken=${if (githubToken.isEmpty()) "<empty>" else "<redacted>"}, webWifiOnly=$webWifiOnly)"
+}
 
 /** 對應規格「64. 設定」。只放置真正有實作對應功能的設定項，避免「假設定」。 */
 class SettingsRepository(private val context: Context) {
@@ -68,10 +78,10 @@ class SettingsRepository(private val context: Context) {
             webRepo = prefs[Keys.WEB_REPO] ?: "wahaha232/ANDROID-APP-DEV",
             webBranch = prefs[Keys.WEB_BRANCH] ?: "main",
             webDataPath = prefs[Keys.WEB_DATA_PATH] ?: "gpstracker-web/data",
-            githubToken = prefs[Keys.GITHUB_TOKEN] ?: "",
+            githubToken = SecretCipher.decrypt(prefs[Keys.GITHUB_TOKEN] ?: ""),
             webWifiOnly = prefs[Keys.WEB_WIFI_ONLY] ?: true
         )
-    }
+    }.flowOn(Dispatchers.IO) // 解密要呼叫 Keystore，不放在主執行緒做
 
     suspend fun setGpsMode(mode: GpsMode) = context.dataStore.edit { it[Keys.GPS_MODE] = mode.name }
     suspend fun setAutoPauseEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.AUTO_PAUSE] = enabled }
@@ -86,6 +96,16 @@ class SettingsRepository(private val context: Context) {
     suspend fun setWebRepo(value: String) = context.dataStore.edit { it[Keys.WEB_REPO] = value }
     suspend fun setWebBranch(value: String) = context.dataStore.edit { it[Keys.WEB_BRANCH] = value }
     suspend fun setWebDataPath(value: String) = context.dataStore.edit { it[Keys.WEB_DATA_PATH] = value }
-    suspend fun setGithubToken(value: String) = context.dataStore.edit { it[Keys.GITHUB_TOKEN] = value }
+    suspend fun setGithubToken(value: String) = context.dataStore.edit { it[Keys.GITHUB_TOKEN] = SecretCipher.encrypt(value.trim()) }
+
+    /** 舊版把 Token 以明文存放；App 啟動時一次性轉成 Keystore 加密後的格式。 */
+    suspend fun migrateLegacySecrets() {
+        context.dataStore.edit { prefs ->
+            val raw = prefs[Keys.GITHUB_TOKEN]
+            if (!raw.isNullOrEmpty() && !SecretCipher.isEncrypted(raw)) {
+                prefs[Keys.GITHUB_TOKEN] = SecretCipher.encrypt(raw)
+            }
+        }
+    }
     suspend fun setWebWifiOnly(enabled: Boolean) = context.dataStore.edit { it[Keys.WEB_WIFI_ONLY] = enabled }
 }

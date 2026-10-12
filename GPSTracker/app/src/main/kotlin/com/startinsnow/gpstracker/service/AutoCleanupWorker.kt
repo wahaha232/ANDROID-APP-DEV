@@ -25,8 +25,15 @@ class AutoCleanupWorker(context: Context, params: WorkerParameters) : CoroutineW
 
         val cutoff = System.currentTimeMillis() - retentionDays * 24L * 60 * 60 * 1000
         // 於 SQL 端篩選（不把整張表載入記憶體），再交由 Repository 刪除（含本機檔案）。
-        val expiredTrackIds = app.trackRepository.getFinishedTrackIdsBefore(TrackStatus.FINISHED, cutoff)
-        expiredTrackIds.forEach { app.trackRepository.deleteTrack(it) }
+        // 已開啟雲端同步時，只清理「已成功備份」的軌跡：尚未（或上傳失敗）備份的永遠不自動刪除。
+        // 未開啟雲端同步時，使用者自行設定的保留天數即為意圖，照設定清理（設定頁有警語）。
+        val expiredTrackIds = if (settings.driveSyncEnabled) {
+            app.trackRepository.getUploadedFinishedTrackIdsBefore(TrackStatus.FINISHED, cutoff)
+        } else {
+            app.trackRepository.getFinishedTrackIdsBefore(TrackStatus.FINISHED, cutoff)
+        }
+        // 單筆刪除失敗不應中斷整批。
+        expiredTrackIds.forEach { id -> runCatching { app.trackRepository.deleteTrack(id) } }
         return Result.success()
     }
 

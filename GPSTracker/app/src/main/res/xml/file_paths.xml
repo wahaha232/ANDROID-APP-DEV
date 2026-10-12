@@ -3,5 +3,6 @@
     <external-files-path name="photos" path="photos/" />
     <external-files-path name="flyovers" path="flyovers/" />
     <files-path name="internal_exports" path="exports/" />
-    <cache-path name="cache" path="/" />
+    <!-- 只開放分享用的子目錄（ShareUtils 存放截圖處），不暴露整個 cache -->
+    <cache-path name="share" path="share/" />
 </paths>

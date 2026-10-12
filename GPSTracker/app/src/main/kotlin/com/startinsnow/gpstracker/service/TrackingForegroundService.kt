@@ -30,9 +30,10 @@ import com.startinsnow.gpstracker.sensor.StepCounterManager
 import com.startinsnow.gpstracker.sync.ResolvedSteps
 import com.startinsnow.gpstracker.sync.StepResolver
 import com.startinsnow.gpstracker.sync.StepSourceTag
-import com.startinsnow.gpstracker.sync.WebDashboardUploader
+import com.startinsnow.gpstracker.sync.WebDashboardSync
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -40,6 +41,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 背景記錄的核心引擎（規格 56. Background Recording / 73. GPS Engine 的容器）。
@@ -59,6 +61,9 @@ class TrackingForegroundService : LifecycleService() {
 
     /** 防止重複建立 Track（MainActivity 的 Crash Recovery 與 UI 的開始記錄可能同時送 ACTION_START）。 */
     private var isStarting = false
+
+    /** 仍在寫入資料庫／上傳的收尾協程數：期間重複的「結束」必須忽略，且 Service 不可提前 stopSelf()。 */
+    private var finalizingCount = 0
 
     private var isPaused = false
     private var isAutoPaused = false
@@ -156,6 +161,8 @@ class TrackingForegroundService : LifecycleService() {
                     app.trackRepository.createTrack(startLocation)
                 }
                 trackId = track.trackId
+                // 已有進行中的記錄，就不可能還有「未完成記錄」要提示。
+                TrackingStateHolder.setPendingRecovery(null)
                 resetAggregation()
 
                 if (existingTrack != null) {
@@ -169,26 +176,9 @@ class TrackingForegroundService : LifecycleService() {
                     }
                     activeDurationMs = existingTrack.durationMs
                     stepCount = existingTrack.stepCount
-                    val lastPoint = app.trackRepository.getLastPoint(track.trackId)
-                    if (lastPoint != null && lastPoint.reliability == "TRUSTED") {
-                        lastAggregatedLocation = com.startinsnow.gpstracker.core.model.LocationSample(
-                            latitude = lastPoint.latitude,
-                            longitude = lastPoint.longitude,
-                            timestampMs = lastPoint.timestampMs,
-                            elapsedRealtimeMs = lastPoint.elapsedRealtimeMs,
-                            speedMps = lastPoint.speedMps,
-                            speedAccuracyMps = null,
-                            altitudeMeters = lastPoint.altitudeMeters,
-                            altitudeAccuracyMeters = null,
-                            bearingDegrees = lastPoint.bearingDegrees,
-                            bearingAccuracyDegrees = null,
-                            accuracyMeters = lastPoint.accuracyMeters,
-                            provider = com.startinsnow.gpstracker.core.model.LocationProvider.valueOf(
-                                runCatching { lastPoint.provider }.getOrDefault("UNKNOWN")
-                            ),
-                            trackId = track.trackId
-                        )
-                    }
+                    // 不用資料庫的最後一個點當聚合 anchor（lastAggregatedLocation 維持 null）：
+                    // 程序被殺到使用者按「接續」之間可能已經移動了很遠（甚至重開機、elapsedRealtime 重置），
+                    // 若以舊點為基準，第一個新點會把整段空白直線計入距離。新的第一個可信點會成為新的 anchor。
                     // 重要：續錄時必須先 seed 再開始觀察步數，且不能在中間呼叫 reset()，
                     // 否則先前累積的步數會被歸零（規格 57/83）。
                     stepCounterManager.seedAccumulatedSteps(stepCount)
@@ -257,7 +247,17 @@ class TrackingForegroundService : LifecycleService() {
             gpsMinTimeMs = gpsIntervalMs,
             gpsMinDistanceM = gpsDistanceM
         )
-            .onEach { filtered -> handleLocation(filtered) }
+            .onEach { filtered ->
+                // 單一點處理失敗（例如資料庫暫時寫入錯誤）不可讓整條定位 Flow 終止，
+                // 否則通知仍顯示錄製中，之後的點卻全部遺失。
+                try {
+                    handleLocation(filtered)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (t: Throwable) {
+                    TrackingStateHolder.postMessage("儲存定位點失敗：${t.message ?: t::class.java.simpleName}")
+                }
+            }
             .catch { e ->
                 // 定位來源錯誤（例如權限被撤銷）不可讓例外往外炸，否則 App 會直接崩潰。
                 TrackingStateHolder.postMessage("定位更新失敗：${e.message ?: e::class.java.simpleName}")
@@ -435,46 +435,57 @@ class TrackingForegroundService : LifecycleService() {
         tickerJob = lifecycleScope.launch {
             while (isActive) {
                 delay(TICK_INTERVAL_MS)
-                val id = trackId ?: continue
-                val now = SystemClock.elapsedRealtime()
-
-                if (locationTracker.qualityManager.isLost(now) && !TrackingStateHolder.state.value.isGpsLost) {
-                    TrackingStateHolder.update {
-                        it.copy(gpsQuality = LocationQuality.LOST, isGpsLost = true, accuracyLabel = "🔴 GPS 遺失")
-                    }
-                    if (!hasOpenOutage) {
-                        app.trackRepository.startOutageIfNeeded(id, System.currentTimeMillis())
-                        hasOpenOutage = true
-                    }
-                    if (!locationTracker.qualityManager.hasFix) {
-                        // 從頭到尾都沒收到定位：明確告訴使用者原因，而不是讓畫面一直停在 0 km。
-                        TrackingStateHolder.postMessage(
-                            if (locationTracker.isAnyProviderEnabled()) {
-                                "尚未收到 GPS 定位，請移動到室外或空曠處"
-                            } else {
-                                "裝置定位功能未開啟，請開啟定位後再記錄"
-                            }
-                        )
-                    }
+                // 單次失敗（例如寫入 GPS 中斷區間時資料庫出錯）不可讓計時器死掉，也不可讓例外殺掉整個 App。
+                try {
+                    tickOnce()
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (t: Throwable) {
+                    TrackingStateHolder.postMessage("更新記錄狀態失敗：${t.message ?: t::class.java.simpleName}")
                 }
-
-                if (autoPauseEnabled && !isPaused && !isAutoPaused &&
-                    stationarySinceElapsedMs != null &&
-                    (now - stationarySinceElapsedMs!!) > AUTO_PAUSE_THRESHOLD_MS
-                ) {
-                    pauseRecording(auto = true)
-                }
-
-                batteryMode = BatteryModeResolver.modeFor(BatteryModeResolver.currentBatteryPercent(this@TrackingForegroundService))
-                TrackingStateHolder.update {
-                    it.copy(
-                        durationMs = currentDurationMs(),
-                        batteryPercent = BatteryModeResolver.currentBatteryPercent(this@TrackingForegroundService)
-                    )
-                }
-                updateNotification()
             }
         }
+    }
+
+    private suspend fun tickOnce() {
+        val id = trackId ?: return
+        val now = SystemClock.elapsedRealtime()
+
+        if (locationTracker.qualityManager.isLost(now) && !TrackingStateHolder.state.value.isGpsLost) {
+            TrackingStateHolder.update {
+                it.copy(gpsQuality = LocationQuality.LOST, isGpsLost = true, accuracyLabel = "🔴 GPS 遺失")
+            }
+            if (!hasOpenOutage) {
+                app.trackRepository.startOutageIfNeeded(id, System.currentTimeMillis())
+                hasOpenOutage = true
+            }
+            if (!locationTracker.qualityManager.hasFix) {
+                // 從頭到尾都沒收到定位：明確告訴使用者原因，而不是讓畫面一直停在 0 km。
+                TrackingStateHolder.postMessage(
+                    if (locationTracker.isAnyProviderEnabled()) {
+                        "尚未收到 GPS 定位，請移動到室外或空曠處"
+                    } else {
+                        "裝置定位功能未開啟，請開啟定位後再記錄"
+                    }
+                )
+            }
+        }
+
+        if (autoPauseEnabled && !isPaused && !isAutoPaused &&
+            stationarySinceElapsedMs != null &&
+            (now - stationarySinceElapsedMs!!) > AUTO_PAUSE_THRESHOLD_MS
+        ) {
+            pauseRecording(auto = true)
+        }
+
+        batteryMode = BatteryModeResolver.modeFor(BatteryModeResolver.currentBatteryPercent(this@TrackingForegroundService))
+        TrackingStateHolder.update {
+            it.copy(
+                durationMs = currentDurationMs(),
+                batteryPercent = BatteryModeResolver.currentBatteryPercent(this@TrackingForegroundService)
+            )
+        }
+        updateNotification()
     }
 
     private fun pauseRecording(auto: Boolean) {
@@ -518,6 +529,9 @@ class TrackingForegroundService : LifecycleService() {
     private fun stopRecording() {
         val id = trackId
         if (id == null) {
+            // 上一筆還在收尾（寫入資料庫／上傳）時，重複按「結束」必須忽略：
+            // 這時 stopSelf() 會取消收尾協程，讓該筆軌跡永遠停在「錄製中」變成幽靈記錄。
+            if (finalizingCount > 0 || isStarting) return
             // 沒有進行中的 Track 也要讓 Service 收乾淨，避免殘留前景服務。
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -532,46 +546,61 @@ class TrackingForegroundService : LifecycleService() {
         val finalMaxSpeedMps = maxSpeedMps
         val finalAvgSpeedMps = if (runningSpeedCount > 0) runningSpeedSum / runningSpeedCount else 0.0
         val finalPointCount = TrackingStateHolder.state.value.pointCount
+        // 同步取走並清掉「GPS 中斷」旗標：收尾期間若立刻開始新記錄，不會和新記錄的狀態互相踩到。
+        val hadOpenOutage = hasOpenOutage
+        hasOpenOutage = false
 
         collectJob?.cancel()
         tickerJob?.cancel()
         trackId = null
         isPaused = false
         isAutoPaused = false
+        finalizingCount++
 
         // 先同步更新 UI 狀態，讓使用者按下「結束」後畫面立刻回到非記錄中，
         // 不會還停留在舊的距離/時間（TrackStatusHolder 也要一併清乾淨）。
         TrackingStateHolder.reset()
 
         lifecycleScope.launch {
-            runCatching {
-                if (hasOpenOutage) {
-                    app.trackRepository.endOutageIfNeeded(id, System.currentTimeMillis())
-                    hasOpenOutage = false
+            try {
+                // 寫入最終資料絕不可被取消（例如 Service 被停掉），否則軌跡會永遠停在「錄製中」。
+                withContext(NonCancellable) {
+                    runCatching {
+                        if (hadOpenOutage) {
+                            app.trackRepository.endOutageIfNeeded(id, System.currentTimeMillis())
+                        }
+                        val endTimestampMs = System.currentTimeMillis()
+                        val resolvedSteps = resolveFinalStepCount(id, finalSteps, endTimestampMs)
+                        app.trackRepository.finalizeTrack(
+                            trackId = id,
+                            endTimestampMs = endTimestampMs,
+                            stepCount = resolvedSteps.steps,
+                            stepSource = resolvedSteps.sourceTag,
+                            activeDurationMs = finalActiveDurationMs,
+                            snapshotDistanceMeters = finalDistanceMeters,
+                            snapshotAvgSpeedMps = finalAvgSpeedMps,
+                            snapshotMaxSpeedMps = finalMaxSpeedMps,
+                            snapshotPointCount = finalPointCount
+                        )
+                        // Zepp Life 等來源常比結束錄製晚才同步到 Health Connect：延後補讀，讀到就更新這筆步數。
+                        if (resolvedSteps.sourceTag != StepSourceTag.SENSOR) StepResyncWorker.schedule(applicationContext, id)
+                    }.onFailure {
+                        TrackingStateHolder.postMessage("結束記錄時發生錯誤：${it.message ?: it::class.java.simpleName}")
+                        // 最後防線：至少把它從「錄製中」收尾，避免留下永遠無法結束的幽靈記錄。
+                        runCatching { app.trackRepository.abandonTrack(id) }
+                    }
                 }
-                val endTimestampMs = System.currentTimeMillis()
-                val resolvedSteps = resolveFinalStepCount(id, finalSteps, endTimestampMs)
-                app.trackRepository.finalizeTrack(
-                    trackId = id,
-                    endTimestampMs = endTimestampMs,
-                    stepCount = resolvedSteps.steps,
-                    stepSource = resolvedSteps.sourceTag,
-                    activeDurationMs = finalActiveDurationMs,
-                    snapshotDistanceMeters = finalDistanceMeters,
-                    snapshotAvgSpeedMps = finalAvgSpeedMps,
-                    snapshotMaxSpeedMps = finalMaxSpeedMps,
-                    snapshotPointCount = finalPointCount
-                )
-                // Zepp Life 等來源常比結束錄製晚才同步到 Health Connect：延後補讀，讀到就更新這筆步數。
-                if (resolvedSteps.sourceTag != StepSourceTag.SENSOR) StepResyncWorker.schedule(applicationContext, id)
-            }.onFailure {
-                TrackingStateHolder.postMessage("結束記錄時發生錯誤：${it.message ?: it::class.java.simpleName}")
+            } finally {
+                finalizingCount--
             }
             // 記錄結束後自動上傳到網頁儀表板（設定有開啟且有 token 才做）。
             runCatching { uploadToWebDashboard(id) }
                 .onFailure { TrackingStateHolder.postMessage("網頁上傳失敗：${it.message ?: it::class.java.simpleName}") }
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            // 收尾期間若已開始新的記錄（或還有別的收尾在跑），Service 要留給它們，不可在這裡停掉。
+            if (trackId == null && !isStarting && finalizingCount == 0) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
         }
     }
 
@@ -580,33 +609,17 @@ class TrackingForegroundService : LifecycleService() {
      * 只透過 TrackingStateHolder 回報訊息（本機優先，雲端為加分項）。
      */
     private suspend fun uploadToWebDashboard(trackId: String) {
-        val settings = app.settingsRepository.settings.first()
-        if (!settings.webUploadEnabled || settings.githubToken.isBlank() || settings.webRepo.isBlank()) return
-        if (settings.webWifiOnly && !WebDashboardUploader.isOnWifi(this)) {
-            TrackingStateHolder.postMessage("已略過網頁上傳（設定為僅 Wi-Fi）")
-            return
-        }
-        val track = app.trackRepository.getTrack(trackId) ?: return
-        val data = ExportTrackData(
-            track = track,
-            points = app.trackRepository.getPoints(trackId),
-            photos = app.trackRepository.getPhotos(trackId),
-            segments = app.trackRepository.getSegments(trackId),
-            outages = app.trackRepository.getOutages(trackId)
-        )
-        val payload = WebDashboardUploader.buildPayload(data)
-        WebDashboardUploader().uploadTrack(
-            token = settings.githubToken,
-            repo = settings.webRepo,
-            branch = settings.webBranch,
-            dataPath = settings.webDataPath,
-            trackId = trackId,
-            payload = payload
-        ).onSuccess {
-            TrackingStateHolder.postMessage("已上傳到網頁儀表板")
-        }.onFailure {
-            TrackingStateHolder.postMessage("網頁上傳失敗：${it.message ?: it::class.java.simpleName}")
-        }
+        WebDashboardSync.uploadIfConfigured(app, trackId)
+            .onSuccess { outcome ->
+                when (outcome) {
+                    WebDashboardSync.Outcome.SKIPPED_WIFI_ONLY -> TrackingStateHolder.postMessage("已略過網頁上傳（設定為僅 Wi-Fi）")
+                    WebDashboardSync.Outcome.UPLOADED -> TrackingStateHolder.postMessage("已上傳到網頁儀表板")
+                    WebDashboardSync.Outcome.NOT_CONFIGURED -> Unit
+                }
+            }
+            .onFailure {
+                TrackingStateHolder.postMessage("網頁上傳失敗：${it.message ?: it::class.java.simpleName}")
+            }
     }
 
     private fun currentDurationMs(): Long =

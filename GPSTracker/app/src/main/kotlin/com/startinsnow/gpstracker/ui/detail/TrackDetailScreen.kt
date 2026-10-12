@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -46,6 +47,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -76,8 +78,10 @@ import com.startinsnow.gpstracker.ui.components.MetricCard
 import com.startinsnow.gpstracker.ui.components.formatDuration
 import com.startinsnow.gpstracker.ui.map.GpsMapController
 import com.startinsnow.gpstracker.ui.map.GpsMapView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private fun isOnWifi(context: android.content.Context): Boolean {
     val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
@@ -111,6 +115,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
     var mapController by remember { mutableStateOf<GpsMapController?>(null) }
     var uploadStatusText by remember { mutableStateOf<String?>(null) }
     var stepSyncText by remember { mutableStateOf<String?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     val authManager = remember { GoogleAuthManager(context) }
     val driveSyncManager = remember { DriveSyncManager() }
@@ -139,7 +144,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                 uploadStatusText = "沒有可上傳的資料"
                 return@launch
             }
-            val exportDir = TrackZipExporter.buildExportDirectory(app.filesDir, data)
+            val exportDir = withContext(Dispatchers.IO) { TrackZipExporter.buildExportDirectory(app.filesDir, data) }
             val drivePath = TrackZipExporter.relativeDrivePath(data.track.startTimeMs)
             app.trackRepository.setUploadStatus(trackId, UploadStatus.UPLOADING)
             val tokenResult = authManager.getAccessToken(account)
@@ -367,7 +372,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                             return@launch
                         }
                         uploadStatusText = "上傳到網頁中…"
-                        val payload = WebDashboardUploader.buildPayload(data)
+                        val payload = withContext(Dispatchers.IO) { WebDashboardUploader.buildPayload(data) }
                         WebDashboardUploader().uploadTrack(
                             token = currentSettings.githubToken,
                             repo = currentSettings.webRepo,
@@ -390,16 +395,33 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
             }
 
             OutlinedButton(
-                onClick = {
-                    viewModel.deleteTrack()
-                    onBack()
-                },
+                onClick = { showDeleteConfirm = true },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
                 Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("刪除這筆紀錄")
+            }
+
+            if (showDeleteConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteConfirm = false },
+                    title = { Text("刪除這筆紀錄？") },
+                    text = { Text("軌跡、照片與匯出檔都會一併刪除，且無法復原。") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showDeleteConfirm = false
+                                viewModel.deleteTrack()
+                                onBack()
+                            }
+                        ) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+                    }
+                )
             }
         }
     }

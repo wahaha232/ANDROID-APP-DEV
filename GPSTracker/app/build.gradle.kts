@@ -9,12 +9,35 @@ plugins {
 }
 
 // git commit 總數（versionCode/versionName 序號來源）。CI 需 fetch-depth: 0 才能取得完整歷史。
-val gitCommitCount: Int = runCatching {
+// 資料夾不是 git repo（例如單獨複製出來的 GPSTracker）時，原本會回退成 0，建出版號 1000000 的 APK，
+// 無法覆蓋安裝較新的版本。因此依序嘗試：gradle.properties 的 gpst.versionSourceDir 指向的 git 目錄 →
+// 專案目錄本身；都取不到才回退為 0，並印出警告。
+fun gitCommitCountOf(dir: File): Int? = runCatching {
     providers.exec {
-        workingDir = rootProject.projectDir
+        workingDir = dir
         commandLine("git", "rev-list", "--count", "HEAD")
     }.standardOutput.asText.get().trim().toInt()
-}.getOrDefault(0)
+}.getOrNull()
+
+val gitCommitCount: Int = run {
+    val configured = (findProperty("gpst.versionSourceDir") as String?)
+        ?.let { rootProject.projectDir.resolve(it) }
+        ?.takeIf { it.isDirectory }
+    val count = configured?.let { gitCommitCountOf(it) } ?: gitCommitCountOf(rootProject.projectDir)
+    if (count == null) {
+        logger.warn("WARNING: 取不到 git commit 數，versionCode 回退為 1000000；這個 APK 無法覆蓋安裝較新的版本。")
+    }
+    count ?: 0
+}
+
+// 沒有簽署金鑰環境變數時，release 只會產出未簽名 APK（無法安裝）；明確警告，避免誤以為建置成功就能用。
+gradle.taskGraph.whenReady {
+    val buildsRelease = allTasks.any { it.name.startsWith("assemble") && it.name.endsWith("Release") ||
+        it.name.startsWith("bundle") && it.name.endsWith("Release") }
+    if (buildsRelease && System.getenv("GPST_KEYSTORE_PATH") == null) {
+        logger.warn("WARNING: 未設定 GPST_KEYSTORE_PATH，release 產物沒有簽署（未簽名 APK 無法安裝）。")
+    }
+}
 
 android {
     namespace = "com.startinsnow.gpstracker"
@@ -47,7 +70,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 縮減與混淆：縮小 APK、增加逆向難度。規則見 proguard-rules.pro。
+            // 不啟用 shrinkResources（Compose / MapLibre 資源以動態方式引用，風險大於收益）。
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -149,7 +174,7 @@ dependencies {
     // CameraX 的 ProcessCameraProvider 回傳 com.google.common.util.concurrent.ListenableFuture。
     // 該類別由 guava 提供（已透過其他相依間接引入 runtime，但未在編譯期可見），
     // 因此明確加入 guava 讓編譯期也能解析（單一副本，不使用 listenablefuture 空殼版本避免重複類別）。
-    implementation("com.google.guava:guava:31.1-android")
+    implementation("com.google.guava:guava:33.4.0-android")
 
     // ---------- MapLibre (NO Google Maps) ----------
     implementation("org.maplibre.gl:android-sdk:11.6.1")
@@ -161,11 +186,8 @@ dependencies {
     // 1.1.0 需要 compileSdk 36 + AGP 8.9.1；本專案為 compileSdk 35 / AGP 8.6.1，故使用相容的 alpha10。
     implementation("androidx.health.connect:connect-client:1.1.0-alpha10")
 
-    // ---------- Retrofit/OkHttp (Drive REST v3 batch upload, not used by the GPS engine) ----------
-    implementation("com.squareup.retrofit2:retrofit:2.11.0")
-    implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
+    // ---------- OkHttp（Drive REST 上傳與網頁儀表板上傳；程式碼未使用 Retrofit / logging-interceptor，已移除） ----------
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
     // ---------- Unit Test (pure JVM, no device required) ----------
     testImplementation("junit:junit:4.13.2")

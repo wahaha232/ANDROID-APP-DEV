@@ -44,6 +44,17 @@ interface TrackDao {
     @Query("UPDATE tracks SET stepCount = :steps, stepSource = :source WHERE trackId = :trackId")
     suspend fun updateSteps(trackId: String, steps: Long, source: String)
 
+    /** Auto Cleanup（已開啟雲端同步時）：只挑已成功備份的 Track。 */
+    @Query(
+        "SELECT trackId FROM tracks WHERE status = :status AND uploadStatus = :uploaded " +
+            "AND COALESCE(endTimeMs, startTimeMs) < :cutoffTimestampMs"
+    )
+    suspend fun getUploadedFinishedTrackIdsBefore(
+        status: TrackStatus,
+        uploaded: UploadStatus,
+        cutoffTimestampMs: Long
+    ): List<String>
+
     @Query("DELETE FROM tracks WHERE trackId = :trackId")
     suspend fun deleteById(trackId: String)
 

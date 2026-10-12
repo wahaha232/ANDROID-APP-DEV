@@ -354,9 +354,11 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
         )
     }
 
-    // 離開畫面時釋放 WebView，避免資源洩漏。
+    // 離開畫面時釋放 WebView，避免資源洩漏；錄影中離開（按返回）也要一併停止錄影，
+    // 否則錄影服務會繼續錄整個 App 的畫面，而且使用者找不到停止入口。
     DisposableEffect(Unit) {
         onDispose {
+            if (FlyoverRecorderState.isRecording.value) FlyoverRecordingService.stop(context)
             webView?.let {
                 it.removeJavascriptInterface("AndroidBridge")
                 it.stopLoading()
