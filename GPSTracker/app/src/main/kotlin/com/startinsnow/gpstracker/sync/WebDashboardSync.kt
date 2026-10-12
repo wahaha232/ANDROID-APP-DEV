@@ -1,5 +1,7 @@
 package com.startinsnow.gpstracker.sync
 
+import org.json.JSONObject
+import com.startinsnow.gpstracker.data.db.TrackEntity
 import com.startinsnow.gpstracker.GpsTrackerApplication
 import com.startinsnow.gpstracker.export.ExportTrackData
 import kotlinx.coroutines.flow.first
@@ -65,6 +67,31 @@ object WebDashboardSync {
             trackId = trackId,
             payload = WebDashboardUploader.buildPayload(data)
         ).getOrThrow()
+        app.trackRepository.setWebUploadedAt(trackId, System.currentTimeMillis())
         Outcome.UPLOADED
+    }
+
+    /** 本機記得「上傳過」、但網站的 manifest 已經沒有的軌跡 id（純邏輯，可測試）。 */
+    fun missingFromManifest(uploadedLocally: Collection<String>, manifestIds: Set<String>): List<String> =
+        uploadedLocally.filter { it !in manifestIds }
+
+    /**
+     * 找出「先前上傳過、現在在網站被刪除」的本機紀錄。網站讀不到或 manifest 不是有效 JSON 時一律回傳空清單
+     * （或失敗），不能因為網路或網站暫時異常就提示使用者刪除。
+     */
+    suspend fun findDeletedOnWeb(app: GpsTrackerApplication): Result<List<TrackEntity>> = runCatching {
+        val settings = app.settingsRepository.settings.first()
+        if (settings.githubToken.isBlank() || settings.webRepo.isBlank()) return@runCatching emptyList()
+        if (settings.webWifiOnly && !WebDashboardUploader.isOnWifi(app)) return@runCatching emptyList()
+        val local = app.trackRepository.getWebUploadedTracks()
+        if (local.isEmpty()) return@runCatching emptyList()
+
+        val text = WebDashboardUploader().getFileText(
+            settings.githubToken, settings.webRepo, settings.webBranch, "${settings.webDataPath.trim('/')}/manifest.json"
+        ).getOrThrow() ?: return@runCatching emptyList()
+        val tracks = JSONObject(text).optJSONArray("tracks") ?: return@runCatching emptyList()
+        val ids = (0 until tracks.length()).map { tracks.getJSONObject(it).optString("trackId") }.toSet()
+        val missing = missingFromManifest(local.map { it.trackId }, ids).toSet()
+        local.filter { it.trackId in missing }
     }
 }

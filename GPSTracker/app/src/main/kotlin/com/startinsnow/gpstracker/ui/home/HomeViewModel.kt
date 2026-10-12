@@ -54,6 +54,39 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val recentTracks = app.trackRepository.observeTracks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    private val _deletedOnWeb = MutableStateFlow<List<com.startinsnow.gpstracker.data.db.TrackEntity>>(emptyList())
+    val deletedOnWeb: StateFlow<List<com.startinsnow.gpstracker.data.db.TrackEntity>> = _deletedOnWeb
+    private var lastDeletedCheckMs = 0L
+
+    /** 回到首頁時檢查網站上是否有紀錄被刪除（節流：10 分鐘內不重複查）。只提示，不自動刪除。 */
+    fun checkDeletedOnWeb(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastDeletedCheckMs < 10 * 60 * 1000L) return
+        lastDeletedCheckMs = now
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { com.startinsnow.gpstracker.sync.WebDashboardSync.findDeletedOnWeb(app) }
+            _deletedOnWeb.value = result.getOrDefault(emptyList())
+        }
+    }
+
+    /** 使用者確認：把網站上已刪除的紀錄也從手機移除（含照片與匯出檔）。 */
+    fun removeDeletedOnWebLocally() {
+        val targets = _deletedOnWeb.value
+        _deletedOnWeb.value = emptyList()
+        viewModelScope.launch(Dispatchers.IO) {
+            targets.forEach { runCatching { app.trackRepository.deleteTrack(it.trackId) } }
+        }
+    }
+
+    /** 使用者選擇保留：清掉「上傳過」標記，之後不再為這些紀錄提示。 */
+    fun keepDeletedOnWebLocally() {
+        val targets = _deletedOnWeb.value
+        _deletedOnWeb.value = emptyList()
+        viewModelScope.launch(Dispatchers.IO) {
+            targets.forEach { runCatching { app.trackRepository.setWebUploadedAt(it.trackId, null) } }
+        }
+    }
+
     private val _stepsSyncMessage = MutableStateFlow<String?>(null)
     val stepsSyncMessage: StateFlow<String?> = _stepsSyncMessage
 

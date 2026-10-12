@@ -397,18 +397,21 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                         }
                         uploadStatusText = context.getString(R.string.detail_028)
                         val payload = withContext(Dispatchers.IO) { WebDashboardUploader.buildPayload(data) }
-                        WebDashboardUploader().uploadTrack(
+                        val webResult = WebDashboardUploader().uploadTrack(
                             token = currentSettings.githubToken,
                             repo = currentSettings.webRepo,
                             branch = currentSettings.webBranch,
                             dataPath = currentSettings.webDataPath,
                             trackId = trackId,
                             payload = payload
-                        ).onSuccess {
+                        )
+                        webResult.onSuccess {
                             uploadStatusText = context.getString(R.string.detail_029)
                         }.onFailure {
                             uploadStatusText = context.getString(R.string.detail_030, it.message)
                         }
+                        // 記下「上傳過」：之後若在網站被刪除，手機才能偵測並詢問要不要一起移除。
+                        if (webResult.isSuccess) app.trackRepository.setWebUploadedAt(trackId, System.currentTimeMillis())
                     }
                 },
                 modifier = Modifier.fillMaxWidth()

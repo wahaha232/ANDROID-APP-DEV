@@ -168,6 +168,10 @@ class TrackRepository(
         trackDao.updateSteps(trackId, steps, source)
     }
 
+    suspend fun setWebUploadedAt(trackId: String, at: Long?) = trackDao.setWebUploadedAt(trackId, at)
+
+    suspend fun getWebUploadedTracks(): List<TrackEntity> = trackDao.getWebUploaded(TrackStatus.FINISHED)
+
     suspend fun setStatus(trackId: String, status: TrackStatus) {
         val track = trackDao.getById(trackId) ?: return
         trackDao.update(track.copy(status = status))

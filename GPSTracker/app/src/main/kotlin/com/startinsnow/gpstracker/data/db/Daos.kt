@@ -33,6 +33,13 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE uploadStatus != :uploaded")
     suspend fun getPendingUpload(uploaded: UploadStatus = UploadStatus.UPLOADED): List<TrackEntity>
 
+    @Query("UPDATE tracks SET webUploadedAtMs = :at WHERE trackId = :trackId")
+    suspend fun setWebUploadedAt(trackId: String, at: Long?)
+
+    /** 曾經上傳到網頁、而且已經結束的紀錄（用來和網站的 manifest 比對「是否被刪除」）。 */
+    @Query("SELECT * FROM tracks WHERE webUploadedAtMs IS NOT NULL AND status = :status")
+    suspend fun getWebUploaded(status: TrackStatus): List<TrackEntity>
+
     /** Auto Cleanup 用：直接由 SQL 篩選（避免把所有 Track 載入記憶體）。 */
     @Query(
         "SELECT trackId FROM tracks WHERE status = :status " +

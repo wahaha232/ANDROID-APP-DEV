@@ -28,6 +28,8 @@ class AppDatabaseMigrationTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         context.deleteDatabase(TEST_DB)
         context.deleteDatabase(TEST_DB_EMPTY)
+        context.deleteDatabase(TEST_DB_V3)
+        context.deleteDatabase(TEST_DB_CHAIN)
     }
 
     @Test
@@ -63,7 +65,36 @@ class AppDatabaseMigrationTest {
         helper.runMigrationsAndValidate(TEST_DB_EMPTY, 2, true, AppDatabase.MIGRATION_1_2).close()
     }
 
+    @Test
+    fun migrate2To3_addsNullableWebUploadedAtAndKeepsRows() {
+        helper.createDatabase(TEST_DB_V3, 2).apply {
+            execSQL(
+                "INSERT INTO tracks (trackId,startTimeMs,endTimeMs,status,distanceMeters,durationMs,avgSpeedMps,maxSpeedMps," +
+                    "stepCount,dominantMode,uploadStatus,gpsPointCount,photoCount,maxAltitudeMeters,minAltitudeMeters," +
+                    "totalAscentMeters,totalDescentMeters,startLatitude,startLongitude,endLatitude,endLongitude,modeDistributionJson,stepSource) " +
+                    "VALUES ('t-v2',1000,2000,'FINISHED',500.0,60000,1.5,3.0,42,'WALKING','NOT_UPLOADED',3,0," +
+                    "NULL,NULL,0.0,0.0,NULL,NULL,NULL,NULL,'{}','ZEPP_LIFE')"
+            )
+            close()
+        }
+        val migrated = helper.runMigrationsAndValidate(TEST_DB_V3, 3, true, AppDatabase.MIGRATION_2_3)
+        migrated.query("SELECT stepCount, stepSource, webUploadedAtMs FROM tracks WHERE trackId = 't-v2'").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(42L, c.getLong(0))
+            assertEquals("ZEPP_LIFE", c.getString(1))
+            assertTrue("existing tracks must not look like 'uploaded to the website'", c.isNull(2))
+        }
+    }
+
+    @Test
+    fun migrate1To3_chainsBothMigrations() {
+        helper.createDatabase(TEST_DB_CHAIN, 1).close()
+        helper.runMigrationsAndValidate(TEST_DB_CHAIN, 3, true, AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3).close()
+    }
+
     private companion object {
+        const val TEST_DB_V3 = "migration-test-v3.db"
+        const val TEST_DB_CHAIN = "migration-test-chain.db"
         const val TEST_DB = "migration-test.db"
         const val TEST_DB_EMPTY = "migration-test-empty.db"
     }

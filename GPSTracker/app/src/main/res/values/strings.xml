@@ -296,4 +296,10 @@
     <string name="backup_confirm_ok">覆蓋並還原</string>
     <string name="backup_cancel">取消</string>
     <string name="backup_restore_failed">還原失敗（目前的資料沒有被動到）：%1$s</string>
+    <!-- records deleted on the website -->
+    <string name="web_deleted_title">網站上已刪除 %1$d 筆紀錄</string>
+    <string name="web_deleted_body">這些紀錄是你先前從這支手機上傳到網站的，現在在網站「紀錄管理」被刪除了，但手機上還留著。要一起從手機移除嗎？移除後無法復原；想留著的選「保留在手機」，之後不會再提示。</string>
+    <string name="web_deleted_more">… 另外還有 %1$d 筆</string>
+    <string name="web_deleted_remove">從手機移除</string>
+    <string name="web_deleted_keep">保留在手機</string>
 </resources>

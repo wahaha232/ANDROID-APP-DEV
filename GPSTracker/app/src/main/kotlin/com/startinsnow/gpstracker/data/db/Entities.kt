@@ -36,7 +36,9 @@ data class TrackEntity(
     val endLongitude: Double?,
     val modeDistributionJson: String,
     /** 步數來源標記（SENSOR / SENSOR_FALLBACK / ZEPP_LIFE / GOOGLE_FIT），見 StepSourceTag。 */
-    @ColumnInfo(defaultValue = "SENSOR") val stepSource: String = "SENSOR"
+    @ColumnInfo(defaultValue = "SENSOR") val stepSource: String = "SENSOR",
+    /** 成功上傳到網頁儀表板的時間；null = 從未上傳（舊紀錄也是 null，所以不會被當成「網站上被刪除」）。 */
+    val webUploadedAtMs: Long? = null
 )
 
 @Entity(

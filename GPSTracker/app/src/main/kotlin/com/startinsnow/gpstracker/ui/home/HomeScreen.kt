@@ -76,12 +76,16 @@ fun HomeScreen(
     val pendingRecovery by viewModel.pendingRecovery.collectAsStateWithLifecycle()
     val todaySteps by viewModel.todaySteps.collectAsStateWithLifecycle()
     val stepsSyncMessage by viewModel.stepsSyncMessage.collectAsStateWithLifecycle()
+    val deletedOnWeb by viewModel.deletedOnWeb.collectAsStateWithLifecycle()
 
     // 回到前景（含從設定頁授權 Health Connect 回來）就重新讀取今日步數。
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.refreshTodaySteps()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshTodaySteps()
+                viewModel.checkDeletedOnWeb()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -104,6 +108,16 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { StatusHero(state = state, isActive = isActive) }
+
+            if (deletedOnWeb.isNotEmpty()) {
+                item {
+                    DeletedOnWebCard(
+                        tracks = deletedOnWeb,
+                        onRemove = { viewModel.removeDeletedOnWebLocally() },
+                        onKeep = { viewModel.keepDeletedOnWebLocally() }
+                    )
+                }
+            }
 
             item {
                 TodayStepsCard(
