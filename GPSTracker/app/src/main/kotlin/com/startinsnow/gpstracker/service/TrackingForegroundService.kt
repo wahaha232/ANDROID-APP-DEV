@@ -20,7 +20,6 @@ import com.startinsnow.gpstracker.core.model.PointReliability
 import com.startinsnow.gpstracker.core.model.TrackStatus
 import com.startinsnow.gpstracker.core.geo.GeoMath
 import com.startinsnow.gpstracker.data.prefs.GpsMode
-import com.startinsnow.gpstracker.data.prefs.StepSource
 import com.startinsnow.gpstracker.export.ExportTrackData
 import com.startinsnow.gpstracker.location.AdaptiveSamplingPolicy
 import com.startinsnow.gpstracker.location.LocationQualityManager
@@ -28,7 +27,9 @@ import com.startinsnow.gpstracker.location.LocationTracker
 import com.startinsnow.gpstracker.movement.MovementDetector
 import com.startinsnow.gpstracker.movement.MovementSample
 import com.startinsnow.gpstracker.sensor.StepCounterManager
-import com.startinsnow.gpstracker.sync.HealthConnectStepReader
+import com.startinsnow.gpstracker.sync.ResolvedSteps
+import com.startinsnow.gpstracker.sync.StepResolver
+import com.startinsnow.gpstracker.sync.StepSourceTag
 import com.startinsnow.gpstracker.sync.WebDashboardUploader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -548,17 +549,21 @@ class TrackingForegroundService : LifecycleService() {
                     app.trackRepository.endOutageIfNeeded(id, System.currentTimeMillis())
                     hasOpenOutage = false
                 }
-                val stepsForSave = resolveFinalStepCount(id, finalSteps)
+                val endTimestampMs = System.currentTimeMillis()
+                val resolvedSteps = resolveFinalStepCount(id, finalSteps, endTimestampMs)
                 app.trackRepository.finalizeTrack(
                     trackId = id,
-                    endTimestampMs = System.currentTimeMillis(),
-                    stepCount = stepsForSave,
+                    endTimestampMs = endTimestampMs,
+                    stepCount = resolvedSteps.steps,
+                    stepSource = resolvedSteps.sourceTag,
                     activeDurationMs = finalActiveDurationMs,
                     snapshotDistanceMeters = finalDistanceMeters,
                     snapshotAvgSpeedMps = finalAvgSpeedMps,
                     snapshotMaxSpeedMps = finalMaxSpeedMps,
                     snapshotPointCount = finalPointCount
                 )
+                // Zepp Life 等來源常比結束錄製晚才同步到 Health Connect：延後補讀，讀到就更新這筆步數。
+                if (resolvedSteps.sourceTag != StepSourceTag.SENSOR) StepResyncWorker.schedule(applicationContext, id)
             }.onFailure {
                 TrackingStateHolder.postMessage("結束記錄時發生錯誤：${it.message ?: it::class.java.simpleName}")
             }
@@ -608,28 +613,15 @@ class TrackingForegroundService : LifecycleService() {
         activeDurationMs + if (!isPaused) SystemClock.elapsedRealtime() - activeSegmentStartElapsedMs else 0L
 
     /**
-     * 決定要寫入資料庫的步數：依設定來源（Google Fit 或小米 Zepp Life）經 Health Connect 讀取該趟步數，
-     * 讀取失敗／未授權／未設定時退回裝置感測器累積的步數（不影響其他功能）。
+     * 決定要寫入資料庫的步數與來源：依設定來源（Google Fit 或小米 Zepp Life）經 Health Connect 讀取該趟步數
+     * （aggregate，依時間比例切分），讀取失敗／未授權／尚無資料時退回裝置感測器累積的步數並標記為 SENSOR_FALLBACK
+     * （之後由 StepResyncWorker 或詳情頁「重新同步步數」補讀）。不再把所有來源相加，避免重複計算。
      */
-    private suspend fun resolveFinalStepCount(trackId: String, sensorSteps: Long): Long {
-        val settings = runCatching { app.settingsRepository.settings.first() }.getOrNull() ?: return sensorSteps
-        val startMs = app.trackRepository.getTrack(trackId)?.startTimeMs ?: return sensorSteps
-        val endMs = System.currentTimeMillis()
-        return when (settings.stepSource) {
-            StepSource.GOOGLE_FIT -> stepsFromHealthConnect(googleFit = true, startMs, endMs) ?: sensorSteps
-            StepSource.ZEPP_LIFE -> stepsFromHealthConnect(googleFit = false, startMs, endMs) ?: sensorSteps
-            StepSource.DEVICE_SENSOR -> sensorSteps
-        }
-    }
-
-    /** 經 Health Connect 讀取步數：先取指定來源，無資料時退回全部來源；皆不可用時回傳 null。 */
-    private suspend fun stepsFromHealthConnect(googleFit: Boolean, startMs: Long, endMs: Long): Long? {
-        val reader = HealthConnectStepReader(this)
-        if (!reader.isAvailable()) return null
-        val preferred = (if (googleFit) reader.googleFitSteps(startMs, endMs) else reader.zeppSteps(startMs, endMs)).getOrNull()
-        if (preferred != null && preferred > 0) return preferred
-        val all = reader.allSteps(startMs, endMs).getOrNull()
-        return if (all != null && all > 0) all else null
+    private suspend fun resolveFinalStepCount(trackId: String, sensorSteps: Long, endMs: Long): ResolvedSteps {
+        val sensorOnly = ResolvedSteps(sensorSteps, StepSourceTag.SENSOR)
+        val settings = runCatching { app.settingsRepository.settings.first() }.getOrNull() ?: return sensorOnly
+        val startMs = app.trackRepository.getTrack(trackId)?.startTimeMs ?: return sensorOnly
+        return StepResolver(this).resolve(settings.stepSource, startMs, endMs, sensorSteps)
     }
 
     private fun resetAggregation() {

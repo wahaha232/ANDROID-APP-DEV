@@ -62,6 +62,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     var offlineDownloadJob by remember { mutableStateOf<Job?>(null) }
 
     var hcStatus by remember { mutableStateOf<String?>(null) }
+    var hcBackgroundRequested by remember { mutableStateOf(false) }
 
     val activityPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -73,7 +74,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
         PermissionController.createRequestPermissionResultContract()
     ) { granted ->
         hcStatus = if (granted.contains(HealthConnectStepReader.READ_PERMISSION)) {
-            "已授權 Health Connect 讀取步數"
+            if (hcBackgroundRequested && !granted.contains(HealthConnectStepReader.BACKGROUND_PERMISSION)) {
+                "已授權讀取步數，但未授權「背景讀取」：錄製結束時 App 不在前景，可能讀不到 Zepp Life／Google Fit 步數（會改用手機感測器）。"
+            } else {
+                "已授權 Health Connect 讀取步數"
+            }
         } else {
             "未授權 Health Connect 讀取步數"
         }
@@ -88,8 +93,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 !reader.hasPermission() -> "尚未授權 Health Connect 讀取步數，請先按上方授權。"
                 else -> reader.stepsByOriginLastDays(7).fold(
                     onSuccess = { m ->
-                        if (m.isEmpty()) "近 7 天 Health Connect 沒有任何步數資料（請確認來源 App 已同步到 Health Connect）。"
-                        else "近 7 天步數來源：\n" + m.entries.joinToString("\n") { "• ${it.key}：${it.value} 步" }
+                        val bgWarn = if (reader.isBackgroundReadSupported() && !reader.hasBackgroundPermission())
+                            "\n⚠ 尚未授權「背景讀取」，錄製結束時可能讀不到步數，請再按上方授權。" else ""
+                        if (m.isEmpty()) "近 7 天 Health Connect 沒有任何步數資料（請確認來源 App 已同步到 Health Connect）。$bgWarn"
+                        else "近 7 天步數來源：\n" + m.entries.joinToString("\n") { "• ${it.key}：${it.value} 步" } + bgWarn
                     },
                     onFailure = { "檢查失敗：${it.message}" }
                 )
@@ -193,7 +200,14 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     }
                     if (settings.stepSource != StepSource.DEVICE_SENSOR) {
                         OutlinedButton(
-                            onClick = { hcLauncher.launch(setOf(HealthConnectStepReader.READ_PERMISSION)) },
+                            onClick = {
+                                scope.launch {
+                                    val permissions = mutableSetOf(HealthConnectStepReader.READ_PERMISSION)
+                                    hcBackgroundRequested = HealthConnectStepReader(context).isBackgroundReadSupported()
+                                    if (hcBackgroundRequested) permissions += HealthConnectStepReader.BACKGROUND_PERMISSION
+                                    hcLauncher.launch(permissions)
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text("授權 Health Connect 讀取步數") }
                         OutlinedButton(

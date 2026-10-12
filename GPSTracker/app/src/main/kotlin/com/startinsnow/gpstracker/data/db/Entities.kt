@@ -1,5 +1,6 @@
 package com.startinsnow.gpstracker.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -33,7 +34,9 @@ data class TrackEntity(
     val startLongitude: Double?,
     val endLatitude: Double?,
     val endLongitude: Double?,
-    val modeDistributionJson: String
+    val modeDistributionJson: String,
+    /** 步數來源標記（SENSOR / SENSOR_FALLBACK / ZEPP_LIFE / GOOGLE_FIT），見 StepSourceTag。 */
+    @ColumnInfo(defaultValue = "SENSOR") val stepSource: String = "SENSOR"
 )
 
 @Entity(

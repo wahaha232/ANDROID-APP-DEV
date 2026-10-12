@@ -110,6 +110,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
 
     var mapController by remember { mutableStateOf<GpsMapController?>(null) }
     var uploadStatusText by remember { mutableStateOf<String?>(null) }
+    var stepSyncText by remember { mutableStateOf<String?>(null) }
 
     val authManager = remember { GoogleAuthManager(context) }
     val driveSyncManager = remember { DriveSyncManager() }
@@ -273,6 +274,25 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                         }
                         if (rowItems.size == 1) Spacer(Modifier.weight(1f))
                     }
+                }
+                Text(
+                    "步數來源：${com.startinsnow.gpstracker.sync.StepSourceTag.label(t.stepSource)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (t.status == com.startinsnow.gpstracker.core.model.TrackStatus.FINISHED) {
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                stepSyncText = "同步中…"
+                                stepSyncText = viewModel.resyncSteps()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("重新同步步數") }
+                }
+                stepSyncText?.let { text ->
+                    InfoBanner(text = text, color = MaterialTheme.colorScheme.primary)
                 }
             }
 

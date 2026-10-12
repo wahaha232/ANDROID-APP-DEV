@@ -158,6 +158,11 @@ class TrackRepository(
         )
     }
 
+    /** 延後補同步／手動重新同步步數：只動步數與來源欄位。 */
+    suspend fun updateSteps(trackId: String, steps: Long, source: String) {
+        trackDao.updateSteps(trackId, steps, source)
+    }
+
     suspend fun setStatus(trackId: String, status: TrackStatus) {
         val track = trackDao.getById(trackId) ?: return
         trackDao.update(track.copy(status = status))
@@ -207,6 +212,7 @@ class TrackRepository(
         trackId: String,
         endTimestampMs: Long,
         stepCount: Long,
+        stepSource: String = "SENSOR",
         activeDurationMs: Long = 0L,
         snapshotDistanceMeters: Double = 0.0,
         snapshotAvgSpeedMps: Double = 0.0,
@@ -241,6 +247,7 @@ class TrackRepository(
                 avgSpeedMps = finalAvgSpeed,
                 maxSpeedMps = finalMaxSpeed,
                 stepCount = stepCount,
+                stepSource = stepSource,
                 dominantMode = stats.dominantMode,
                 gpsPointCount = maxOf(points.size, snapshotPointCount, trustedPointCount),
                 maxAltitudeMeters = stats.maxAltitudeMeters,

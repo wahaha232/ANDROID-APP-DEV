@@ -7,6 +7,7 @@ import com.startinsnow.gpstracker.data.db.PhotoEntity
 import com.startinsnow.gpstracker.data.db.GpsOutageEntity
 import com.startinsnow.gpstracker.data.db.TrackEntity
 import com.startinsnow.gpstracker.data.db.TrackPointEntity
+import com.startinsnow.gpstracker.data.prefs.StepSource
 import com.startinsnow.gpstracker.export.ExportTrackData
 import com.startinsnow.gpstracker.playback.PlaybackFrame
 import com.startinsnow.gpstracker.playback.PlaybackPhotoMarker
@@ -14,7 +15,12 @@ import com.startinsnow.gpstracker.playback.PlaybackPoint
 import com.startinsnow.gpstracker.playback.TrackPlaybackEngine
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.startinsnow.gpstracker.sync.StepResolver
+import com.startinsnow.gpstracker.sync.StepSourceTag
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -101,6 +107,33 @@ class TrackDetailViewModel(
                 _playback.value = _playback.value.copy(elapsedMs = newElapsed, frame = frame, isPlaying = !frame.finished)
                 if (frame.finished) break
             }
+        }
+    }
+
+    /**
+     * 手動重新同步步數：依設定的來源重讀這趟軌跡時間範圍的 Health Connect 步數，讀到就更新並回傳說明文字。
+     * Zepp Life 需先讓手環同步到手機並寫入 Health Connect，再按此鈕。
+     */
+    suspend fun resyncSteps(): String {
+        val t = app.trackRepository.getTrack(trackId) ?: return "找不到這筆紀錄"
+        val endMs = t.endTimeMs ?: return "這筆紀錄尚未結束"
+        val source = app.settingsRepository.settings.first().stepSource
+        if (source == StepSource.DEVICE_SENSOR) {
+            return "步數來源設為手機感測器，無需同步；若要使用 Zepp Life 或 Google Fit，請到「設定」切換步數來源。"
+        }
+        return withContext(Dispatchers.IO) {
+            StepResolver(app).readHealthConnect(source, t.startTimeMs, endMs).fold(
+                onSuccess = { steps ->
+                    if (steps > 0) {
+                        val tag = StepSourceTag.forSource(source)
+                        app.trackRepository.updateSteps(trackId, steps, tag)
+                        "已更新步數為 $steps（來源：${StepSourceTag.label(tag)}）"
+                    } else {
+                        "Health Connect 目前沒有這段時間的步數。請先開啟 Zepp Life（或 Google Fit）讓手環同步，再按一次。"
+                    }
+                },
+                onFailure = { "讀取 Health Connect 失敗：${it.message ?: it::class.java.simpleName}（請確認已在「設定」授權讀取步數）" }
+            )
         }
     }
 

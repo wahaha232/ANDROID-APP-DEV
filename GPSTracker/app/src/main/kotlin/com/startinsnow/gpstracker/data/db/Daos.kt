@@ -40,6 +40,10 @@ interface TrackDao {
     )
     suspend fun getFinishedTrackIdsBefore(status: TrackStatus, cutoffTimestampMs: Long): List<String>
 
+    /** 只更新步數與來源（延後補同步用，不覆蓋其他欄位）。 */
+    @Query("UPDATE tracks SET stepCount = :steps, stepSource = :source WHERE trackId = :trackId")
+    suspend fun updateSteps(trackId: String, steps: Long, source: String)
+
     @Query("DELETE FROM tracks WHERE trackId = :trackId")
     suspend fun deleteById(trackId: String)
 
