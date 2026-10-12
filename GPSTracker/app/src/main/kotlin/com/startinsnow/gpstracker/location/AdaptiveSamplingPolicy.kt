@@ -53,6 +53,7 @@ object AdaptiveSamplingPolicy {
             (30_000L + extra).coerceAtMost(60_000L)
         }
         MovementMode.WALKING -> 5_000L
+        MovementMode.RUNNING -> 4_000L // 只能手動指定；取樣策略仍以偵測器的模式為準
         MovementMode.BICYCLE -> 3_000L
         MovementMode.MOTORCYCLE -> 2_500L
         MovementMode.CAR -> 2_500L
@@ -64,6 +65,7 @@ object AdaptiveSamplingPolicy {
     private fun baseMinDistanceMeters(mode: MovementMode): Double = when (mode) {
         MovementMode.STATIONARY -> 0.0
         MovementMode.WALKING -> 3.0
+        MovementMode.RUNNING -> 5.0
         MovementMode.BICYCLE -> 7.0
         MovementMode.MOTORCYCLE -> 8.0
         MovementMode.CAR -> 10.0

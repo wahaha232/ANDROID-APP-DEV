@@ -52,11 +52,11 @@ class StepResolver(context: Context) {
     }
 
     /** 今日各來源明細（package -> 步數）；掃描失敗回傳 failure。 */
-    suspend fun readOriginBreakdown(startMs: Long, endMs: Long): Result<Map<String, Long>> {
+    suspend fun readOriginBreakdown(startMs: Long, endMs: Long, forceDiscover: Boolean = false): Result<Map<String, Long>> {
         if (!reader.isAvailable()) return Result.failure(IllegalStateException("Health Connect unavailable"))
         return runCatching {
             val result = linkedMapOf<String, Long>()
-            reader.originsInRange(startMs, endMs).getOrThrow().forEach { pkg ->
+            StepOriginCache(reader.appContext).origins(reader, forceDiscover).forEach { pkg ->
                 result[pkg] = reader.stepsForOrigin(pkg, startMs, endMs).getOrDefault(0L)
             }
             result

@@ -23,6 +23,13 @@ object DailyStepsSync {
     /** 一次涵蓋的天數：Health Connect 能讀到多少就同步多少（沒有資料的天會是 0）。 */
     const val DEFAULT_DAYS = 1095 // 3 年
 
+    /**
+     * 背景定期同步只重讀最近這幾天：更早的天數已經在網站上（合併只增不減），而且幾乎不會再變，
+     * 每次重讀 3 年既慢又耗電。涵蓋這麼多天是為了：手環離開一陣子、回來同步後，Zepp／Google Fit 會補寫過去幾天的步數。
+     * 網站上還沒有資料時（第一次）與按「同步到網站」時仍會讀完整歷史。
+     */
+    const val RECENT_DAYS = 30
+
     suspend fun sync(app: GpsTrackerApplication, days: Int = DEFAULT_DAYS, force: Boolean = false): Result<Outcome> = runCatching {
         val settings = app.settingsRepository.settings.first()
         if (settings.githubToken.isBlank() || settings.webRepo.isBlank()) return@runCatching Outcome.NOT_CONFIGURED
@@ -32,16 +39,18 @@ object DailyStepsSync {
         check(reader.isAvailable()) { "Health Connect unavailable" }
         check(reader.hasPermission()) { "Health Connect permission missing" }
 
-        // 完全沒有資料的日子不上傳（網站把缺少的日期當 0），歷史很長時檔案才不會被零灌大。
-        val rows = reader.dailySteps(days).getOrThrow().filter { it.total > 0L || it.perOrigin.isNotEmpty() }
-        val fresh = toMap(buildDaysJson(rows))
-
         // 持續累計：合併進網站上現有的 steps.json，而不是整份覆寫。
         // 已上傳的天數永遠保留——就算 Health Connect 日後不再保留舊資料、或超出同步範圍，累計也不會變少。
         val uploader = WebDashboardUploader()
         val path = "${settings.webDataPath.trim('/')}/steps.json"
         val existingText = uploader.getFileText(settings.githubToken, settings.webRepo, settings.webBranch, path).getOrThrow()
         val existing = existingText?.let { runCatching { toMap(JSONObject(it).getJSONArray("days")) }.getOrNull() } ?: emptyMap()
+
+        // 網站上還沒有資料時（第一次）一次讀完整歷史；之後只重讀最近幾天。
+        val effectiveDays = if (existing.isEmpty()) maxOf(days, DEFAULT_DAYS) else days
+        // 完全沒有資料的日子不上傳（網站把缺少的日期當 0），歷史很長時檔案才不會被零灌大。
+        val rows = reader.dailySteps(effectiveDays).getOrThrow().filter { it.total > 0L || it.perOrigin.isNotEmpty() }
+        val fresh = toMap(buildDaysJson(rows))
         val merged = mergeByDate(existing, fresh) { hasData(it) }
         val mergedJson = JSONArray().also { arr -> merged.toSortedMap().values.forEach { arr.put(it) } }
 

@@ -88,15 +88,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * 讀取「今天（本地時區 00:00 到現在）」在 Health Connect 的步數：選定的來源為主，
      * 另一個來源若也有資料就一併列出。回到前景與按「重新整理」時呼叫（App 在前景，不需要背景讀取權限）。
      */
-    fun refreshTodaySteps() {
+    /** [forceDiscover] 為 true（按「重新整理」）時重新掃描來源清單；回到前景時用快取，不重掃。 */
+    fun refreshTodaySteps(forceDiscover: Boolean = false) {
         viewModelScope.launch {
             val source = runCatching { app.settingsRepository.settings.first().stepSource }.getOrNull()
-                ?: StepSource.ZEPP_LIFE
-            _todaySteps.value = withContext(Dispatchers.IO) { loadTodaySteps(source) }
+                ?: StepSource.GOOGLE_FIT
+            _todaySteps.value = withContext(Dispatchers.IO) { loadTodaySteps(source, forceDiscover) }
         }
     }
 
-    private suspend fun loadTodaySteps(source: StepSource): TodaySteps {
+    private suspend fun loadTodaySteps(source: StepSource, forceDiscover: Boolean): TodaySteps {
         val reader = HealthConnectStepReader(app)
         if (!reader.isAvailable()) return TodaySteps.Unavailable
         if (!reader.hasPermission()) return TodaySteps.NoPermission
@@ -105,16 +106,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val nowMs = System.currentTimeMillis()
         val resolver = StepResolver(app)
         // 掃描今天實際出現過的所有來源（「手機本身」的 package 有隨機碼，不能寫死名單），再逐一彙總。
-        val breakdown = resolver.readOriginBreakdown(startMs, nowMs)
+        val breakdown = resolver.readOriginBreakdown(startMs, nowMs, forceDiscover)
             .getOrElse { return TodaySteps.Error(it.message ?: it::class.java.simpleName) }
         fun stepsOf(match: (String) -> Boolean): Long? =
             breakdown.filterKeys(match).values.takeIf { it.isNotEmpty() }?.sum()
         val zepp = stepsOf(HealthConnectStepReader::isZepp)
         val googleFit = stepsOf(HealthConnectStepReader::isGoogleFit)
         val phone = stepsOf(HealthConnectStepReader::isPhone)
+        // 快取的來源清單包含「以前出現過、今天沒有資料」的 App：只列今天有步數的。
         val others = breakdown.filterKeys {
             !HealthConnectStepReader.isZepp(it) && !HealthConnectStepReader.isGoogleFit(it) && !HealthConnectStepReader.isPhone(it)
-        }.toList()
+        }.filterValues { it > 0L }.toList()
         // 首頁一律以 Google Fit 為主（小米 Zepp Life 的步數會先同步到 Google Fit 再進入 Health Connect）；
         // 沒有 Google Fit 資料時才依設定的來源退回其他來源。
         val shownSource = if (googleFit != null) StepSource.GOOGLE_FIT else source

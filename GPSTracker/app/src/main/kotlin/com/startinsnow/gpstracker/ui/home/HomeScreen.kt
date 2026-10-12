@@ -106,7 +106,7 @@ fun HomeScreen(
             item {
                 TodayStepsCard(
                     state = todaySteps,
-                    onRefresh = { viewModel.refreshTodaySteps() },
+                    onRefresh = { viewModel.refreshTodaySteps(forceDiscover = true) },
                     syncMessage = stepsSyncMessage,
                     onSyncToWeb = { viewModel.syncStepsToWeb() }
                 )

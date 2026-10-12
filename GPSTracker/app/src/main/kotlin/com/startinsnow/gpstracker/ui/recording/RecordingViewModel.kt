@@ -76,6 +76,8 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
             runCatching {
                 app.trackRepository.addPhoto(trackId, p.type, finalFile.absolutePath, p.timestampMs, p.sample)
             }
+            // 正式歸入這趟軌跡了，這時才寫進系統相簿。
+            runCatching { photoManager.publishToGallery(finalFile) }
         }
         _pendingPhotos.value = emptyList()
         waitingToAttach = false
@@ -106,7 +108,7 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
             return runCatching {
                 val sample = runCatching { LocationTracker(app).getLastKnownBestLocation() }.getOrNull()
                 val pendingType = if (_pendingPhotos.value.isEmpty()) PhotoType.START else PhotoType.NORMAL
-                val file = photoManager.capturePhoto(PENDING_DIR, pendingType, sample)
+                val file = photoManager.capturePhoto(PENDING_DIR, pendingType, sample, publish = false)
                 _pendingPhotos.value = _pendingPhotos.value + PendingPhoto(file, pendingType, System.currentTimeMillis(), sample)
                 Unit
             }

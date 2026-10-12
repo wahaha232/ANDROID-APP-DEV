@@ -21,7 +21,7 @@ class StepsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
 
     override suspend fun doWork(): Result {
         val app = applicationContext as GpsTrackerApplication
-        DailyStepsSync.sync(app)
+        DailyStepsSync.sync(app, days = DailyStepsSync.RECENT_DAYS)
         return Result.success()
     }
 

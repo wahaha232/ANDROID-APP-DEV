@@ -36,6 +36,8 @@ import java.time.temporal.ChronoUnit
  */
 class HealthConnectStepReader(private val context: Context) {
 
+    val appContext: Context get() = context.applicationContext
+
     /** 小米 Zepp Life（com.xiaomi.hm.health）、Mi Fitness（com.xiaomi.wearable）與 Zepp（com.huami.watch.hmwatchmanager）。 */
     private val zeppOrigins = setOf(
         DataOrigin("com.xiaomi.hm.health"),
@@ -81,7 +83,13 @@ class HealthConnectStepReader(private val context: Context) {
         runCatching { grantedPermissions().contains(BACKGROUND_PERMISSION) }.getOrDefault(false)
 
     /** 小米 Zepp Life / Mi Fitness / Zepp 來源步數。 */
-    suspend fun zeppSteps(startMs: Long, endMs: Long): Result<Long> = aggregateSteps(startMs, endMs, zeppOrigins)
+    suspend fun zeppSteps(startMs: Long, endMs: Long): Result<Long> {
+        val direct = aggregateSteps(startMs, endMs, zeppOrigins)
+        if (direct.getOrNull()?.let { it > 0L } == true) return direct
+        // 小米 Zepp Life 的步數通常是先同步到 Google Fit，再由 Google Fit 寫入 Health Connect，
+        // 所以 Health Connect 裡不一定有 Zepp 自己的來源：沒有時改讀 Google Fit。
+        return googleFitSteps(startMs, endMs)
+    }
 
     /** Google Fit 來源步數（經 Health Connect，免 Google OAuth）。 */
     suspend fun googleFitSteps(startMs: Long, endMs: Long): Result<Long> = aggregateSteps(startMs, endMs, googleFitOrigins)
@@ -119,12 +127,8 @@ class HealthConnectStepReader(private val context: Context) {
         val endDate = LocalDate.now(zone)
         val startDate = endDate.minusDays(days - 1L)
         val nowMs = System.currentTimeMillis()
-        // 來源清單只掃描最近 14 天的原始記錄（來源 App 不會頻繁變動）；整段歷史的步數用 aggregate 由系統彙總，
+        // 來源清單用快取（見 StepOriginCache）；整段歷史的步數用 aggregate 由系統彙總，
         // 不把上萬筆原始記錄讀進記憶體。
-        val discoverStartMs = maxOf(
-            startDate.atStartOfDay(zone).toInstant().toEpochMilli(),
-            endDate.minusDays(13).atStartOfDay(zone).toInstant().toEpochMilli()
-        )
         val range = TimeRangeFilter.between(startDate.atStartOfDay(), LocalDateTime.now(zone))
 
         suspend fun perDay(filter: Set<DataOrigin>): Map<LocalDate, Long> =
@@ -138,7 +142,7 @@ class HealthConnectStepReader(private val context: Context) {
             ).associate { it.startTime.toLocalDate() to (it.result[StepsRecord.COUNT_TOTAL] ?: 0L) }
 
         val total = perDay(emptySet())
-        val perOrigin = originsInRange(discoverStartMs, nowMs).getOrThrow().associateWith { perDay(setOf(DataOrigin(it))) }
+        val perOrigin = StepOriginCache(context).origins(this@HealthConnectStepReader).associateWith { perDay(setOf(DataOrigin(it))) }
         (0 until days).map { i ->
             val date = startDate.plusDays(i.toLong())
             DailyStepsRow(
@@ -147,6 +151,29 @@ class HealthConnectStepReader(private val context: Context) {
                 perOrigin = perOrigin.mapValues { it.value[date] ?: 0L }.filterValues { it > 0L }
             )
         }
+    }
+
+    /** 最近寫入的步數記錄所屬的來源 App（最新的在前、只看前幾頁），給 [StepOriginCache] 用，成本很低。 */
+    suspend fun recentOrigins(): Result<Set<String>> = runCatching {
+        val client = HealthConnectClient.getOrCreate(context)
+        val found = sortedSetOf<String>()
+        var pageToken: String? = null
+        var pages = 0
+        do {
+            val response = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = StepsRecord::class,
+                    timeRangeFilter = TimeRangeFilter.before(Instant.now()),
+                    ascendingOrder = false,
+                    pageSize = RECENT_PAGE_SIZE,
+                    pageToken = pageToken
+                )
+            )
+            response.records.forEach { found += it.metadata.dataOrigin.packageName }
+            pageToken = response.pageToken
+            pages++
+        } while (!pageToken.isNullOrEmpty() && pages < RECENT_MAX_PAGES)
+        found
     }
 
     /** 單一來源 App 在區間內的步數（aggregate，依時間比例切分）。 */
@@ -213,6 +240,8 @@ class HealthConnectStepReader(private val context: Context) {
         fun isGoogleFit(pkg: String) = pkg == GOOGLE_FIT_PACKAGE
         fun isPhone(pkg: String) = pkg.startsWith(PHONE_PREFIX)
         private const val PAGE_SIZE = 5000
+        private const val RECENT_PAGE_SIZE = 1000
+        private const val RECENT_MAX_PAGES = 3
         private const val MAX_PAGES = 40
     }
 }

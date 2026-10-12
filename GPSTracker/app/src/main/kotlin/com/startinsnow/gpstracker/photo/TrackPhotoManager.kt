@@ -135,11 +135,15 @@ class TrackPhotoManager(private val context: Context) {
      * @param sample 拍照當下的 GPS 樣本；會一併寫入 EXIF GPS（緯度 / 經度 / 高度 / 時間），
      *   讓匯出的照片本身也帶有定位資訊，而不是只有資料庫裡有座標。GPS 尚未取得時傳 null，不可因此崩潰。
      */
-    suspend fun capturePhoto(trackId: String, type: PhotoType, sample: LocationSample? = null): File {
+    /**
+     * @param publish false 時先不寫進系統相簿：開始記錄前拍的暫存照片，若使用者最後放棄記錄，
+     *   就不該在相簿裡留下副本；正式歸入軌跡時才呼叫 [publishToGallery]。
+     */
+    suspend fun capturePhoto(trackId: String, type: PhotoType, sample: LocationSample? = null, publish: Boolean = true): File {
         val file = captureToFile(trackId, type, sample)
         // 另外寫一份到系統相簿（MediaStore）；App 私有目錄的檔案不會被相簿掃到，
         // 使用者會以為「照片沒存下來」。相簿寫入失敗不影響既有檔案與資料庫記錄。
-        publishToGallery(file)
+        if (publish) publishToGallery(file)
         return file
     }
 
@@ -174,7 +178,7 @@ class TrackPhotoManager(private val context: Context) {
         }
 
     /** 把拍好的檔案複製進 MediaStore.Images，讓它出現在手機相簿（Pictures/GPS Tracker）。 */
-    private suspend fun publishToGallery(file: File) = withContext(Dispatchers.IO) {
+    suspend fun publishToGallery(file: File) = withContext(Dispatchers.IO) {
         runCatching {
             val resolver = context.contentResolver
             val now = System.currentTimeMillis()

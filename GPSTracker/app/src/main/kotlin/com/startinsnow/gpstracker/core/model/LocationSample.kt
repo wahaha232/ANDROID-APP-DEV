@@ -61,6 +61,8 @@ data class FilteredLocation(
 
 enum class MovementMode {
     WALKING,
+    /** 只能手動指定（記錄前選擇）；自動偵測不會判成跑步。 */
+    RUNNING,
     BICYCLE,
     MOTORCYCLE,
     PUBLIC_TRANSPORT,
@@ -72,6 +74,7 @@ enum class MovementMode {
     val emoji: String
         get() = when (this) {
             WALKING -> "🚶"
+            RUNNING -> "🏃"
             BICYCLE -> "🚲"
             MOTORCYCLE -> "🏍️"
             PUBLIC_TRANSPORT -> "🚌"

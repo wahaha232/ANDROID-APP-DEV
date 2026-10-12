@@ -116,6 +116,8 @@ fun RecordingScreen(
     // 準備階段：手動指定的移動方式（null = 自動，由移動速度判斷）；按下「開始記錄」才真正開始。
     var selectedModeName by rememberSaveable { mutableStateOf<String?>(null) }
     var startPressed by rememberSaveable { mutableStateOf(false) }
+    // 沒有定位權限時按「開始記錄」：先要權限，授權完成後自動接著開始（不必再按一次）。
+    var startAfterPermission by remember { mutableStateOf(false) }
     val pendingPhotos by viewModel.pendingPhotos.collectAsStateWithLifecycle()
     // 本畫面是否已經送出過「開始記錄」：之後（例如從通知列按「結束」再回到 App）ON_RESUME 不可再自動開新一筆。
     var hasRequestedStart by rememberSaveable { mutableStateOf(false) }
@@ -193,6 +195,7 @@ fun RecordingScreen(
         // 必須用「剛更新過的 state 變數」重新判斷，不可用組合期算出的 hasLocationPermission 值，
         // 否則剛授權成功時可能被誤判成沒有權限（該 val 是舊一次組合的值）。
         if (!(hasFineLocation || hasCoarseLocation)) {
+            startAfterPermission = false
             TrackingStateHolder.postMessage(context.getString(R.string.recording_003))
         } else {
             startOrResumeRecording()
@@ -207,14 +210,20 @@ fun RecordingScreen(
     /** 準備畫面的「開始記錄」：沒有定位權限就先要權限；有的話才真正啟動記錄服務。 */
     fun startNewRecording() {
         if (!(hasFineLocation || hasCoarseLocation)) {
+            startAfterPermission = true
             permissionLauncher.launch(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
             )
             return
         }
+        startAfterPermission = false
         startPressed = true
         hasRequestedStart = true
         viewModel.startRecording(selectedModeName?.let { runCatching { MovementMode.valueOf(it) }.getOrNull() })
+    }
+
+    LaunchedEffect(hasFineLocation, hasCoarseLocation, startAfterPermission) {
+        if (startAfterPermission && (hasFineLocation || hasCoarseLocation)) startNewRecording()
     }
 
     LaunchedEffect(Unit) {
@@ -609,12 +618,13 @@ fun RecordingScreen(
 
 /** 手動移動方式（不含「靜止」；「其他」對應 UNKNOWN）。第一個選項「自動」代表由移動速度判斷。 */
 private val MANUAL_MODES = listOf(
-    MovementMode.WALKING, MovementMode.BICYCLE, MovementMode.MOTORCYCLE,
+    MovementMode.WALKING, MovementMode.RUNNING, MovementMode.BICYCLE, MovementMode.MOTORCYCLE,
     MovementMode.CAR, MovementMode.PUBLIC_TRANSPORT, MovementMode.AIRPLANE, MovementMode.UNKNOWN
 )
 
 private fun modeLabelRes(mode: MovementMode): Int = when (mode) {
     MovementMode.WALKING -> R.string.mode_walking
+    MovementMode.RUNNING -> R.string.mode_running
     MovementMode.BICYCLE -> R.string.mode_bicycle
     MovementMode.MOTORCYCLE -> R.string.mode_motorcycle
     MovementMode.CAR -> R.string.mode_car

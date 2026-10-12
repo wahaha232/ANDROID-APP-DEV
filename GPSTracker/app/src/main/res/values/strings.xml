@@ -26,8 +26,8 @@
     <string name="settings_019">步數</string>
     <string name="settings_020">記錄結束時讀取該趟步數；讀取失敗或未授權時自動改用裝置感測器。</string>
     <string name="settings_021">小米 Zepp Life</string>
-    <string name="settings_022">Google Fit 的步數會同步到 Health Connect（免 Google OAuth）；本 App 會讀取 Google Fit 來源的步數。</string>
-    <string name="settings_023">小米 Zepp Life / Mi Fitness 的步數會同步到 Health Connect；請先在 Zepp Life 開啟同步。本 App 會讀取 Zepp Life／Mi Fitness 來源的步數。</string>
+    <string name="settings_022">Google Fit 的步數會同步到 Health Connect（免 Google OAuth）。小米 Zepp Life 的步數若先同步到 Google Fit，也包含在內；本 App 會讀取 Google Fit 來源的步數。</string>
+    <string name="settings_023">小米 Zepp Life 的步數有兩種途徑進入 Health Connect：直接寫入，或先同步到 Google Fit 再由它寫入。本 App 會先讀 Zepp Life 來源，沒有資料時改讀 Google Fit。</string>
     <string name="settings_024">使用手機內建步數感測器（最省電、不需額外授權）。</string>
     <string name="settings_025">授權 Health Connect 讀取步數</string>
     <string name="settings_026">檢查 Health Connect 資料</string>
@@ -264,6 +264,7 @@
     <string name="recording_mode_auto">自動（依速度判斷）</string>
     <string name="recording_pending_photos">已拍 %1$d 張照片，開始記錄後會加入這趟紀錄</string>
     <string name="mode_walking">走路</string>
+    <string name="mode_running">跑步</string>
     <string name="mode_bicycle">腳踏車</string>
     <string name="mode_motorcycle">機車</string>
     <string name="mode_car">汽車</string>
