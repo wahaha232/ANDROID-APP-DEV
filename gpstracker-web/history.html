@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="GPS Tracker 歷史紀錄：搜尋、篩選、排序所有活動，進入活動故事或 3D 路線回放，也可在地圖上檢視全部軌跡。" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">📁</text></svg>' />
+  <title>歷史紀錄 · GPS Tracker</title>
+  <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin />
+  <link href="style.css?v=1ceea449" rel="stylesheet" />
+  <link href="gt-ui.css?v=08315d6a" rel="stylesheet" />
+  <script defer src="common.js?v=46cd05d5"></script>
+  <script defer src="gt-core.js?v=9ed6c8c1"></script>
+  <script defer src="gt-data.js?v=8bbbfbf0"></script>
+  <script defer src="gt-nav.js?v=feea0360"></script>
+  <script defer src="history.js?v=ec438578"></script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo" aria-hidden="true">📁</span>
+      <div>
+        <h1>歷史紀錄</h1>
+        <div id="summary" class="summary">載入中…</div>
+      </div>
+    </div>
+    <div class="gt-nav"><a href="index.html">總覽</a><a href="explore.html">探索挑戰</a><a href="records.html">紀錄管理</a></div>
+  </header>
+
+  <main class="gt-main" id="main">
+    <div class="gt-wrap" style="gap:12px">
+      <div class="gt-toolbar" role="search">
+        <label class="gt-sr" for="search">搜尋活動</label>
+        <input id="search" type="search" placeholder="搜尋日期、類型、標題或備註…" autocomplete="off" />
+        <label class="gt-sr" for="modeFilter">活動類型</label>
+        <select id="modeFilter"><option value="">全部類型</option></select>
+        <label class="gt-sr" for="sortSel">排序</label>
+        <select id="sortSel">
+          <option value="date_desc">最新優先</option>
+          <option value="date_asc">最舊優先</option>
+          <option value="dist_desc">距離最長</option>
+          <option value="dur_desc">時間最長</option>
+          <option value="steps_desc">步數最多</option>
+        </select>
+        <div class="gt-seg" role="group" aria-label="檢視方式">
+          <button type="button" id="viewCards" aria-pressed="true">活動卡片</button>
+          <button type="button" id="viewMap" aria-pressed="false">全部軌跡地圖</button>
+        </div>
+        <span id="count" class="gt-count" aria-live="polite"></span>
+      </div>
+
+      <div id="mapWrap" hidden>
+        <div class="gt-allmap" id="allmap" role="region" aria-label="全部軌跡地圖">
+          <div class="gt-map-note" id="mapNote">載入中…</div>
+        </div>
+      </div>
+
+      <div id="list" aria-live="polite"><div class="gt-skel" style="height:240px"></div></div>
+    </div>
+  </main>
+</body>
+</html>

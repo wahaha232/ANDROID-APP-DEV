@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="GPS Tracker 探索挑戰中心：競賽、太陽系／地球／台灣征服計畫、航海家追逐賽與步數環遊里程的進度總覽。" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">🏆</text></svg>' />
+  <title>探索挑戰 · GPS Tracker</title>
+  <link href="style.css?v=1ceea449" rel="stylesheet" />
+  <link href="gt-ui.css?v=08315d6a" rel="stylesheet" />
+  <script defer src="common.js?v=46cd05d5"></script>
+  <script defer src="solar-levels.js?v=38941ca7"></script>
+  <script defer src="solar-core.js?v=3bca26ad"></script>
+  <script defer src="earth-levels.js?v=b6ea575c"></script>
+  <script defer src="taiwan-levels.js?v=ccfe21e1"></script>
+  <script defer src="progress-core.js?v=b2883d11"></script>
+  <script defer src="gt-core.js?v=9ed6c8c1"></script>
+  <script defer src="gt-data.js?v=8bbbfbf0"></script>
+  <script defer src="gt-nav.js?v=feea0360"></script>
+  <script defer src="explore.js?v=5efbba8c"></script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo" aria-hidden="true">🏆</span>
+      <div>
+        <h1>探索挑戰</h1>
+        <div id="summary" class="summary">載入中…</div>
+      </div>
+    </div>
+    <div class="gt-nav"><a href="index.html">總覽</a><a href="history.html">歷史紀錄</a><a href="records.html">紀錄管理</a></div>
+  </header>
+
+  <main class="gt-main" id="main">
+    <div class="gt-wrap">
+      <section aria-labelledby="ov-h">
+        <div class="gt-sec-head"><h2 id="ov-h">累計里程與目標</h2></div>
+        <div id="overview" class="gt-stats"><div class="gt-skel" style="height:90px;grid-column:1/-1"></div></div>
+        <p class="gt-note" id="overviewNote"></p>
+      </section>
+
+      <section aria-labelledby="plans-h">
+        <div class="gt-sec-head"><h2 id="plans-h">征服計畫</h2><a href="progress.html">全挑戰進度表 →</a></div>
+        <div id="plans" class="gt-ch-grid"></div>
+      </section>
+
+      <section id="doneSec" aria-labelledby="done-h" hidden>
+        <div class="gt-sec-head"><h2 id="done-h">已達成的目標</h2></div>
+        <div id="done" class="gt-badges"></div>
+      </section>
+
+      <section aria-labelledby="more-h">
+        <div class="gt-sec-head"><h2 id="more-h">競賽與步數</h2></div>
+        <div id="more" class="gt-ch-grid"></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

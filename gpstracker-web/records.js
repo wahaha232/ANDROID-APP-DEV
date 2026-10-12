@@ -183,6 +183,8 @@
         '<td class="num">' + (t.gpsPointCount || 0) + '</td>' +
         '<td class="note">' + (noteText ? escapeHtml(noteText) : "") + '</td>' +
         '<td><div class="rec-actions">' +
+        '<a class="rec-link" href="' + GT.activityUrl(t.trackId) + '">故事</a>' +
+        '<a class="rec-link" href="' + GT.workspaceUrl(t.trackId, 'replay') + '">3D</a>' +
         '<button data-act="gpx" data-id="' + t.trackId + '">GPX</button>' +
         '<button data-act="json" data-id="' + t.trackId + '">JSON</button>' +
         '<button data-act="edit" data-id="' + t.trackId + '"' + (w ? "" : " disabled") + '>編輯</button>' +

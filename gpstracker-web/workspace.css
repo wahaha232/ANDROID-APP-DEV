@@ -1,0 +1,128 @@
+/* 3D 路線工作區（flythrough.html）：桌面＝地圖 + 右側資訊面板；手機＝地圖優先 + 可展開的底部面板。 */
+:root { --ws-peek: 84px; --ws-panel-w: 380px; }
+html, body.ws { height: 100%; margin: 0; overflow: hidden; background: #050912; display: block; }
+body.ws { overscroll-behavior: none; }
+
+.ws-app { position: fixed; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--ws-panel-w); transition: grid-template-columns .25s var(--ease); }
+body.panel-closed .ws-app { grid-template-columns: minmax(0, 1fr) 0; }
+.ws-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+#map { position: absolute; inset: 0; min-height: 0; }
+.ws-status { position: absolute; inset: 0; z-index: 8; display: grid; place-content: center; gap: 12px; text-align: center; color: var(--muted); padding: 24px; pointer-events: none; }
+.ws-status a, .ws-status button { pointer-events: auto; }
+.ws-status.err { color: var(--text); background: rgba(5, 9, 18, .82); }
+
+/* 玻璃面板共同樣式 */
+.ws-topbar .ws-btn, .ws-modes, .ws-hud, .ws-controls, .ws-hint {
+  -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%);
+  background: rgba(9, 14, 25, .72); border: 1px solid rgba(76, 141, 255, .28); box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+}
+
+/* ───── 頂列 ───── */
+.ws-topbar { position: absolute; z-index: 10; left: 12px; right: 12px; top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none; }
+.ws-topbar > * { pointer-events: auto; }
+.ws-btn { display: inline-flex; align-items: center; justify-content: center; gap: 2px; min-height: 40px; min-width: 40px; padding: 0 14px; border-radius: 999px; color: var(--text); font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.ws-btn:hover { border-color: var(--primary); }
+.ws-modes { display: inline-flex; border-radius: 999px; padding: 3px; gap: 2px; }
+.ws-modes button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ws-modes button:hover { color: var(--text); }
+.ws-modes button[aria-selected="true"] { background: var(--grad); color: #fff; box-shadow: 0 2px 10px rgba(76, 141, 255, .4); }
+
+/* ───── HUD ───── */
+.ws-hud { position: absolute; z-index: 9; left: 12px; top: 64px; border-radius: 16px; padding: 10px 14px; min-width: 140px; }
+.ws-hud .big { font-size: 26px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; background: linear-gradient(135deg, #4c8dff, #22d3ee); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ws-hud .unit { font-size: 12px; opacity: .75; margin-left: 4px; }
+.ws-hud .row { font-size: 13px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.ws-hud .label { opacity: .65; }
+body[data-mode="explore"] .ws-hud { display: none; }
+.ws-hint { position: absolute; z-index: 9; left: 50%; bottom: 36px; transform: translateX(-50%); padding: 7px 16px; border-radius: 999px; font-size: 12.5px; color: var(--muted); white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
+body:not([data-mode="explore"]) .ws-hint { display: none; }
+
+/* ───── 回放控制 ───── */
+.ws-controls { position: absolute; z-index: 10; left: 12px; right: 12px; bottom: 36px; border-radius: 18px; padding: 10px 14px 12px; }
+.ws-controls[hidden] { display: none; }
+body:not([data-mode="replay"]) .ws-controls { display: none; }
+.ws-seekrow { display: flex; align-items: center; gap: 12px; }
+#seek { flex: 1; min-width: 0; height: 28px; accent-color: #4c8dff; cursor: pointer; }
+.ws-clock { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ws-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.ws-play { min-height: 40px; padding: 0 20px; border: 1px solid transparent; border-radius: 999px; background: var(--grad); color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 14px rgba(76, 141, 255, .35); }
+.ws-chipbtn { min-height: 36px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ws-chipbtn[aria-pressed="true"], .ws-chipbtn.active { background: var(--grad); border-color: transparent; }
+.ws-chips, .ws-cams { display: inline-flex; gap: 6px; }
+.ws-cams { margin-left: auto; }
+.ws-play:hover, .ws-chipbtn:hover { filter: brightness(1.12); }
+
+/* ───── 地圖按鈕（MapLibre control）放大成觸控友善尺寸 ───── */
+.maplibregl-ctrl-top-right { top: 66px; }
+.maplibregl-ctrl-group { background: rgba(9, 14, 25, .78); border: 1px solid rgba(76, 141, 255, .28); box-shadow: 0 6px 20px rgba(0, 0, 0, .4); }
+.maplibregl-ctrl-group button { width: 40px; height: 40px; color: var(--text); font-size: 17px; line-height: 1; }
+.maplibregl-ctrl-group button + button { border-top: 1px solid rgba(76, 141, 255, .2); }
+.maplibregl-ctrl-group button:hover { background: rgba(76, 141, 255, .18); }
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1) brightness(1.4); }
+.maplibregl-ctrl-attrib { background: rgba(9, 14, 25, .6) !important; color: var(--muted) !important; }
+.maplibregl-ctrl-attrib a { color: var(--muted) !important; }
+
+/* ───── 資訊面板（桌面：右欄） ───── */
+.ws-panel { min-width: 0; min-height: 0; overflow: hidden; background: var(--surface); border-left: 1px solid var(--border-strong); position: relative; z-index: 20; }
+.ws-sheet { position: absolute; inset: 0; display: flex; flex-direction: column; width: var(--ws-panel-w); }
+.ws-handle { display: none; }
+.ws-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 18px 28px; display: flex; flex-direction: column; gap: 16px; }
+.ws-head h1 { margin: 0 0 6px; font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
+.ws-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.ws-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ws-stats .gt-stat { background: var(--surface-2); padding: 9px 12px; }
+.ws-stats .gt-stat .v { font-size: 18px; }
+.ws-block h2 { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
+.ws-block h2 small { font-weight: 500; opacity: .8; margin-left: 6px; }
+.ws-block[hidden] { display: none; }
+.ws-block .gt-profile { height: 110px; }
+body[data-mode="data"] .ws-block .gt-profile { height: 140px; }
+body:not([data-mode="data"]) .data-only { display: none; }
+.ws-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ws-actions .btn { width: 100%; font-size: 13px; }
+.ws-backmap { display: none; }
+
+/* ───── 手機：地圖優先 + 底部面板 ───── */
+@media (max-width: 899px) {
+  .ws-app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) var(--ws-peek); transition: none; }
+  body.panel-closed .ws-app { grid-template-columns: minmax(0, 1fr); }
+  .ws-panel { border-left: 0; border-top: 0; overflow: visible; }
+  .ws-sheet {
+    inset: auto 0 0 0; width: auto; max-height: var(--ws-peek); overflow: hidden;
+    background: var(--surface); border-top: 1px solid var(--border-strong); border-radius: 18px 18px 0 0;
+    box-shadow: 0 -12px 30px rgba(0, 0, 0, .5); transition: max-height .28s var(--ease);
+  }
+  .sheet-open .ws-sheet { max-height: 64vh; max-height: 64dvh; }
+  .ws-handle { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; width: 100%; min-height: var(--ws-peek); padding: 16px 16px 10px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; position: relative; flex: none; }
+  .ws-grip { position: absolute; top: 6px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--border-strong); }
+  .ws-handle-title { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws-handle-sub { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
+  .ws-head { display: none; }
+  .ws-body { padding-top: 4px; }
+  .ws-backmap { display: inline-flex; width: 100%; }
+  .ws-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ws-panel-toggle { display: none; }
+  .ws-lbl { display: none; }
+  .ws-modes button { padding: 0 10px; font-size: 12.5px; }
+  .ws-controls { bottom: 36px; padding: 8px 12px 10px; }
+  body[data-mode="data"] .ws-hud { display: none; }
+  .ws-chips .ws-chipbtn, .ws-cams .ws-chipbtn { min-width: 44px; min-height: 44px; }
+  .ws-hint { bottom: 30px; white-space: normal; text-align: center; border-radius: 14px; }
+  .ws-hud { top: 60px; padding: 8px 12px; min-width: 0; }
+  .ws-hud .big { font-size: 22px; }
+  .ws-chips { overflow-x: auto; max-width: 100%; }
+  .ws-cams { margin-left: 0; }
+}
+@media (max-width: 420px) {
+  .ws-play { padding: 0 14px; }
+  .ws-chipbtn { padding: 0 9px; }
+}
+@media (pointer: coarse) {
+  .ws-chipbtn, .ws-modes button { min-height: 44px; }
+  .ws-btn { min-height: 44px; min-width: 44px; }
+  .ws-play { min-height: 44px; }
+  .maplibregl-ctrl-group button { width: 44px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-app, .ws-sheet { transition: none !important; }
+}

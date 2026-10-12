@@ -1,0 +1,245 @@
+/* GPS Tracker 新版介面元件（Relive 風格的活動故事 + 3D 路線）。
+   沿用 style.css 的設計變數（色票、圓角、陰影）；本檔所有類別都以 gt- 開頭，不會影響既有頁面的樣式。
+   規範：深藍黑底、青藍色路線（--accent）、資訊卡以 --surface 為底；間距 4 / 8 / 12 / 16 / 24；
+   字級 12 / 13 / 14 / 16 / 20 / 28；觸控目標至少 40px（粗略指標裝置 44px）。 */
+
+/* ───── 主導覽 ───── */
+.gt-nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.gt-nav a, .gt-subnav a {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 6px 14px;
+  border: 1px solid transparent; border-radius: 999px; color: var(--muted); text-decoration: none;
+  font-size: 13.5px; font-weight: 600; white-space: nowrap; transition: color .15s, background .15s, border-color .15s;
+}
+.gt-nav a:hover, .gt-subnav a:hover { color: var(--text); background: var(--surface-2); }
+.gt-nav a[aria-current="page"], .gt-subnav a[aria-current="page"] {
+  color: var(--text); background: var(--primary-soft); border-color: rgba(76, 141, 255, .5);
+}
+.gt-subnav {
+  display: flex; gap: 4px; padding: 8px 20px; overflow-x: auto; scrollbar-width: none; flex: none;
+  background: rgba(11, 18, 32, .6); border-bottom: 1px solid var(--border);
+}
+.gt-subnav::-webkit-scrollbar { display: none; }
+.gt-subnav a { min-height: 34px; padding: 4px 12px; font-size: 13px; flex: none; }
+
+/* ───── 版面 ───── */
+/* style.css 的 main 是 flex；這裡改成區塊，內容才會撐到 .gt-wrap 的 max-width */
+.gt-main { display: block; flex: 1; min-height: 0; overflow-y: auto; }
+.gt-wrap { width: 100%; max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; display: flex; flex-direction: column; gap: 32px; }
+.gt-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.gt-sec-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.gt-sec-head a { font-size: 13px; }
+.gt-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ───── 按鈕 / 標籤 ───── */
+.gt-btn { min-height: 40px; justify-content: center; }
+.gt-btn.lg { min-height: 46px; padding: 10px 20px; font-size: 14.5px; border-radius: 12px; }
+.gt-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  color: var(--accent); background: rgba(34, 211, 238, .1); border: 1px solid rgba(34, 211, 238, .3);
+}
+.gt-chip.muted { color: var(--muted); background: var(--surface-2); border-color: var(--border); font-weight: 500; }
+.gt-chip.warn { color: var(--amber); background: rgba(251, 191, 36, .08); border-color: rgba(251, 191, 36, .3); }
+
+/* ───── 首頁：精選活動 ───── */
+.gt-hero {
+  display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 0; overflow: hidden;
+  background: radial-gradient(700px 320px at 0% 0%, rgba(76, 141, 255, .16), transparent 70%), var(--surface);
+  border: 1px solid var(--border-strong); border-radius: 22px; box-shadow: var(--shadow-lg);
+}
+.gt-hero-body { padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.gt-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.gt-hero-title { margin: 0; font-size: 28px; line-height: 1.2; font-weight: 800; letter-spacing: .01em; overflow-wrap: anywhere; }
+.gt-hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.gt-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 12px; margin: 4px 0; }
+.gt-kpi .v { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.gt-kpi .v small { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+.gt-kpi .l { font-size: 12px; color: var(--muted); }
+.gt-cta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 4px; }
+.gt-hero-route {
+  position: relative; min-height: 280px; display: grid; place-items: center; padding: 16px;
+  background:
+    linear-gradient(rgba(34, 211, 238, .05) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(90deg, rgba(34, 211, 238, .05) 1px, transparent 1px) 0 0 / 32px 32px,
+    radial-gradient(circle at 60% 40%, #10233f, #0a1222 70%);
+  border-left: 1px solid var(--border);
+}
+.gt-route-svg { width: 100%; height: 100%; max-height: 360px; display: block; }
+.gt-route-svg .line { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 6px rgba(34, 211, 238, .55)); }
+.gt-route-svg .dot-s { fill: var(--green); stroke: #06210f; stroke-width: 1.5; }
+.gt-route-svg .dot-e { fill: #ff7a45; stroke: #3a1305; stroke-width: 1.5; }
+.gt-route-cap { position: absolute; left: 14px; bottom: 10px; font-size: 11.5px; color: var(--muted); }
+
+/* ───── 統計列 ───── */
+.gt-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.gt-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.gt-stat .v { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.gt-stat .v small { font-size: 12px; color: var(--muted); font-weight: 600; margin-left: 3px; }
+.gt-stat .l { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.gt-stat .s { font-size: 11.5px; color: var(--muted); opacity: .8; margin-top: 4px; }
+
+/* ───── 時間軸 ───── */
+.gt-timeline { list-style: none; margin: 0; padding: 0 0 0 18px; position: relative; display: flex; flex-direction: column; gap: 10px; }
+.gt-timeline::before { content: ""; position: absolute; left: 4px; top: 10px; bottom: 10px; width: 2px; background: linear-gradient(var(--primary), var(--border) 80%); border-radius: 2px; }
+.gt-timeline > li { position: relative; }
+.gt-timeline > li::before {
+  content: ""; position: absolute; left: -18px; top: 26px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--bg); border: 2px solid var(--accent);
+}
+.gt-tl-item {
+  display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 10px 14px 10px 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); text-decoration: none;
+  transition: border-color .15s, background .15s, transform .15s var(--ease);
+}
+.gt-tl-item:hover { border-color: var(--primary); background: var(--surface-2); transform: translateX(2px); }
+.gt-tl-thumb { width: 96px; height: 64px; border-radius: 10px; background: radial-gradient(circle at 60% 40%, #10233f, #0a1222 75%); border: 1px solid var(--border); display: grid; place-items: center; overflow: hidden; }
+.gt-tl-thumb svg { width: 100%; height: 100%; display: block; }
+.gt-tl-title { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gt-tl-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.gt-tl-stats { font-size: 13px; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; }
+.gt-tl-go { color: var(--accent); font-size: 18px; }
+.gt-mini .line { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.gt-mini .dot-s { fill: var(--green); }
+.gt-mini .dot-e { fill: #ff7a45; }
+
+/* ───── 快速入口 ───── */
+.gt-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.gt-link-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; text-decoration: none; color: var(--text);
+  background: linear-gradient(135deg, rgba(76, 141, 255, .12), rgba(122, 92, 255, .08)), var(--surface);
+  border: 1px solid var(--border-strong); border-radius: var(--radius); transition: border-color .15s, transform .15s var(--ease);
+}
+.gt-link-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+.gt-link-card b { font-size: 16px; }
+.gt-link-card span { font-size: 13px; color: var(--muted); }
+
+/* ───── 狀態：載入 / 空 / 錯誤 ───── */
+.gt-state { padding: 40px 20px; text-align: center; color: var(--muted); background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+.gt-state h3 { margin: 0 0 6px; color: var(--text); font-size: 16px; }
+.gt-state p { margin: 0 0 12px; font-size: 13px; }
+.gt-state.err { border-color: rgba(248, 113, 113, .5); }
+.gt-skel { border-radius: var(--radius); background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%) 0 0 / 200% 100%; animation: gt-shimmer 1.4s linear infinite; }
+@keyframes gt-shimmer { to { background-position: -200% 0; } }
+.gt-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: gt-rot .8s linear infinite; vertical-align: -2px; }
+@keyframes gt-rot { to { transform: rotate(360deg); } }
+
+/* ───── 歷史紀錄 ───── */
+.gt-toolbar {
+  position: sticky; top: 0; z-index: 6; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 0;
+  background: linear-gradient(var(--bg) 70%, transparent);
+}
+.gt-toolbar input[type=search] { flex: 1 1 220px; min-width: 0; min-height: 40px; }
+.gt-toolbar select { min-height: 40px; }
+.gt-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 999px; overflow: hidden; background: var(--surface); }
+.gt-seg button {
+  min-height: 38px; padding: 6px 14px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.gt-seg button[aria-pressed="true"] { background: var(--primary-soft); color: var(--text); box-shadow: inset 0 0 0 1px rgba(76, 141, 255, .55); }
+.gt-count { font-size: 12.5px; color: var(--muted); margin-left: auto; }
+.gt-month { margin: 20px 0 10px; font-size: 14px; font-weight: 700; color: var(--muted); letter-spacing: .04em; display: flex; align-items: center; gap: 10px; }
+.gt-month::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.gt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.gt-card { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; transition: border-color .15s, transform .15s var(--ease); }
+.gt-card:hover, .gt-card:focus-within { border-color: var(--primary); transform: translateY(-2px); }
+.gt-card-thumb { display: block; aspect-ratio: 16 / 9; background: radial-gradient(circle at 60% 40%, #10233f, #0a1222 75%); border-bottom: 1px solid var(--border); position: relative; }
+.gt-card-thumb svg { width: 100%; height: 100%; display: block; }
+.gt-card-thumb .gt-chip { position: absolute; left: 10px; top: 10px; background: rgba(9, 14, 25, .75); }
+.gt-card-thumb .gt-nothumb { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; color: var(--muted); }
+.gt-card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.gt-card-title { font-size: 15px; font-weight: 700; margin: 0; overflow-wrap: anywhere; }
+.gt-card-title a { color: var(--text); text-decoration: none; }
+.gt-card-title a::after { content: ""; position: absolute; inset: 0; } /* 整張卡片可點 */
+.gt-card { position: relative; }
+.gt-card-sub { font-size: 12.5px; color: var(--muted); }
+.gt-card-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.gt-card-note { font-size: 12px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.gt-card-actions { display: flex; gap: 6px; margin-top: auto; padding-top: 8px; position: relative; z-index: 1; flex-wrap: wrap; }
+.gt-card-actions .btn { min-height: 38px; padding: 6px 12px; font-size: 12.5px; }
+.gt-allmap { height: min(62vh, 560px); min-height: 320px; border: 1px solid var(--border-strong); border-radius: 16px; overflow: hidden; position: relative; background: #0a1222; }
+.gt-allmap .gt-map-note { position: absolute; left: 12px; bottom: 12px; z-index: 2; padding: 6px 12px; border-radius: 999px; background: rgba(9, 14, 25, .8); border: 1px solid var(--border-strong); font-size: 12.5px; color: var(--muted); }
+
+/* ───── 活動故事頁 ───── */
+.gt-story-hero { position: relative; height: clamp(320px, 56vh, 580px); border-radius: 22px; overflow: hidden; border: 1px solid var(--border-strong); background: #0a1222; box-shadow: var(--shadow-lg); }
+.gt-story-hero #map { position: absolute; inset: 0; min-height: 0; }
+.gt-story-shade { position: absolute; left: 0; right: 0; bottom: 0; padding: 72px 24px 20px; pointer-events: none;
+  background: linear-gradient(transparent, rgba(5, 9, 18, .88) 70%); }
+.gt-story-shade > * { pointer-events: auto; }
+.gt-story-title { margin: 6px 0 6px; font-size: 28px; font-weight: 800; line-height: 1.2; text-shadow: 0 2px 12px rgba(0, 0, 0, .6); overflow-wrap: anywhere; }
+.gt-story-cta { position: absolute; right: 16px; top: 16px; z-index: 3; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.gt-story-hint { position: absolute; left: 16px; top: 16px; z-index: 3; padding: 5px 12px; border-radius: 999px; background: rgba(9, 14, 25, .75); border: 1px solid var(--border-strong); font-size: 12px; color: var(--muted); }
+.gt-story-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.gt-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+.gt-panel h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; letter-spacing: .04em; color: var(--muted); }
+.gt-stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+.gt-stat-grid .gt-stat { background: var(--surface-2); padding: 11px 13px; }
+.gt-stat-grid .gt-stat .v { font-size: 20px; }
+.gt-profile { width: 100%; height: 150px; display: block; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); touch-action: pan-y; }
+.gt-profile + .gt-profile-cap { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.gt-modes { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--track); }
+.gt-modes i { display: block; height: 100%; }
+.gt-mode-legend { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+.gt-mode-legend li { display: flex; align-items: center; gap: 6px; }
+.gt-mode-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.gt-actions { display: flex; flex-direction: column; gap: 8px; }
+.gt-actions .btn { width: 100%; }
+.gt-note { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+.gt-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50; padding: 10px 18px; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--border-strong); box-shadow: var(--shadow-lg); font-size: 13px; }
+.gt-crumb { font-size: 13px; color: var(--muted); }
+.gt-crumb a { color: var(--accent); text-decoration: none; }
+
+/* ───── 探索挑戰中心 ───── */
+.gt-ch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.gt-ch-card { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; color: var(--text); text-decoration: none; transition: border-color .15s, transform .15s var(--ease); }
+.gt-ch-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+.gt-ch-head { display: flex; align-items: center; gap: 12px; }
+.gt-ch-icon { width: 44px; height: 44px; display: grid; place-items: center; font-size: 24px; border-radius: 12px; background: var(--primary-soft); border: 1px solid var(--border-strong); flex: none; }
+.gt-ch-head b { font-size: 16px; display: block; }
+.gt-ch-head span { font-size: 12.5px; color: var(--muted); }
+.gt-bar { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.gt-bar > i { display: block; height: 100%; min-width: 2px; border-radius: 4px; background: var(--grad-progress); }
+.gt-ch-line { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gt-ch-line b { color: var(--text); font-weight: 600; }
+.gt-ch-more { font-size: 13px; color: var(--accent); margin-top: auto; }
+.gt-badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.gt-badge { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--surface); border: 1px solid rgba(76, 141, 255, .45); border-radius: var(--radius-sm); }
+.gt-badge .ic { font-size: 24px; }
+.gt-badge b { display: block; font-size: 14px; }
+.gt-badge span { font-size: 12px; color: var(--muted); }
+
+/* ───── 地圖上的起／終點標記、深色地圖按鈕（活動故事、歷史地圖、3D 工作區共用） ───── */
+.ws-mk { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 2px solid #fff; color: #fff; font-size: 12px; font-weight: 800; box-shadow: 0 2px 8px rgba(0, 0, 0, .55); }
+.ws-mk.s { background: #16a34a; }
+.ws-mk.e { background: #ea580c; }
+.gt-story-hero .maplibregl-ctrl-group, .gt-allmap .maplibregl-ctrl-group { background: rgba(9, 14, 25, .78); border: 1px solid rgba(76, 141, 255, .28); }
+.gt-story-hero .maplibregl-ctrl-group button, .gt-allmap .maplibregl-ctrl-group button { width: 38px; height: 38px; }
+.gt-story-hero .maplibregl-ctrl-group button + button, .gt-allmap .maplibregl-ctrl-group button + button { border-top: 1px solid rgba(76, 141, 255, .2); }
+.gt-story-hero .maplibregl-ctrl-group .maplibregl-ctrl-icon, .gt-allmap .maplibregl-ctrl-group .maplibregl-ctrl-icon { filter: invert(1) brightness(1.4); }
+.gt-story-hero .maplibregl-ctrl-top-right { top: 64px; }
+.gt-story-hero .maplibregl-ctrl-attrib, .gt-allmap .maplibregl-ctrl-attrib { background: rgba(9, 14, 25, .7) !important; color: var(--muted) !important; }
+.gt-story-hero .maplibregl-ctrl-attrib a, .gt-allmap .maplibregl-ctrl-attrib a { color: var(--muted) !important; }
+.gt-story-hero .maplibregl-ctrl-attrib-button, .gt-allmap .maplibregl-ctrl-attrib-button { filter: invert(1); }
+
+/* ───── 響應式 ───── */
+@media (max-width: 900px) {
+  .gt-hero { grid-template-columns: 1fr; }
+  .gt-hero-route { order: -1; min-height: 220px; border-left: 0; border-bottom: 1px solid var(--border); }
+  .gt-story-grid { grid-template-columns: 1fr; }
+  .gt-nav { flex-wrap: nowrap; }
+  .gt-subnav { padding: 6px 14px; }
+}
+@media (max-width: 560px) {
+  .gt-wrap { padding: 16px 14px 56px; gap: 24px; }
+  .gt-hero-body { padding: 18px; }
+  .gt-hero-title, .gt-story-title { font-size: 22px; }
+  .gt-tl-item { grid-template-columns: 72px minmax(0, 1fr); }
+  .gt-tl-thumb { width: 72px; height: 56px; }
+  .gt-tl-go { display: none; }
+  .gt-story-shade { padding: 56px 16px 14px; }
+  .gt-story-cta { left: 12px; right: 12px; top: 12px; justify-content: flex-start; }
+  .gt-story-hint { display: none; }
+}
+@media (pointer: coarse) {
+  .gt-btn, .gt-card-actions .btn, .gt-nav a, .gt-seg button, .gt-toolbar select { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gt-skel, .gt-spin { animation: none; }
+}

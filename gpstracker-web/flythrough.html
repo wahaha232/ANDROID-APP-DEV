@@ -2,247 +2,116 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker 3D 回放</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#050912" />
+  <title>3D 路線工作區 · GPS Tracker</title>
   <!-- 提前與圖磚主機建立連線（DNS + TLS），省下首批圖磚請求的握手時間 -->
   <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin />
   <link rel="preconnect" href="https://s3.amazonaws.com" crossorigin />
   <link rel="preload" href="vendor/maplibre-gl.js" as="script" />
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
-  <script src="common.js?v=d579a5fd"></script>
+  <link href="style.css?v=1ceea449" rel="stylesheet" />
+  <link href="gt-ui.css?v=08315d6a" rel="stylesheet" />
+  <link href="workspace.css?v=6530a643" rel="stylesheet" />
+  <!-- 小型同源腳本不 defer：軌跡 JSON 在頁面一解析就開始下載，與 1 MB 的 MapLibre 並行（沿用原本的載入策略）。 -->
+  <script src="common.js?v=46cd05d5"></script>
+  <script src="gt-core.js?v=9ed6c8c1"></script>
+  <script src="gt-data.js?v=8bbbfbf0"></script>
+  <script>
+    (function () {
+      var id = new URLSearchParams(location.search).get("track");
+      if (id) GT.loadTrack(id).catch(function () { /* 錯誤由 workspace.js 顯示 */ });
+    })();
+  </script>
   <script defer src="vendor/maplibre-gl.js"></script>
-  <style>
-    html, body { height: 100%; margin: 0; background: #000; overflow: hidden; color: #eaf0fb;
-      font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
-      -webkit-font-smoothing: antialiased; }
-    #map { position: absolute; inset: 0; }
-    #hud, #controls { -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%);
-      border: 1px solid rgba(76,141,255,.28); box-shadow: 0 10px 30px rgba(0,0,0,.45); }
-    #hud { position: absolute; top: 14px; left: 14px; z-index: 10; background: rgba(9,14,25,.7);
-      border-radius: 16px; padding: 12px 16px; min-width: 150px; }
-    #hud .big { font-size: 28px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums;
-      background: linear-gradient(135deg,#4c8dff,#22d3ee); -webkit-background-clip: text; background-clip: text; color: transparent; }
-    #hud .unit { font-size: 12px; opacity: .75; margin-left: 4px; }
-    #hud .row { font-size: 13px; margin-top: 5px; font-variant-numeric: tabular-nums; }
-    #hud .label { opacity: .6; }
-    #controls { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 10;
-      background: rgba(9,14,25,.78); border-radius: 18px; padding: 12px 16px; }
-    #controls .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    #seek { width: 100%; accent-color: #4c8dff; }
-    button, a.btn { background: linear-gradient(135deg,#4c8dff,#7a5cff); color: #fff; border: 1px solid transparent; border-radius: 999px;
-      padding: 8px 16px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; text-decoration: none;
-      box-shadow: 0 4px 14px rgba(76,141,255,.3); transition: filter .15s, transform .15s; }
-    button:hover, a.btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
-    button.secondary { background: #16223a; border: 1px solid #2c3f63; box-shadow: none; }
-    button.chip { background: #16223a; border: 1px solid #2c3f63; padding: 6px 12px; box-shadow: none; }
-    button.chip.active { background: linear-gradient(135deg,#4c8dff,#7a5cff); border-color: transparent; }
-    #back { position: absolute; top: 14px; right: 14px; z-index: 10; }
-    #status { position: absolute; top: 50%; left: 0; right: 0; text-align: center; color: #8c9ab3; }
-  </style>
+  <script defer src="gt-profile.js?v=96a7e38a"></script>
+  <script defer src="workspace.js?v=4c23523d"></script>
 </head>
-<body>
-<div id="map"></div>
-<div id="hud">
-  <div><span class="big" id="hud-dist">0.00</span><span class="unit">km</span></div>
-  <div class="row"><span class="label">速度 </span><span id="hud-speed">0</span> km/h</div>
-  <div class="row"><span class="label">高度 </span><span id="hud-alt">--</span> m</div>
-</div>
-<a class="btn" id="back" href="index.html">← 返回儀表板</a>
-<div id="status">載入中…</div>
-<div id="controls" style="display:none">
-  <input id="seek" type="range" min="0" max="1000" value="0" />
-  <div class="row" style="margin-top:8px">
-    <button id="play">▶ 播放</button>
-    <button class="secondary" id="restart">↺ 重播</button>
-    <span id="spdchips"></span>
+<body class="ws" data-mode="replay">
+<div class="ws-app" id="app">
+
+  <div class="ws-stage" id="stage">
+    <div id="map" aria-label="3D 地形地圖"></div>
+    <div id="status" class="ws-status" role="status">載入中…</div>
+
+    <div class="ws-topbar">
+      <a class="ws-btn" id="back" href="history.html" aria-label="返回活動故事">←<span class="ws-lbl"> 活動故事</span></a>
+      <div class="ws-modes" role="tablist" aria-label="檢視模式">
+        <button type="button" role="tab" data-mode="explore" aria-selected="false">自由探索</button>
+        <button type="button" role="tab" data-mode="replay" aria-selected="true">旅程回放</button>
+        <button type="button" role="tab" data-mode="data" aria-selected="false">活動數據</button>
+      </div>
+      <button type="button" class="ws-btn ws-panel-toggle" id="panelToggle" aria-expanded="true" aria-controls="panel" title="收合／展開資訊面板">☰<span class="ws-lbl"> 資訊</span></button>
+    </div>
+
+    <div class="ws-hud" id="hud" aria-hidden="true">
+      <div><span class="big" id="hud-dist">0.00</span><span class="unit">km</span></div>
+      <div class="row"><span class="label">速度 </span><span id="hud-speed">0</span> km/h</div>
+      <div class="row"><span class="label">高度 </span><span id="hud-alt">--</span> m</div>
+    </div>
+
+    <div class="ws-hint" id="exploreHint">拖曳旋轉・滾輪／雙指縮放・按住右鍵或雙指上下拖曳傾斜</div>
+
+    <div class="ws-controls" id="controls" hidden>
+      <div class="ws-seekrow">
+        <input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="播放進度" />
+        <span class="ws-clock" id="clock">0:00 / 0:00</span>
+      </div>
+      <div class="ws-row">
+        <button type="button" class="ws-play" id="play">▶ 播放</button>
+        <button type="button" class="ws-chipbtn" id="restart">↺ 重播</button>
+        <div class="ws-chips" id="spdchips" role="group" aria-label="播放速度"></div>
+        <div class="ws-cams" role="group" aria-label="鏡頭">
+          <button type="button" class="ws-chipbtn" id="camFollow" aria-pressed="true">跟隨</button>
+          <button type="button" class="ws-chipbtn" id="camOverview" aria-pressed="false">鳥瞰</button>
+        </div>
+      </div>
+    </div>
   </div>
+
+  <aside class="ws-panel" id="panel" aria-label="活動資訊">
+    <div class="ws-sheet" id="sheet">
+      <button type="button" class="ws-handle" id="sheetBtn" aria-expanded="false" aria-controls="sheetBody">
+        <span class="ws-grip" aria-hidden="true"></span>
+        <span class="ws-handle-title" id="hTitle">載入中…</span>
+        <span class="ws-handle-sub" id="hSub"></span>
+      </button>
+      <div class="ws-body" id="sheetBody">
+        <div class="ws-head">
+          <h1 id="pTitle">載入中…</h1>
+          <div class="ws-meta" id="pMeta"></div>
+        </div>
+        <div class="ws-stats" id="pStats"></div>
+
+        <section class="ws-block" id="blkAlt" hidden>
+          <h2>海拔剖面 <small>點選或拖曳可跳到該位置</small></h2>
+          <canvas id="profAlt" class="gt-profile"></canvas>
+        </section>
+        <section class="ws-block data-only" id="blkSpd" hidden>
+          <h2>速度剖面 <small>km/h</small></h2>
+          <canvas id="profSpd" class="gt-profile"></canvas>
+        </section>
+        <section class="ws-block data-only" id="blkModes" hidden>
+          <h2>移動方式</h2>
+          <div class="gt-modes" id="modeBar"></div>
+          <ul class="gt-mode-legend" id="modeLegend"></ul>
+        </section>
+        <section class="ws-block data-only" id="blkPhotos" hidden>
+          <h2>拍照點</h2>
+          <p class="gt-note" id="photoNote"></p>
+        </section>
+
+        <div class="ws-actions">
+          <a class="btn gt-btn secondary" id="aStory" href="activity.html">活動故事</a>
+          <button type="button" class="btn gt-btn secondary" id="aGpx">⬇ GPX</button>
+          <button type="button" class="btn gt-btn secondary" id="aShare">分享連結</button>
+          <a class="btn gt-btn secondary" id="aEdit" href="records.html">編輯備註</a>
+        </div>
+        <button type="button" class="btn gt-btn ws-backmap" id="backToMap">↑ 回到地圖</button>
+      </div>
+    </div>
+  </aside>
 </div>
-
-<script>
-(function () {
-  "use strict";
-  var params = new URLSearchParams(location.search);
-  var CONFIG = GPST.resolveConfig();
-  var trackId = params.get("track");
-  var RAW = CONFIG.dataBase;
-  var BASE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-  var DEM_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
-  var BASE_ATTR = "Esri, Maxar, Earthstar Geographics, GIS User Community";
-  var DEM_ATTR = "Elevation: Mapzen / AWS Terrain Tiles";
-  var SPEEDS = [1, 2, 4, 8, 16];
-
-  var coords = [], hudData = [], cum = [], total = 0;
-  var progress = 0, playing = false, speed = 4, lastTs = 0, lastTravel = 0;
-  var map = null;
-
-  function $(id) { return document.getElementById(id); }
-
-  function emptyLine() { return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } }; }
-  function emptyFC() { return { type: "FeatureCollection", features: [] }; }
-
-  // ===== 載入流程（針對速度）=====
-  // 1) 軌跡 JSON 在頁面一解析就開始下載，與 1 MB 的 MapLibre 腳本並行（原本要等地圖整個載入完才開始抓）。
-  // 2) 地圖直接建在軌跡起點的視角：原本先以全球視角（z3）載入約 100 張用不到的世界圖磚，再跳到軌跡。
-  // 3) 高程圖磚只到 z15：宣告 maxzoom，避免請求不存在的 z16 圖磚。
-  var trackPromise = null;
-  if (trackId) {
-    trackPromise = fetch(GPST.bust(RAW + trackId + ".json", true), { cache: "no-cache" })
-      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
-    trackPromise.catch(function () { /* 錯誤由 DOMContentLoaded 後的處理顯示 */ });
-  }
-
-  var DISPLAY_MAX_POINTS = 2000; // 軌跡「顯示線」的最大點數；位置／HUD 仍用完整資料
-  var dispCoords = [], dispStep = 1;
-
-  function prepareTrack(t) {
-    var pts = t.points || [];
-    coords = pts.map(function (p) { return [p[0], p[1]]; });
-    hudData = pts.map(function (p) { return [p[3] || 0, p[2] || 0]; });
-    cum = [0]; total = 0;
-    for (var i = 1; i < coords.length; i++) { total += hav(coords[i - 1], coords[i]); cum.push(total); }
-    // 長軌跡（上萬點）每幀重建並序列化整條線很吃 CPU：顯示用的線抽樣到最多 DISPLAY_MAX_POINTS 點。
-    dispStep = Math.max(1, Math.ceil(coords.length / DISPLAY_MAX_POINTS));
-    dispCoords = [];
-    for (var j = 0; j < coords.length; j += dispStep) dispCoords.push(coords[j]);
-    if (coords.length && dispCoords[dispCoords.length - 1] !== coords[coords.length - 1]) dispCoords.push(coords[coords.length - 1]);
-  }
-
-  function createMap() {
-    var hasTrack = coords.length > 0;
-    map = new maplibregl.Map({
-      container: "map",
-      style: { version: 8, projection: { type: "globe" }, sky: {},
-        sources: {
-          base: { type: "raster", tiles: [BASE_TILES], tileSize: 256, maxzoom: 19, attribution: BASE_ATTR },
-          dem: { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256, maxzoom: 15, attribution: DEM_ATTR }
-        },
-        layers: [
-          { id: "base", type: "raster", source: "base" },
-          { id: "hillshade", type: "hillshade", source: "dem", paint: { "hillshade-exaggeration": 0.5 } }
-        ] },
-      // 有軌跡就直接從起點視角開始（與播放第一幀相同），沒有才顯示全球。
-      center: hasTrack ? coords[0] : [121, 23.5],
-      zoom: hasTrack ? 15.2 : 1.6,
-      pitch: hasTrack ? 60 : 0,
-      bearing: coords.length > 1 ? bearing(coords[0], coords[1]) : 0,
-      antialias: true,
-      fadeDuration: 0 // 圖磚不做淡入動畫：畫面更快就緒
-    });
-    map.on("load", onMapLoad);
-  }
-
-  function onMapLoad() {
-    map.setTerrain({ source: "dem", exaggeration: 1.3 });
-    map.addSource("planned", { type: "geojson", data: emptyLine() });
-    map.addLayer({ id: "planned-line", type: "line", source: "planned", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 4, "line-opacity": 0.35, "line-dasharray": [2, 2] } });
-    map.addSource("traveled", { type: "geojson", data: emptyLine() });
-    map.addLayer({ id: "traveled-line", type: "line", source: "traveled", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#00E676", "line-width": 6 } });
-    map.addSource("marker", { type: "geojson", data: emptyFC() });
-    map.addLayer({ id: "marker-dot", type: "circle", source: "marker", paint: { "circle-radius": 9, "circle-color": "#FF3D00", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
-
-    map.getSource("planned").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: dispCoords } });
-    applyFrame(true);
-    $("status").style.display = "none";
-    $("controls").style.display = "";
-    buildChips();
-    if (coords.length > 1) { playing = true; updatePlayBtn(); lastTs = 0; requestAnimationFrame(tick); }
-  }
-
-  // 等 DOM 與（defer 的）MapLibre 腳本都就緒，並且軌跡資料已經到手，才建立地圖。
-  document.addEventListener("DOMContentLoaded", function () {
-    if (!trackId) { $("status").textContent = "缺少 ?track= 參數"; return; }
-    trackPromise
-      .then(function (t) { prepareTrack(t); createMap(); })
-      .catch(function (e) { $("status").textContent = "讀取失敗：" + e.message; });
-  });
-
-  function hav(a, b) {
-    var R = 6371000, dLat = (b[1] - a[1]) * Math.PI / 180, dLon = (b[0] - a[0]) * Math.PI / 180;
-    var la1 = a[1] * Math.PI / 180, la2 = b[1] * Math.PI / 180;
-    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(la1) * Math.cos(la2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-  }
-  function bearing(a, b) {
-    var la1 = a[1] * Math.PI / 180, la2 = b[1] * Math.PI / 180, dLon = (b[0] - a[0]) * Math.PI / 180;
-    var y = Math.sin(dLon) * Math.cos(la2);
-    var x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dLon);
-    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-  }
-  function pointAt(f) {
-    if (!coords.length) return null;
-    if (coords.length === 1 || total === 0) return { pos: coords[0], bearing: 0, i: 0, t: 0 };
-    var target = f * total;
-    // 二分搜尋：找出第一個 cum[i] >= target 的 i（cum 為累積距離，遞增）。
-    var lo = 1, hi = cum.length - 1;
-    while (lo < hi) { var mid = (lo + hi) >> 1; if (cum[mid] < target) lo = mid + 1; else hi = mid; }
-    var i = Math.min(lo, coords.length - 1);
-    var a = coords[i - 1], b = coords[i], segLen = cum[i] - cum[i - 1];
-    var t = segLen > 0 ? (target - cum[i - 1]) / segLen : 0;
-    return { pos: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], bearing: bearing(a, b), i: i, t: t };
-  }
-  function lerp(a, b, t) { return a + (b - a) * t; }
-
-  function applyFrame(force) {
-    var p = pointAt(progress);
-    if (!p) return;
-    map.jumpTo({ center: p.pos, bearing: p.bearing, pitch: 60, zoom: 15.2 });
-    var now = performance.now();
-    if (force || now - lastTravel > 60) {
-      lastTravel = now;
-      var k = Math.ceil(p.i / dispStep);
-      map.getSource("traveled").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: dispCoords.slice(0, k).concat([p.pos]) } });
-      map.getSource("marker").setData({ type: "Feature", geometry: { type: "Point", coordinates: p.pos }, properties: {} });
-    }
-    $("hud-dist").textContent = ((progress * total) / 1000).toFixed(2);
-    var spd = 0, alt = null;
-    if (hudData.length >= 2 && p.i >= 1) {
-      var s0 = hudData[p.i - 1][0], s1 = hudData[p.i][0], a0 = hudData[p.i - 1][1], a1 = hudData[p.i][1];
-      spd = lerp(s0, s1, p.t);
-      if (a0 && a1) alt = lerp(a0, a1, p.t);
-    }
-    $("hud-speed").textContent = Math.round(spd);
-    $("hud-alt").textContent = alt === null ? "--" : Math.round(alt);
-    $("seek").value = String(Math.round(progress * 1000));
-  }
-
-  function tick(ts) {
-    if (!playing) return;
-    if (!lastTs) lastTs = ts;
-    var dt = (ts - lastTs) / 1000; lastTs = ts;
-    progress = Math.min(1, progress + dt * 0.035 * speed);
-    applyFrame(false);
-    if (progress < 1) requestAnimationFrame(tick);
-    else { playing = false; updatePlayBtn(); applyFrame(true); }
-  }
-
-  function fit() {
-    if (coords.length < 2) return;
-    var b = new maplibregl.LngLatBounds();
-    coords.forEach(function (c) { b.extend(c); });
-    map.fitBounds(b, { padding: 70, duration: 0, pitch: 45, bearing: 0 });
-  }
-  function updatePlayBtn() { $("play").textContent = playing ? "⏸ 暫停" : "▶ 播放"; }
-
-  function buildChips() {
-    var box = $("spdchips");
-    box.innerHTML = "";
-    SPEEDS.forEach(function (s) {
-      var b = document.createElement("button");
-      b.className = "chip" + (s === speed ? " active" : "");
-      b.textContent = s + "×";
-      b.onclick = function () {
-        speed = s;
-        Array.prototype.forEach.call(box.children, function (c) { c.className = "chip"; });
-        b.className = "chip active";
-      };
-      box.appendChild(b);
-    });
-  }
-
-  $("play").onclick = function () { playing = !playing; updatePlayBtn(); if (playing) { lastTs = 0; requestAnimationFrame(tick); } };
-  $("restart").onclick = function () { progress = 0; applyFrame(true); playing = true; updatePlayBtn(); lastTs = 0; requestAnimationFrame(tick); };
-  $("seek").addEventListener("input", function () { playing = false; updatePlayBtn(); progress = ($("seek").value / 1000); applyFrame(true); });
-})();
-</script>
+<div class="gt-toast" id="toast" role="status" hidden></div>
 </body>
 </html>
