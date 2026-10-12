@@ -176,6 +176,8 @@
     html += card((totalKm / EARTH_EQUATOR_KM).toFixed(2) + " 圈", "相當於繞地球赤道", "一圈 " + fmtInt(EARTH_EQUATOR_KM) + " km");
     html += card((totalKm / MOON_KM * 100).toFixed(1) + "%", "地月距離的比例", "地月平均 " + fmtInt(MOON_KM) + " km");
     if (loop) html += card((totalKm / loop).toFixed(1) + " 次", "台灣環島（以 1,000 km 計）", "對照環島里程達人門檻");
+    var upd = state.daily && state.daily.updatedAt ? new Date(state.daily.updatedAt) : null;
+    html += card(upd ? pad(upd.getMonth() + 1) + "/" + pad(upd.getDate()) + " " + pad(upd.getHours()) + ":" + pad(upd.getMinutes()) : "—", "最後同步時間", "本頁每 5 分鐘自動更新");
     html += "</div>";
     $("sjSummary").innerHTML = html;
   }
@@ -265,7 +267,8 @@
       html += "</ul></div>";
     }
     html += '<div class="sj-foot">各關卡門檻與其他競賽頁使用同一份設定（太陽系／地球／台灣）；台灣的縣市制霸、四極點需要 GPS 位置，無法用步數換算，所以不在此頁。' +
-      "里程 = 累計步數 × 步幅，只是估算；步數資料來自 App 同步的 steps.json。</div>";
+      "里程 = 累計步數 × 步幅，只是估算；步數資料來自 App 同步的 steps.json。" +
+      "步數會隨 App 同步持續累計：每次同步只會新增或更新天數，已經上傳的天數永遠保留，累計只增不減；今天的步數也會隨一天進行而增加。</div>";
     $("sjGroups").innerHTML = html;
   }
 
@@ -297,8 +300,21 @@
     renderGroups(model, totalKm, avgKm);
   }
 
+  // ===== 持續累計：頁面開著時定期重新讀取 steps.json，新的步數同步上來就會自動加進累計 =====
+  var REFRESH_MS = 5 * 60 * 1000;
+  var refreshing = false;
+  function refresh(manual) {
+    if (refreshing) return;
+    refreshing = true;
+    loadJSON("steps.json").then(function (d) {
+      if (d && d.days && d.days.length) { state.daily = d; render(); }
+    }).catch(function () { /* 網路暫時失敗：保留目前畫面，下次再試 */ }).then(function () { refreshing = false; });
+  }
+
   function init() {
     state.stride = readStride();
+    setInterval(function () { if (state.daily && !document.hidden) refresh(false); }, REFRESH_MS);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden && state.daily) refresh(false); });
     Promise.all([
       loadJSON("steps.json").catch(function () { return null; }),
       loadJSON("voyager.json").catch(function () { return null; })
