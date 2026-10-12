@@ -204,7 +204,6 @@
     <string name="detail_vm_008">讀取 Health Connect 失敗：%1$s（請確認已在「設定」授權讀取步數）</string>
 
     <!-- recording_vm -->
-    <string name="recording_vm_001">目前沒有進行中的記錄，無法拍照</string>
 
     <!-- service -->
     <string name="service_001">無法啟動前景服務：%1$s</string>
@@ -278,4 +277,10 @@
     <string name="today_steps_sync_not_configured">請先在「設定」填入 GitHub Token 與儲存庫（網頁儀表板），才能上傳到網站。</string>
     <string name="today_steps_sync_wifi">設定為「僅限 Wi-Fi 上傳」，目前不是 Wi-Fi 連線。</string>
     <string name="today_steps_sync_failed">上傳失敗：%1$s</string>
+    <!-- diagnostics -->
+    <string name="diag_title">診斷</string>
+    <string name="diag_none">沒有當機紀錄。</string>
+    <string name="diag_count">最近有 %1$d 筆當機紀錄（只存在這支手機，不會自動上傳）。</string>
+    <string name="diag_share">分享最新一筆</string>
+    <string name="diag_clear">清除</string>
 </resources>

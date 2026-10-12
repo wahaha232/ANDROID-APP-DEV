@@ -150,14 +150,13 @@ class FlyoverRecordingService : Service() {
     }
 
     private fun startForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, getString(R.string.flyover_001), NotificationManager.IMPORTANCE_LOW).apply {
-                    setShowBadge(false)
-                }
-            )
-        }
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, getString(R.string.flyover_001), NotificationManager.IMPORTANCE_LOW).apply {
+                setShowBadge(false)
+            }
+        )
+    
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.flyover_002))
             .setContentText(getString(R.string.flyover_003))

@@ -329,6 +329,30 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 }
             }
 
+            SettingsSection(title = context.getString(R.string.diag_title)) {
+                var crashCount by remember { mutableStateOf(com.startinsnow.gpstracker.diagnostics.CrashLogger.count(context)) }
+                Text(
+                    if (crashCount == 0) stringResource(R.string.diag_none) else stringResource(R.string.diag_count, crashCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                if (crashCount > 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(onClick = { com.startinsnow.gpstracker.diagnostics.CrashLogger.shareLatest(context) }) {
+                            Text(stringResource(R.string.diag_share))
+                        }
+                        OutlinedButton(onClick = {
+                            com.startinsnow.gpstracker.diagnostics.CrashLogger.clear(context)
+                            crashCount = 0
+                        }) { Text(stringResource(R.string.diag_clear)) }
+                    }
+                }
+            }
+
             SettingsSection(title = context.getString(R.string.settings_048)) {
                 SwitchRow(
                     title = context.getString(R.string.settings_049),

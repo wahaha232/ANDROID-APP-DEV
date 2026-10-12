@@ -1,5 +1,7 @@
 package com.startinsnow.gpstracker.location
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
@@ -35,6 +37,13 @@ class LocationTracker(private val context: Context) {
     val driftFilter = GpsDriftFilter()
     val qualityManager = LocationQualityManager()
 
+    /** 省電模式要用的 GPS 請求間隔；null = 使用 observe() 傳入的原本間隔。見 [GpsPowerPolicy]。 */
+    private val gpsIntervalOverrideMs = MutableStateFlow<Long?>(null)
+
+    fun setGpsIntervalOverride(ms: Long?) {
+        gpsIntervalOverrideMs.value = ms
+    }
+
     @SuppressLint("MissingPermission")
     fun observe(
         trackId: String,
@@ -50,7 +59,9 @@ class LocationTracker(private val context: Context) {
 
         val registered = mutableSetOf<String>()
         var lastGpsElapsedMs = Long.MIN_VALUE
+        var currentGpsIntervalMs = gpsMinTimeMs
         lateinit var listener: LocationListener
+        gpsIntervalOverrideMs.value = null
 
         /** 註冊單一 provider；已註冊或目前未啟用則略過（之後被啟用時由 onProviderEnabled 再補註冊）。 */
         fun register(provider: String) {
@@ -58,7 +69,7 @@ class LocationTracker(private val context: Context) {
             try {
                 if (!locationManager.isProviderEnabled(provider)) return
                 if (provider == LocationManager.GPS_PROVIDER) {
-                    locationManager.requestLocationUpdates(provider, gpsMinTimeMs, gpsMinDistanceM, listener, context.mainLooper)
+                    locationManager.requestLocationUpdates(provider, currentGpsIntervalMs, gpsMinDistanceM, listener, context.mainLooper)
                 } else {
                     locationManager.requestLocationUpdates(provider, networkMinTimeMs, networkMinDistanceM, listener, context.mainLooper)
                 }
@@ -92,7 +103,21 @@ class LocationTracker(private val context: Context) {
         register(LocationManager.GPS_PROVIDER)
         register(LocationManager.NETWORK_PROVIDER)
 
+        // 靜止一段時間後 Service 會要求拉長 GPS 間隔（動起來再還原）：重新註冊使新的間隔生效。
+        val intervalJob = launch {
+            gpsIntervalOverrideMs.collect { override ->
+                val wanted = override ?: gpsMinTimeMs
+                if (wanted == currentGpsIntervalMs) return@collect
+                currentGpsIntervalMs = wanted
+                locationManager.removeUpdates(listener) // 會同時移除 GPS 與網路兩個註冊
+                registered.clear()
+                register(LocationManager.GPS_PROVIDER)
+                register(LocationManager.NETWORK_PROVIDER)
+            }
+        }
+
         awaitClose {
+            intervalJob.cancel()
             locationManager.removeUpdates(listener)
         }
     }
@@ -103,9 +128,7 @@ class LocationTracker(private val context: Context) {
         val candidates = listOfNotNull(
             runCatching { locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER) }.getOrNull(),
             runCatching { locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) }.getOrNull(),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                runCatching { locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) }.getOrNull()
-            } else null
+            runCatching { locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) }.getOrNull()
         )
         // 未設定 accuracy 的 Location，其 getAccuracy() 回傳 0，會讓 minByOrNull 誤選最不可靠的點；
         // 因此沒有 accuracy 的候選一律排到最後，避免用「看似最準」的無效值當起始點。
@@ -129,23 +152,13 @@ class LocationTracker(private val context: Context) {
             latitude = latitude,
             longitude = longitude,
             timestampMs = time,
-            elapsedRealtimeMs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-                elapsedRealtimeNanos / 1_000_000L
-            } else {
-                SystemClock.elapsedRealtime()
-            },
+            elapsedRealtimeMs = elapsedRealtimeNanos / 1_000_000L,
             speedMps = if (hasSpeed()) speed else null,
-            speedAccuracyMps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && hasSpeedAccuracy()) {
-                speedAccuracyMetersPerSecond
-            } else null,
+            speedAccuracyMps = if (hasSpeedAccuracy()) speedAccuracyMetersPerSecond else null,
             altitudeMeters = if (hasAltitude()) altitude else null,
-            altitudeAccuracyMeters = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && hasVerticalAccuracy()) {
-                verticalAccuracyMeters
-            } else null,
+            altitudeAccuracyMeters = if (hasVerticalAccuracy()) verticalAccuracyMeters else null,
             bearingDegrees = if (hasBearing()) bearing else null,
-            bearingAccuracyDegrees = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && hasBearingAccuracy()) {
-                bearingAccuracyDegrees
-            } else null,
+            bearingAccuracyDegrees = if (hasBearingAccuracy()) bearingAccuracyDegrees else null,
             accuracyMeters = if (hasAccuracy()) accuracy else 999f,
             provider = when (provider) {
                 LocationManager.GPS_PROVIDER -> LocationProvider.GPS

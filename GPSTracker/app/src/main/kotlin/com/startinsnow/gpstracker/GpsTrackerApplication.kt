@@ -27,6 +27,7 @@ class GpsTrackerApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        com.startinsnow.gpstracker.diagnostics.CrashLogger.install(this)
         org.maplibre.android.MapLibre.getInstance(this)
         createNotificationChannels()
         com.startinsnow.gpstracker.service.AutoCleanupWorker.schedule(this)
@@ -38,17 +39,16 @@ class GpsTrackerApplication : Application() {
     }
 
     private fun createNotificationChannels() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(NotificationManager::class.java)
-            val channel = NotificationChannel(
-                RECORDING_CHANNEL_ID,
-                getString(R.string.notif_channel_recording),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                setShowBadge(false)
-            }
-            manager.createNotificationChannel(channel)
+        val manager = getSystemService(NotificationManager::class.java)
+        val channel = NotificationChannel(
+            RECORDING_CHANNEL_ID,
+            getString(R.string.notif_channel_recording),
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            setShowBadge(false)
         }
+        manager.createNotificationChannel(channel)
+    
     }
 
     companion object {

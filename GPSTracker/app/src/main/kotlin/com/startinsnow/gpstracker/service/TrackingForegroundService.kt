@@ -1,5 +1,6 @@
 package com.startinsnow.gpstracker.service
 
+import com.startinsnow.gpstracker.location.GpsPowerPolicy
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -61,6 +62,9 @@ class TrackingForegroundService : LifecycleService() {
 
     /** 防止重複建立 Track（MainActivity 的 Crash Recovery 與 UI 的開始記錄可能同時送 ACTION_START）。 */
     private var isStarting = false
+
+    /** 這次記錄設定的 GPS 基本請求間隔（省電模式只會在它之上拉長）。 */
+    private var baseGpsIntervalMs = LocationTracker.GPS_MIN_TIME_MS
 
     /** 手動指定的移動方式（記錄前選擇）；null = 自動。 */
     private var manualMode: MovementMode? = null
@@ -249,6 +253,7 @@ class TrackingForegroundService : LifecycleService() {
         // 「高精度 GPS 模式」設定真的有作用：開啟時提高 GNSS 更新頻率（較耗電），
         // 關閉時使用預設的省電頻率，並由 AdaptiveSamplingPolicy 決定實際落地/統計的節奏。
         val gpsIntervalMs = if (highAccuracyGps) HIGH_ACCURACY_GPS_INTERVAL_MS else LocationTracker.GPS_MIN_TIME_MS
+        baseGpsIntervalMs = gpsIntervalMs
         val gpsDistanceM = if (highAccuracyGps) 0f else LocationTracker.GPS_MIN_DISTANCE_M
         collectJob = locationTracker.observe(
             trackId = id,
@@ -344,6 +349,12 @@ class TrackingForegroundService : LifecycleService() {
         // 手動指定移動方式時，記錄用的模式（區段、點位、畫面）以手動為準；
         // 靜止／自動暫停仍用偵測器的結果，避免手動模式下原地不動也一直累積。
         val recordedMode = manualMode ?: movementResult.mode
+
+        // 靜止一陣子後進入省電模式：拉長 GPS 請求間隔、不再寫入雜訊範圍內的低可信度點（見 GpsPowerPolicy）。
+        val stationaryMs = stationarySinceElapsedMs?.let { SystemClock.elapsedRealtime() - it } ?: 0L
+        locationTracker.setGpsIntervalOverride(
+            GpsPowerPolicy.gpsIntervalMs(baseGpsIntervalMs, stationaryMs).takeIf { it != baseGpsIntervalMs }
+        )
         // 用獨立的最後區段模式判斷（而非 UI 的 movementMode）：暫停期間 UI 的 movementMode 仍會更新，
         // 若拿它比較，恢復後若模式剛好相同就不會建立新區段，導致該段時間從模式統計中消失。
         if (!isPaused && lastSegmentMode != recordedMode) {
@@ -362,9 +373,12 @@ class TrackingForegroundService : LifecycleService() {
         if (isPaused) return
 
         if (filtered.reliability != PointReliability.TRUSTED) {
-            // 低可信度 / 異常點仍寫入資料庫供除錯與 Browser Playback 顯示，但不計入距離/速度聚合。
-            app.trackRepository.appendPoint(filtered, recordedMode)
-            TrackingStateHolder.update { it.copy(pointCount = it.pointCount + 1) }
+            // 低可信度 / 異常點仍寫入資料庫供除錯與 Browser Playback 顯示，但不計入距離/速度聚合；
+            // 只有「靜止一陣子後落在雜訊範圍內」的點不寫（原地不動時每秒一個，只會灌大資料庫）。
+            if (GpsPowerPolicy.shouldPersistPoint(filtered.reliability, stationaryMs)) {
+                app.trackRepository.appendPoint(filtered, recordedMode)
+                TrackingStateHolder.update { it.copy(pointCount = it.pointCount + 1) }
+            }
             return
         }
 

@@ -70,7 +70,9 @@ fun HomeScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val state by viewModel.recordingState.collectAsStateWithLifecycle()
-    val tracks by viewModel.recentTracks.collectAsStateWithLifecycle()
+    val tracksOrNull by viewModel.recentTracks.collectAsStateWithLifecycle()
+    val tracksLoaded = tracksOrNull != null
+    val tracks = tracksOrNull ?: emptyList()
     val pendingRecovery by viewModel.pendingRecovery.collectAsStateWithLifecycle()
     val todaySteps by viewModel.todaySteps.collectAsStateWithLifecycle()
     val stepsSyncMessage by viewModel.stepsSyncMessage.collectAsStateWithLifecycle()
@@ -156,7 +158,7 @@ fun HomeScreen(
                 )
             }
 
-            if (tracks.isEmpty()) {
+            if (tracksLoaded && tracks.isEmpty()) {
                 item {
                     EmptyState(
                         icon = Icons.Filled.Map,

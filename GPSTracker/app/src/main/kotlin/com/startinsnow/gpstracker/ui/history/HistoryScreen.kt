@@ -57,7 +57,9 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel()
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val tracks by viewModel.tracks.collectAsStateWithLifecycle()
+    val tracksOrNull by viewModel.tracks.collectAsStateWithLifecycle()
+    val tracksLoaded = tracksOrNull != null
+    val tracks = tracksOrNull ?: emptyList()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
 
@@ -98,7 +100,7 @@ fun HistoryScreen(
                 }
             }
 
-            if (tracks.isEmpty()) {
+            if (tracksLoaded && tracks.isEmpty()) {
                 EmptyState(
                     icon = Icons.Filled.History,
                     title = context.getString(R.string.history_004),

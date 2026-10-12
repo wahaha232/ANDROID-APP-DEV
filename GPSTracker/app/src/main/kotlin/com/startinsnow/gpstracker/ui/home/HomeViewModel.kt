@@ -50,8 +50,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val recordingState = TrackingStateHolder.state
     val pendingRecovery = TrackingStateHolder.pendingRecovery
+    /** null = 還在載入（此時不顯示「還沒有紀錄」的空狀態，避免冷啟動先閃一下）。 */
     val recentTracks = app.trackRepository.observeTracks()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _stepsSyncMessage = MutableStateFlow<String?>(null)
     val stepsSyncMessage: StateFlow<String?> = _stepsSyncMessage

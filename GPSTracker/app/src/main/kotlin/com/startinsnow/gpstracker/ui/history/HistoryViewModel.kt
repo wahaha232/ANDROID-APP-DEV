@@ -24,12 +24,13 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val _filter = MutableStateFlow(HistoryFilter())
     val filter: StateFlow<HistoryFilter> = _filter
 
-    val tracks: StateFlow<List<TrackEntity>> = combine(app.trackRepository.observeTracks(), _filter) { all, filter ->
+    /** null = 還在載入（不顯示空狀態，避免冷啟動先閃一下）。 */
+    val tracks: StateFlow<List<TrackEntity>?> = combine(app.trackRepository.observeTracks(), _filter) { all, filter ->
         all.filter { track ->
             (filter.mode == null || track.dominantMode == filter.mode) &&
                 (!filter.onlyWithPhotos || track.photoCount > 0)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun setModeFilter(mode: MovementMode?) {
         _filter.value = _filter.value.copy(mode = mode)
