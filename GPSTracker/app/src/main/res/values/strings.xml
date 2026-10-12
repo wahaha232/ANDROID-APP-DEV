@@ -24,7 +24,7 @@
     <string name="settings_017">自動暫停</string>
     <string name="settings_018">靜止超過 1 分鐘後自動暫停記錄</string>
     <string name="settings_019">步數</string>
-    <string name="settings_020">記錄結束時讀取該趟步數；讀取失敗或未授權時自動改用裝置感測器。</string>
+    <string name="settings_020">記錄結束時，這一趟的步數一律以 Google Fit（含小米 Zepp Life 同步來的）為主；Google Fit 讀不到（例如手環還沒同步）時暫用手機感測器，之後會自動補讀。下方選項只影響首頁在 Google Fit 沒有資料時的備用來源。</string>
     <string name="settings_021">小米 Zepp Life</string>
     <string name="settings_022">Google Fit 的步數會同步到 Health Connect（免 Google OAuth）。小米 Zepp Life 的步數若先同步到 Google Fit，也包含在內；本 App 會讀取 Google Fit 來源的步數。</string>
     <string name="settings_023">小米 Zepp Life 的步數有兩種途徑進入 Health Connect：直接寫入，或先同步到 Google Fit 再由它寫入。本 App 會先讀 Zepp Life 來源，沒有資料時改讀 Google Fit。</string>
@@ -196,7 +196,6 @@
     <!-- detail_vm -->
     <string name="detail_vm_001">找不到這筆紀錄</string>
     <string name="detail_vm_002">這筆紀錄尚未結束</string>
-    <string name="detail_vm_003">步數來源設為手機感測器，無需同步；若要使用 Zepp Life 或 Google Fit，請到「設定」切換步數來源。</string>
     <string name="detail_vm_004">；網頁上傳失敗：%1$s</string>
     <string name="detail_vm_005">，並已更新網頁儀表板</string>
     <string name="detail_vm_006">已更新步數為 %1$d（來源：%2$s）%3$s</string>

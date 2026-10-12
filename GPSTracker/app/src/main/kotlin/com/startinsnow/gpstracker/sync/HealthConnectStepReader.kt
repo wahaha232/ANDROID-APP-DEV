@@ -91,6 +91,9 @@ class HealthConnectStepReader(private val context: Context) {
         return googleFitSteps(startMs, endMs)
     }
 
+    /** 只讀 Zepp Life／小米自己的來源（不退回 Google Fit）。 */
+    suspend fun zeppDirectSteps(startMs: Long, endMs: Long): Result<Long> = aggregateSteps(startMs, endMs, zeppOrigins)
+
     /** Google Fit 來源步數（經 Health Connect，免 Google OAuth）。 */
     suspend fun googleFitSteps(startMs: Long, endMs: Long): Result<Long> = aggregateSteps(startMs, endMs, googleFitOrigins)
 

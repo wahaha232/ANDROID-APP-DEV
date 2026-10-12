@@ -9,12 +9,9 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.startinsnow.gpstracker.GpsTrackerApplication
 import com.startinsnow.gpstracker.core.model.TrackStatus
-import com.startinsnow.gpstracker.data.prefs.StepSource
 import com.startinsnow.gpstracker.sync.StepResolver
-import com.startinsnow.gpstracker.sync.StepSourceTag
 import com.startinsnow.gpstracker.sync.WebDashboardSync
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.flow.first
 
 /**
  * 錄製結束後延後重讀 Health Connect 步數。
@@ -28,19 +25,15 @@ class StepResyncWorker(context: Context, params: WorkerParameters) : CoroutineWo
     override suspend fun doWork(): Result {
         val trackId = inputData.getString(KEY_TRACK_ID) ?: return Result.success()
         val app = applicationContext as GpsTrackerApplication
-        val source = runCatching { app.settingsRepository.settings.first().stepSource }.getOrNull()
-            ?: return Result.success()
-        if (source == StepSource.DEVICE_SENSOR) return Result.success()
-
         val track = app.trackRepository.getTrack(trackId) ?: return Result.success()
         if (track.status != TrackStatus.FINISHED) return Result.success()
         val endMs = track.endTimeMs ?: return Result.success()
 
-        val steps = StepResolver(applicationContext).readHealthConnect(source, track.startTimeMs, endMs)
-            .getOrNull()
-            ?.takeIf { it > 0 }
+        // Google Fit 為主；目前讀不到（手環還沒同步）就等下一次補讀。
+        val resolved = StepResolver(applicationContext).resolveHealthConnect(track.startTimeMs, endMs).getOrNull()
             ?: return Result.success()
-        val tag = StepSourceTag.forSource(source)
+        val steps = resolved.steps
+        val tag = resolved.sourceTag
         val changed = steps != track.stepCount || tag != track.stepSource
         if (changed) app.trackRepository.updateSteps(trackId, steps, tag)
 

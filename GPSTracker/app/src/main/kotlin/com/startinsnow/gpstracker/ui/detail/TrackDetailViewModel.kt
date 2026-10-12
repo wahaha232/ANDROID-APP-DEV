@@ -8,7 +8,6 @@ import com.startinsnow.gpstracker.data.db.PhotoEntity
 import com.startinsnow.gpstracker.data.db.GpsOutageEntity
 import com.startinsnow.gpstracker.data.db.TrackEntity
 import com.startinsnow.gpstracker.data.db.TrackPointEntity
-import com.startinsnow.gpstracker.data.prefs.StepSource
 import com.startinsnow.gpstracker.export.ExportTrackData
 import com.startinsnow.gpstracker.playback.PlaybackFrame
 import com.startinsnow.gpstracker.playback.PlaybackPhotoMarker
@@ -21,7 +20,6 @@ import com.startinsnow.gpstracker.sync.StepSourceTag
 import com.startinsnow.gpstracker.sync.WebDashboardSync
 import java.io.File
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -121,15 +119,13 @@ class TrackDetailViewModel(
     suspend fun resyncSteps(): String {
         val t = app.trackRepository.getTrack(trackId) ?: return app.getString(R.string.detail_vm_001)
         val endMs = t.endTimeMs ?: return app.getString(R.string.detail_vm_002)
-        val source = app.settingsRepository.settings.first().stepSource
-        if (source == StepSource.DEVICE_SENSOR) {
-            return app.getString(R.string.detail_vm_003)
-        }
         return withContext(Dispatchers.IO) {
-            StepResolver(app).readHealthConnect(source, t.startTimeMs, endMs).fold(
-                onSuccess = { steps ->
-                    if (steps > 0) {
-                        val tag = StepSourceTag.forSource(source)
+            // Google Fit 為主（與設定頁選的來源無關）。
+            StepResolver(app).resolveHealthConnect(t.startTimeMs, endMs).fold(
+                onSuccess = { resolved ->
+                    if (resolved != null) {
+                        val steps = resolved.steps
+                        val tag = resolved.sourceTag
                         app.trackRepository.updateSteps(trackId, steps, tag)
                         val web = WebDashboardSync.uploadIfConfigured(app, trackId, onlyIfAlreadyOnWeb = true)
                         val webNote = when {

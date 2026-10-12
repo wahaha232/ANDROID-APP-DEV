@@ -656,10 +656,10 @@ class TrackingForegroundService : LifecycleService() {
      * （之後由 StepResyncWorker 或詳情頁「重新同步步數」補讀）。不再把所有來源相加，避免重複計算。
      */
     private suspend fun resolveFinalStepCount(trackId: String, sensorSteps: Long, endMs: Long): ResolvedSteps {
-        val sensorOnly = ResolvedSteps(sensorSteps, StepSourceTag.SENSOR)
-        val settings = runCatching { app.settingsRepository.settings.first() }.getOrNull() ?: return sensorOnly
-        val startMs = app.trackRepository.getTrack(trackId)?.startTimeMs ?: return sensorOnly
-        return StepResolver(this).resolve(settings.stepSource, startMs, endMs, sensorSteps)
+        val startMs = app.trackRepository.getTrack(trackId)?.startTimeMs
+            ?: return ResolvedSteps(sensorSteps, StepSourceTag.SENSOR)
+        // 一律以 Google Fit 為主（與設定頁選的來源無關）；讀不到才用手機感測器並稍後補讀。
+        return StepResolver(this).resolve(startMs, endMs, sensorSteps)
     }
 
     private fun resetAggregation() {

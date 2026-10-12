@@ -69,10 +69,22 @@ class StepResolver(context: Context) {
         return reader.allSteps(startMs, endMs)
     }
 
-    suspend fun resolve(source: StepSource, startMs: Long, endMs: Long, sensorSteps: Long): ResolvedSteps {
-        if (source == StepSource.DEVICE_SENSOR) return ResolvedSteps(sensorSteps, StepSourceTag.SENSOR)
-        val hc = readHealthConnect(source, startMs, endMs).getOrNull()
-        return if (hc != null && hc > 0) ResolvedSteps(hc, StepSourceTag.forSource(source))
-        else ResolvedSteps(sensorSteps, StepSourceTag.SENSOR_FALLBACK)
+    /**
+     * 一趟軌跡在 Health Connect 的步數，**以 Google Fit 為主**（小米 Zepp Life 的步數就是經由 Google Fit 進來的）；
+     * Google Fit 沒有資料時才試 Zepp 自己的來源。回傳 null＝目前都沒有資料（例如手環還沒同步）；
+     * failure＝讀取失敗（沒有 Health Connect、沒授權…）。
+     */
+    suspend fun resolveHealthConnect(startMs: Long, endMs: Long): Result<ResolvedSteps?> {
+        if (!reader.isAvailable()) return Result.failure(IllegalStateException("此裝置未提供 Health Connect"))
+        val fit = reader.googleFitSteps(startMs, endMs)
+        fit.getOrNull()?.takeIf { it > 0L }?.let { return Result.success(ResolvedSteps(it, StepSourceTag.GOOGLE_FIT)) }
+        val zepp = reader.zeppDirectSteps(startMs, endMs)
+        zepp.getOrNull()?.takeIf { it > 0L }?.let { return Result.success(ResolvedSteps(it, StepSourceTag.ZEPP_LIFE)) }
+        return if (fit.isFailure && zepp.isFailure) Result.failure(fit.exceptionOrNull()!!) else Result.success(null)
     }
+
+    /** 結束記錄時採用的步數：Google Fit 為主，讀不到（尚未同步／沒授權）才退回手機感測器，之後會再補讀。 */
+    suspend fun resolve(startMs: Long, endMs: Long, sensorSteps: Long): ResolvedSteps =
+        resolveHealthConnect(startMs, endMs).getOrNull()
+            ?: ResolvedSteps(sensorSteps, StepSourceTag.SENSOR_FALLBACK)
 }
