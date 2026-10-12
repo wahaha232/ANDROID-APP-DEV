@@ -21,6 +21,8 @@
   var currentTrack = null;
   var map = null;
   var allRoutesLoaded = false;
+  var mapReady = false;   // 地圖圖層建立完成前，與地圖相關的動作先排隊，清單與統計不必等地圖
+  var mapQueue = [];
 
   var MODE_EMOJI = {
     WALKING: "🚶", RUNNING: "🏃", BICYCLE: "🚲", CYCLING: "🚲", VEHICLE: "🚗", DRIVING: "🚗",
@@ -55,6 +57,10 @@
   }
 
   // ---- 地圖 ----
+  function whenMapReady(fn) {
+    if (mapReady) fn(); else mapQueue.push(fn);
+  }
+
   function initMap() {
     map = new maplibregl.Map({
       container: "map",
@@ -79,7 +85,8 @@
       map.addLayer({ id: "allroutes-line", type: "line", source: "allroutes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#2F6BFF", "line-width": 3, "line-opacity": 0.8 } });
       map.addSource("photos", { type: "geojson", data: GPST.emptyFC() });
       map.addLayer({ id: "photos-dot", type: "circle", source: "photos", paint: { "circle-radius": 5, "circle-color": "#FFB300", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
-      loadManifest();
+      mapReady = true;
+      mapQueue.splice(0).forEach(function (fn) { fn(); });
     });
   }
 
@@ -222,8 +229,8 @@
     renderList();
     loadTrack(trackId).then(function (t) {
       currentTrack = t;
-      drawTrack(t);
       renderDetail(t);
+      whenMapReady(function () { if (selected === trackId) drawTrack(t); });
     }).catch(function (e) {
       $("detailTitle").textContent = "讀取失敗：" + e.message;
     });
@@ -384,6 +391,7 @@
   }
 
   function renderAllRoutes() {
+    if (!mapReady) { whenMapReady(renderAllRoutes); return; }
     var on = $("showAll").checked;
     $("hint").style.display = on ? "none" : (selected ? "none" : "block");
     if (!on) {
@@ -427,8 +435,10 @@
     }, 150);
   });
 
+  // 清單／統計只依賴 manifest.json，立即載入，不等地圖與圖磚。
+  loadManifest();
   if (typeof maplibregl === "undefined") {
-    $("summary").textContent = "找不到 MapLibre（請確認 vendor/maplibre-gl.js 是否存在）";
+    $("hint").textContent = "找不到 MapLibre（請確認 vendor/maplibre-gl.js 是否存在）";
   } else {
     initMap();
   }

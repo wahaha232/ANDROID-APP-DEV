@@ -5,29 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>GPS Tracker 3D 回放</title>
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
-  <script src="common.js"></script>
+  <script src="common.js?v=042e6b86"></script>
   <script src="vendor/maplibre-gl.js"></script>
   <style>
-    html, body { height: 100%; margin: 0; background: #000; overflow: hidden; color: #fff;
-      font-family: -apple-system, Roboto, "Noto Sans TC", sans-serif; }
+    html, body { height: 100%; margin: 0; background: #000; overflow: hidden; color: #eaf0fb;
+      font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      -webkit-font-smoothing: antialiased; }
     #map { position: absolute; inset: 0; }
-    #hud { position: absolute; top: 12px; left: 12px; z-index: 10; background: rgba(10,15,25,.72);
-      border-radius: 12px; padding: 10px 14px; box-shadow: 0 4px 16px rgba(0,0,0,.35); min-width: 140px; }
-    #hud .big { font-size: 24px; font-weight: 700; line-height: 1.1; }
-    #hud .unit { font-size: 12px; opacity: .75; margin-left: 3px; }
-    #hud .row { font-size: 13px; margin-top: 4px; }
+    #hud, #controls { -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%);
+      border: 1px solid rgba(76,141,255,.28); box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+    #hud { position: absolute; top: 14px; left: 14px; z-index: 10; background: rgba(9,14,25,.7);
+      border-radius: 16px; padding: 12px 16px; min-width: 150px; }
+    #hud .big { font-size: 28px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums;
+      background: linear-gradient(135deg,#4c8dff,#22d3ee); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    #hud .unit { font-size: 12px; opacity: .75; margin-left: 4px; }
+    #hud .row { font-size: 13px; margin-top: 5px; font-variant-numeric: tabular-nums; }
     #hud .label { opacity: .6; }
-    #controls { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 10;
-      background: rgba(10,15,25,.82); border-radius: 14px; padding: 10px 12px; }
+    #controls { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 10;
+      background: rgba(9,14,25,.78); border-radius: 18px; padding: 12px 16px; }
     #controls .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    #seek { width: 100%; }
-    button, a.btn { background: #2f6bff; color: #fff; border: none; border-radius: 10px;
-      padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; }
-    button.secondary { background: #1a2438; border: 1px solid #26324a; }
-    button.chip { background: #1a2438; border: 1px solid #26324a; padding: 6px 10px; }
-    button.chip.active { background: #2f6bff; border-color: #2f6bff; }
-    #back { position: absolute; top: 12px; right: 12px; z-index: 10; }
-    #status { position: absolute; top: 50%; left: 0; right: 0; text-align: center; color: #9aa7bd; }
+    #seek { width: 100%; accent-color: #4c8dff; }
+    button, a.btn { background: linear-gradient(135deg,#4c8dff,#7a5cff); color: #fff; border: 1px solid transparent; border-radius: 999px;
+      padding: 8px 16px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; text-decoration: none;
+      box-shadow: 0 4px 14px rgba(76,141,255,.3); transition: filter .15s, transform .15s; }
+    button:hover, a.btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    button.secondary { background: #16223a; border: 1px solid #2c3f63; box-shadow: none; }
+    button.chip { background: #16223a; border: 1px solid #2c3f63; padding: 6px 12px; box-shadow: none; }
+    button.chip.active { background: linear-gradient(135deg,#4c8dff,#7a5cff); border-color: transparent; }
+    #back { position: absolute; top: 14px; right: 14px; z-index: 10; }
+    #status { position: absolute; top: 50%; left: 0; right: 0; text-align: center; color: #8c9ab3; }
   </style>
 </head>
 <body>
