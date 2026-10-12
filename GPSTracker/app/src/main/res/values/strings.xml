@@ -283,4 +283,17 @@
     <string name="diag_count">最近有 %1$d 筆當機紀錄（只存在這支手機，不會自動上傳）。</string>
     <string name="diag_share">分享最新一筆</string>
     <string name="diag_clear">清除</string>
+    <!-- backup / restore -->
+    <string name="backup_title">資料備份</string>
+    <string name="backup_desc">把這支手機上所有的軌跡與照片打包成一個 ZIP（不含設定與 GitHub Token），可存到雲端硬碟或傳給自己；換手機或重裝 App 前建議先匯出。</string>
+    <string name="backup_export">匯出全部資料</string>
+    <string name="backup_import">匯入還原…</string>
+    <string name="backup_exporting">打包中…</string>
+    <string name="backup_export_failed">匯出失敗：%1$s</string>
+    <string name="backup_invalid">這個檔案無法還原：%1$s</string>
+    <string name="backup_confirm_title">還原這份備份？</string>
+    <string name="backup_confirm_body">這份備份含 %1$d 張照片。還原會「覆蓋」這支手機上目前所有的軌跡與照片，無法復原；建議先按「匯出全部資料」留一份目前的資料。還原完成後 App 會自動重新啟動。</string>
+    <string name="backup_confirm_ok">覆蓋並還原</string>
+    <string name="backup_cancel">取消</string>
+    <string name="backup_restore_failed">還原失敗（目前的資料沒有被動到）：%1$s</string>
 </resources>

@@ -329,6 +329,86 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 }
             }
 
+            SettingsSection(title = context.getString(R.string.backup_title)) {
+                val appContext = context.applicationContext as com.startinsnow.gpstracker.GpsTrackerApplication
+                var busy by remember { mutableStateOf(false) }
+                var backupMessage by remember { mutableStateOf<String?>(null) }
+                var pendingRestore by remember { mutableStateOf<Pair<android.net.Uri, Int>?>(null) }
+                val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                    if (uri != null) scope.launch {
+                        busy = true
+                        backupMessage = null
+                        com.startinsnow.gpstracker.data.backup.BackupManager.inspect(appContext, uri)
+                            .onSuccess { pendingRestore = uri to it.photoCount }
+                            .onFailure { backupMessage = context.getString(R.string.backup_invalid, it.message ?: it::class.java.simpleName) }
+                        busy = false
+                    }
+                }
+                Text(
+                    stringResource(R.string.backup_desc),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        enabled = !busy,
+                        onClick = {
+                            scope.launch {
+                                busy = true
+                                backupMessage = context.getString(R.string.backup_exporting)
+                                runCatching { com.startinsnow.gpstracker.data.backup.BackupManager.export(appContext) }
+                                    .onSuccess {
+                                        backupMessage = null
+                                        com.startinsnow.gpstracker.data.backup.BackupManager.share(context, it)
+                                    }
+                                    .onFailure { backupMessage = context.getString(R.string.backup_export_failed, it.message ?: it::class.java.simpleName) }
+                                busy = false
+                            }
+                        }
+                    ) { Text(stringResource(R.string.backup_export)) }
+                    OutlinedButton(
+                        enabled = !busy,
+                        onClick = { pickBackup.launch(arrayOf("application/zip", "application/octet-stream")) }
+                    ) { Text(stringResource(R.string.backup_import)) }
+                }
+                backupMessage?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
+                pendingRestore?.let { (uri, photoCount) ->
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { pendingRestore = null },
+                        title = { Text(stringResource(R.string.backup_confirm_title)) },
+                        text = { Text(stringResource(R.string.backup_confirm_body, photoCount)) },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                pendingRestore = null
+                                scope.launch {
+                                    busy = true
+                                    com.startinsnow.gpstracker.data.backup.BackupManager.restore(appContext, uri)
+                                        .onSuccess { com.startinsnow.gpstracker.data.backup.BackupManager.restartApp(appContext) }
+                                        .onFailure { backupMessage = context.getString(R.string.backup_restore_failed, it.message ?: it::class.java.simpleName) }
+                                    busy = false
+                                }
+                            }) { Text(stringResource(R.string.backup_confirm_ok), color = MaterialTheme.colorScheme.error) }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { pendingRestore = null }) {
+                                Text(stringResource(R.string.backup_cancel))
+                            }
+                        }
+                    )
+                }
+            }
+
             SettingsSection(title = context.getString(R.string.diag_title)) {
                 var crashCount by remember { mutableStateOf(com.startinsnow.gpstracker.diagnostics.CrashLogger.count(context)) }
                 Text(

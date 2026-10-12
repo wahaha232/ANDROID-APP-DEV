@@ -102,6 +102,13 @@ interface PhotoDao {
 
     @Query("DELETE FROM photos WHERE trackId = :trackId")
     suspend fun deleteForTrack(trackId: String)
+
+    /** 還原備份後修正照片路徑用。 */
+    @Query("SELECT * FROM photos")
+    suspend fun getAll(): List<PhotoEntity>
+
+    @Query("UPDATE photos SET filePath = :path WHERE photoId = :photoId")
+    suspend fun updatePath(photoId: String, path: String)
 }
 
 @Dao
