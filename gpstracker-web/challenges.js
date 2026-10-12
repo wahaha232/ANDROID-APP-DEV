@@ -503,7 +503,7 @@
       Object.keys(src.others || {}).forEach(function (k) { others[k] = true; });
     });
     if (has.phone) defs.push({ k: "phone", name: "手機本身" });
-    if (has.googleFit) defs.push({ k: "googleFit", name: "Google Fit" });
+    if (has.googleFit) defs.push({ k: "googleFit", name: "Google Fit（小米 Zepp Life）" });
     if (has.zepp) defs.push({ k: "zepp", name: "Zepp Life／小米" });
     Object.keys(others).forEach(function (k) { defs.push({ k: "o:" + k, name: shortPkg(k) }); });
     return defs;
@@ -543,7 +543,7 @@
     var panel = $("panel-steps");
     var defs = seriesDefs(daily);
     var keys = defs.map(function (x) { return x.k; });
-    if (!stepSeries || keys.indexOf(stepSeries) < 0) stepSeries = keys.indexOf("phone") >= 0 ? "phone" : "total";
+    if (!stepSeries || keys.indexOf(stepSeries) < 0) stepSeries = keys.indexOf("googleFit") >= 0 ? "googleFit" : keys.indexOf("phone") >= 0 ? "phone" : "total";
     var k = stepSeries;
     var now = Date.now();
     var days = daily.days.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
@@ -590,8 +590,7 @@
     });
     html += "</ul>";
     html += '<div class="muted" style="margin-top:10px">右側數字為「合計（去除重複）」：Health Connect 依優先順序，同一段時間被多個來源記錄時只算一次。' +
-      "若某個來源明顯偏高（例如 Google Fit 與手機差很多），多半是重複記錄；可到手機「Health Connect → 資料來源優先順序」把「手機」排在前面。" +
-      "資料更新時間：" + fmtDate(daily.updatedAt || 0) + "（由 App 同步）。</div>";
+      "小米 Zepp Life 的步數會先同步到 Google Fit 再進入 Health Connect。資料更新時間：" + fmtDate(daily.updatedAt || 0) + "（由 App 同步）。</div>";
     panel.innerHTML = html;
 
     Array.prototype.forEach.call(panel.querySelectorAll("[data-series]"), function (b) {
