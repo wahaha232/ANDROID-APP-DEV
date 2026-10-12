@@ -1,5 +1,6 @@
 package com.startinsnow.gpstracker.ui.detail
 
+import com.startinsnow.gpstracker.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.startinsnow.gpstracker.GpsTrackerApplication
@@ -118,11 +119,11 @@ class TrackDetailViewModel(
      * Zepp Life 需先讓手環同步到手機並寫入 Health Connect，再按此鈕。
      */
     suspend fun resyncSteps(): String {
-        val t = app.trackRepository.getTrack(trackId) ?: return "找不到這筆紀錄"
-        val endMs = t.endTimeMs ?: return "這筆紀錄尚未結束"
+        val t = app.trackRepository.getTrack(trackId) ?: return app.getString(R.string.detail_vm_001)
+        val endMs = t.endTimeMs ?: return app.getString(R.string.detail_vm_002)
         val source = app.settingsRepository.settings.first().stepSource
         if (source == StepSource.DEVICE_SENSOR) {
-            return "步數來源設為手機感測器，無需同步；若要使用 Zepp Life 或 Google Fit，請到「設定」切換步數來源。"
+            return app.getString(R.string.detail_vm_003)
         }
         return withContext(Dispatchers.IO) {
             StepResolver(app).readHealthConnect(source, t.startTimeMs, endMs).fold(
@@ -132,16 +133,16 @@ class TrackDetailViewModel(
                         app.trackRepository.updateSteps(trackId, steps, tag)
                         val web = WebDashboardSync.uploadIfConfigured(app, trackId)
                         val webNote = when {
-                            web.isFailure -> "；網頁上傳失敗：${web.exceptionOrNull()?.message}"
-                            web.getOrNull() == WebDashboardSync.Outcome.UPLOADED -> "，並已更新網頁儀表板"
+                            web.isFailure -> app.getString(R.string.detail_vm_004, web.exceptionOrNull()?.message)
+                            web.getOrNull() == WebDashboardSync.Outcome.UPLOADED -> app.getString(R.string.detail_vm_005)
                             else -> ""
                         }
-                        "已更新步數為 $steps（來源：${StepSourceTag.label(tag)}）$webNote"
+                        app.getString(R.string.detail_vm_006, steps, app.getString(StepSourceTag.labelRes(tag)), webNote)
                     } else {
-                        "Health Connect 目前沒有這段時間的步數。請先開啟 Zepp Life（或 Google Fit）讓手環同步，再按一次。"
+                        app.getString(R.string.detail_vm_007)
                     }
                 },
-                onFailure = { "讀取 Health Connect 失敗：${it.message ?: it::class.java.simpleName}（請確認已在「設定」授權讀取步數）" }
+                onFailure = { app.getString(R.string.detail_vm_008, it.message ?: it::class.java.simpleName) }
             )
         }
     }

@@ -1,5 +1,6 @@
 package com.startinsnow.gpstracker.ui.recording
 
+import com.startinsnow.gpstracker.R
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import com.startinsnow.gpstracker.GpsTrackerApplication
@@ -40,7 +41,7 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
     /** 拍照；失敗時回傳可顯示給使用者的訊息，而不是靜默失敗。 */
     suspend fun capturePhoto(type: PhotoType): Result<Unit> {
         val trackId = state.value.trackId
-            ?: return Result.failure(IllegalStateException("目前沒有進行中的記錄，無法拍照"))
+            ?: return Result.failure(IllegalStateException(app.getString(R.string.recording_vm_001)))
         val sample = lastLocation.value
         return runCatching {
             val file = photoManager.capturePhoto(trackId, type, sample)

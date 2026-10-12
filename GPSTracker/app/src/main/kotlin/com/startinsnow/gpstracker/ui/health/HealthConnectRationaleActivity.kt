@@ -1,6 +1,7 @@
 package com.startinsnow.gpstracker.ui.health
 
 import android.os.Bundle
+import com.startinsnow.gpstracker.R
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -18,9 +19,7 @@ class HealthConnectRationaleActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val pad = (24 * resources.displayMetrics.density).toInt()
         val text = TextView(this).apply {
-            text = "GPS TRACKER 需要讀取 Health Connect 的「步數」，用來記錄每趟活動的步數。" +
-                "\n\n步數只會在記錄結束後，讀取該趟時間區間的資料；不會上傳到第三方服務。" +
-                "\n\n你可以隨時在 Health Connect 中撤銷此權限。"
+            text = getString(R.string.hc_rationale_body)
             textSize = 16f
             gravity = Gravity.CENTER
             setPadding(pad, pad, pad, pad)

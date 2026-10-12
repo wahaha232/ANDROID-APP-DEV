@@ -1,5 +1,7 @@
 package com.startinsnow.gpstracker.ui.settings
 
+import com.startinsnow.gpstracker.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -70,7 +72,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     val activityPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (!granted) hcStatus = "未取得「活動辨識」權限，Health Connect 步數可能無法讀取"
+        if (!granted) hcStatus = context.getString(R.string.settings_001)
     }
 
     val hcLauncher = rememberLauncherForActivityResult(
@@ -78,30 +80,30 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     ) { granted ->
         hcStatus = if (granted.contains(HealthConnectStepReader.READ_PERMISSION)) {
             if (hcBackgroundRequested && !granted.contains(HealthConnectStepReader.BACKGROUND_PERMISSION)) {
-                "已授權讀取步數，但未授權「背景讀取」：錄製結束時 App 不在前景，可能讀不到 Zepp Life／Google Fit 步數（會改用手機感測器）。"
+                context.getString(R.string.settings_002)
             } else {
-                "已授權 Health Connect 讀取步數"
+                context.getString(R.string.settings_003)
             }
         } else {
-            "未授權 Health Connect 讀取步數"
+            context.getString(R.string.settings_004)
         }
     }
 
     val runHcDiagnostics: () -> Unit = {
         val reader = HealthConnectStepReader(context)
         scope.launch {
-            hcStatus = "檢查中…"
+            hcStatus = context.getString(R.string.settings_005)
             hcStatus = when {
-                !reader.isAvailable() -> "此裝置未提供 Health Connect。"
-                !reader.hasPermission() -> "尚未授權 Health Connect 讀取步數，請先按上方授權。"
+                !reader.isAvailable() -> context.getString(R.string.settings_006)
+                !reader.hasPermission() -> context.getString(R.string.settings_007)
                 else -> reader.stepsByOriginLastDays(7).fold(
                     onSuccess = { m ->
                         val bgWarn = if (reader.isBackgroundReadSupported() && !reader.hasBackgroundPermission())
-                            "\n⚠ 尚未授權「背景讀取」，錄製結束時可能讀不到步數，請再按上方授權。" else ""
-                        if (m.isEmpty()) "近 7 天 Health Connect 沒有任何步數資料（請確認來源 App 已同步到 Health Connect）。$bgWarn"
-                        else "近 7 天步數來源：\n" + m.entries.joinToString("\n") { "• ${it.key}：${it.value} 步" } + bgWarn
+                            context.getString(R.string.settings_008) else ""
+                        if (m.isEmpty()) context.getString(R.string.settings_009, bgWarn)
+                        else context.getString(R.string.settings_010) + m.entries.joinToString("\n") { context.getString(R.string.settings_011, it.key, it.value) } + bgWarn
                     },
-                    onFailure = { "檢查失敗：${it.message}" }
+                    onFailure = { context.getString(R.string.settings_012, it.message) }
                 )
             }
         }
@@ -116,7 +118,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text("設定", style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(R.string.settings_013), style = MaterialTheme.typography.titleLarge) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
@@ -129,23 +131,23 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            SettingsSection(title = "記錄") {
+            SettingsSection(title = context.getString(R.string.settings_014)) {
                 SwitchRow(
-                    title = "高精度 GPS 模式",
-                    subtitle = "提高定位更新頻率，較耗電",
+                    title = context.getString(R.string.settings_015),
+                    subtitle = context.getString(R.string.settings_016),
                     checked = settings.gpsMode == GpsMode.HIGH_ACCURACY
                 ) { viewModel.setGpsMode(if (it) GpsMode.HIGH_ACCURACY else GpsMode.ADAPTIVE) }
                 SectionDivider()
                 SwitchRow(
-                    title = "自動暫停",
-                    subtitle = "靜止超過 1 分鐘後自動暫停記錄",
+                    title = context.getString(R.string.settings_017),
+                    subtitle = context.getString(R.string.settings_018),
                     checked = settings.autoPauseEnabled
                 ) { viewModel.setAutoPause(it) }
             }
 
-            SettingsSection(title = "步數") {
+            SettingsSection(title = context.getString(R.string.settings_019)) {
                 Text(
-                    "記錄結束時讀取該趟步數；讀取失敗或未授權時自動改用裝置感測器。",
+                    stringResource(R.string.settings_020),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -176,7 +178,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                                 activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
                             }
                         },
-                        label = { Text("小米 Zepp Life") }
+                        label = { Text(stringResource(R.string.settings_021)) }
                     )
                 }
                 SectionDivider()
@@ -186,17 +188,17 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 ) {
                     when (settings.stepSource) {
                         StepSource.GOOGLE_FIT -> Text(
-                            "Google Fit 的步數會同步到 Health Connect（免 Google OAuth）；本 App 會讀取 Google Fit 來源的步數。",
+                            stringResource(R.string.settings_022),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         StepSource.ZEPP_LIFE -> Text(
-                            "小米 Zepp Life / Mi Fitness 的步數會同步到 Health Connect；請先在 Zepp Life 開啟同步。本 App 會讀取 Zepp Life／Mi Fitness 來源的步數。",
+                            stringResource(R.string.settings_023),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         StepSource.DEVICE_SENSOR -> Text(
-                            "使用手機內建步數感測器（最省電、不需額外授權）。",
+                            stringResource(R.string.settings_024),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -212,14 +214,14 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("授權 Health Connect 讀取步數") }
+                        ) { Text(stringResource(R.string.settings_025)) }
                         OutlinedButton(
                             onClick = { runHcDiagnostics() },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("檢查 Health Connect 資料") }
+                        ) { Text(stringResource(R.string.settings_026)) }
                         if (!healthConnectAvailable(context)) {
                             Text(
-                                "此裝置未偵測到 Health Connect，請先安裝並啟用。",
+                                stringResource(R.string.settings_027),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
                             )
@@ -231,43 +233,43 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 }
             }
 
-            SettingsSection(title = "雲端同步") {
+            SettingsSection(title = context.getString(R.string.settings_028)) {
                 SwitchRow(
-                    title = "啟用 Google Drive 同步",
-                    subtitle = "將軌跡打包上傳到你的 Google Drive",
+                    title = context.getString(R.string.settings_029),
+                    subtitle = context.getString(R.string.settings_030),
                     checked = settings.driveSyncEnabled
                 ) { viewModel.setDriveSync(it) }
                 SectionDivider()
                 SwitchRow(
-                    title = "僅限 Wi-Fi 上傳",
-                    subtitle = "避免使用行動網路流量",
+                    title = context.getString(R.string.settings_031),
+                    subtitle = context.getString(R.string.settings_032),
                     checked = settings.wifiOnlySync
                 ) { viewModel.setWifiOnly(it) }
                 SectionDivider()
                 SwitchRow(
-                    title = "上傳成功後刪除本機資料",
-                    subtitle = "成功上傳後清空裝置上的該筆紀錄",
+                    title = context.getString(R.string.settings_033),
+                    subtitle = context.getString(R.string.settings_034),
                     checked = settings.deleteLocalAfterUploadEnabled
                 ) { viewModel.setDeleteAfterUpload(it) }
             }
 
-            SettingsSection(title = "離線地圖") {
+            SettingsSection(title = context.getString(R.string.settings_035)) {
                 SwitchRow(
-                    title = "下載離線地圖",
-                    subtitle = "下載台灣本島區域，無網路時仍可顯示地圖",
+                    title = context.getString(R.string.settings_036),
+                    subtitle = context.getString(R.string.settings_037),
                     checked = settings.offlineMapEnabled
                 ) { enabled ->
                     viewModel.setOfflineMap(enabled)
                     // 先取消舊的下載，避免反覆開關時同時跑多個 collector 而重複下載。
                     offlineDownloadJob?.cancel()
                     if (enabled) {
-                        offlineMapStatus = "下載中… 0%"
+                        offlineMapStatus = context.getString(R.string.settings_038)
                         offlineDownloadJob = scope.launch {
                             OfflineMapManager.downloadDefaultRegion(context).collect { progress ->
                                 offlineMapStatus = when (progress) {
-                                    is OfflineDownloadProgress.InProgress -> "下載中… ${progress.percent}%"
-                                    is OfflineDownloadProgress.Completed -> "離線地圖下載完成"
-                                    is OfflineDownloadProgress.Failed -> "下載失敗：${progress.reason}"
+                                    is OfflineDownloadProgress.InProgress -> context.getString(R.string.settings_039, progress.percent)
+                                    is OfflineDownloadProgress.Completed -> context.getString(R.string.settings_040)
+                                    is OfflineDownloadProgress.Failed -> context.getString(R.string.settings_041, progress.reason)
                                 }
                             }
                         }
@@ -285,9 +287,13 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 }
             }
 
-            SettingsSection(title = "資料保留") {
+            SettingsSection(title = context.getString(R.string.settings_042)) {
                 Text(
-                    "本機資料保留：${if (settings.dataRetentionDays == 0) "永久保留" else "${settings.dataRetentionDays} 天"}",
+                    stringResource(
+                        R.string.settings_043,
+                        if (settings.dataRetentionDays == 0) stringResource(R.string.settings_retention_forever)
+                        else stringResource(R.string.settings_retention_days, settings.dataRetentionDays)
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp)
@@ -295,9 +301,9 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 if (settings.dataRetentionDays != 0) {
                     Text(
                         if (settings.driveSyncEnabled) {
-                            "已開啟 Google Drive 同步：只會自動清理「已成功備份」的紀錄，尚未備份的不會被刪除。"
+                            stringResource(R.string.settings_044)
                         } else {
-                            "⚠ 尚未開啟 Google Drive 同步：超過天數的紀錄會被永久刪除且無備份。"
+                            stringResource(R.string.settings_045)
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (settings.driveSyncEnabled) MaterialTheme.colorScheme.onSurfaceVariant
@@ -313,31 +319,31 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                         FilterChip(
                             selected = settings.dataRetentionDays == days,
                             onClick = { viewModel.setRetentionDays(days) },
-                            label = { Text(if (days == 0) "永久" else "$days 天") }
+                            label = { Text(if (days == 0) stringResource(R.string.settings_046) else stringResource(R.string.settings_047, days)) }
                         )
                     }
                 }
             }
 
-            SettingsSection(title = "網頁儀表板（GitHub Pages）") {
+            SettingsSection(title = context.getString(R.string.settings_048)) {
                 SwitchRow(
-                    title = "自動上傳到網頁",
-                    subtitle = "記錄結束後，把該筆紀錄上傳到 GitHub repo 供網頁讀取",
+                    title = context.getString(R.string.settings_049),
+                    subtitle = context.getString(R.string.settings_050),
                     checked = settings.webUploadEnabled
                 ) { viewModel.setWebUpload(it) }
                 SectionDivider()
-                SettingsTextField("GitHub 儲存庫 (owner/repo)", settings.webRepo) { viewModel.setWebRepo(it) }
-                SettingsTextField("分支", settings.webBranch) { viewModel.setWebBranch(it) }
-                SettingsTextField("資料夾路徑", settings.webDataPath) { viewModel.setWebDataPath(it) }
-                SettingsTextField("GitHub Token（fine-grained PAT）", settings.githubToken, isSecret = true) { viewModel.setGithubToken(it) }
+                SettingsTextField(context.getString(R.string.settings_051), settings.webRepo) { viewModel.setWebRepo(it) }
+                SettingsTextField(context.getString(R.string.settings_052), settings.webBranch) { viewModel.setWebBranch(it) }
+                SettingsTextField(context.getString(R.string.settings_053), settings.webDataPath) { viewModel.setWebDataPath(it) }
+                SettingsTextField(context.getString(R.string.settings_054), settings.githubToken, isSecret = true) { viewModel.setGithubToken(it) }
                 SectionDivider()
                 SwitchRow(
-                    title = "僅限 Wi-Fi 上傳",
-                    subtitle = "避免使用行動網路流量",
+                    title = context.getString(R.string.settings_031),
+                    subtitle = context.getString(R.string.settings_032),
                     checked = settings.webWifiOnly
                 ) { viewModel.setWebWifiOnly(it) }
                 Text(
-                    "設定好儲存庫、分支、路徑與 token 後，每次記錄結束會自動上傳。\n網頁網址：https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/",
+                    stringResource(R.string.settings_055),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp)

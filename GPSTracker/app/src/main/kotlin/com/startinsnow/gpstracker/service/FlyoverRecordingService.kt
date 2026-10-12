@@ -1,5 +1,6 @@
 package com.startinsnow.gpstracker.service
 
+import com.startinsnow.gpstracker.R
 import android.app.Activity
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -152,14 +153,14 @@ class FlyoverRecordingService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "3D 飛越錄影", NotificationManager.IMPORTANCE_LOW).apply {
+                NotificationChannel(CHANNEL_ID, getString(R.string.flyover_001), NotificationManager.IMPORTANCE_LOW).apply {
                     setShowBadge(false)
                 }
             )
         }
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("正在錄製 3D 飛越…")
-            .setContentText("錄影中，完成後可分享到社群")
+            .setContentTitle(getString(R.string.flyover_002))
+            .setContentText(getString(R.string.flyover_003))
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

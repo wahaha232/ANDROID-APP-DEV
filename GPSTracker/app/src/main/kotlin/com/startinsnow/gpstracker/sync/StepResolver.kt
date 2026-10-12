@@ -1,6 +1,8 @@
 package com.startinsnow.gpstracker.sync
 
 import android.content.Context
+import androidx.annotation.StringRes
+import com.startinsnow.gpstracker.R
 import com.startinsnow.gpstracker.data.prefs.StepSource
 
 /** 一筆軌跡最後採用的步數與其來源標記（存入 tracks.stepSource）。 */
@@ -13,11 +15,13 @@ object StepSourceTag {
     const val ZEPP_LIFE = "ZEPP_LIFE"
     const val GOOGLE_FIT = "GOOGLE_FIT"
 
-    fun label(tag: String): String = when (tag) {
-        ZEPP_LIFE -> "Zepp Life（Health Connect）"
-        GOOGLE_FIT -> "Google Fit（Health Connect）"
-        SENSOR_FALLBACK -> "手機感測器（Health Connect 尚無資料，可稍後重新同步）"
-        else -> "手機感測器"
+    /** 步數來源的顯示名稱（字串資源 id，由呼叫端用 Context／stringResource 取字）。 */
+    @StringRes
+    fun labelRes(tag: String): Int = when (tag) {
+        ZEPP_LIFE -> R.string.step_source_zepp
+        GOOGLE_FIT -> R.string.step_source_google
+        SENSOR_FALLBACK -> R.string.step_source_sensor_fallback
+        else -> R.string.step_source_sensor
     }
 
     fun forSource(source: StepSource): String = when (source) {

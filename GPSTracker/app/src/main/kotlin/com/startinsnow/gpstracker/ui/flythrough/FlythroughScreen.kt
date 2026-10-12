@@ -1,5 +1,9 @@
 package com.startinsnow.gpstracker.ui.flythrough
 
+import com.startinsnow.gpstracker.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import android.app.Activity
 import android.annotation.SuppressLint
 import android.content.Context
@@ -170,8 +174,8 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
                 val bytes = Base64.decode(base64, Base64.DEFAULT)
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             }.getOrNull()?.let { bitmap ->
-                val annotated = annotateHud(bitmap, hudValues)
-                ShareUtils.shareBitmap(context, annotated, "flyover_${System.currentTimeMillis()}.png", "分享 3D 飛越快照")
+                val annotated = annotateHud(context, bitmap, hudValues)
+                ShareUtils.shareBitmap(context, annotated, "flyover_${System.currentTimeMillis()}.png", context.getString(R.string.flythrough_001))
             }
         }
     }
@@ -201,10 +205,10 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text("3D 飛越", style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(R.string.flythrough_002), style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.detail_011))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
@@ -247,7 +251,7 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                "MapLibre GL JS globe · 免費圖資",
+                                stringResource(R.string.flythrough_003),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -312,7 +316,7 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
                 ) {
                     Icon(Icons.Filled.Stop, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("停止錄影")
+                    Text(stringResource(R.string.flythrough_004))
                 }
             }
         }
@@ -322,34 +326,34 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
         val videoFile = lastFile!!
         AlertDialog(
             onDismissRequest = { showShareMenu = false },
-            title = { Text("分享 3D 飛越影片") },
+            title = { Text(stringResource(R.string.flythrough_005)) },
             text = {
                 Column {
                     TextButton(
                         onClick = {
                             showShareMenu = false
-                            ShareUtils.shareToApps(context, videoFile, "video/mp4", INSTAGRAM_PACKAGES, "分享到 Instagram")
+                            ShareUtils.shareToApps(context, videoFile, "video/mp4", INSTAGRAM_PACKAGES, context.getString(R.string.flythrough_006))
                         },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("分享到 Instagram") }
+                    ) { Text(stringResource(R.string.flythrough_006)) }
                     TextButton(
                         onClick = {
                             showShareMenu = false
-                            ShareUtils.shareToApps(context, videoFile, "video/mp4", TIKTOK_PACKAGES, "分享到 TikTok")
+                            ShareUtils.shareToApps(context, videoFile, "video/mp4", TIKTOK_PACKAGES, context.getString(R.string.flythrough_007))
                         },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("分享到 TikTok") }
+                    ) { Text(stringResource(R.string.flythrough_007)) }
                     TextButton(
                         onClick = {
                             showShareMenu = false
-                            ShareUtils.shareFile(context, videoFile, "video/mp4", "分享 3D 飛越影片")
+                            ShareUtils.shareFile(context, videoFile, "video/mp4", context.getString(R.string.flythrough_005))
                         },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("其他應用程式（系統分享面板）") }
+                    ) { Text(stringResource(R.string.flythrough_008)) }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showShareMenu = false }) { Text("取消") }
+                TextButton(onClick = { showShareMenu = false }) { Text(stringResource(R.string.detail_036)) }
             }
         )
     }
@@ -384,20 +388,25 @@ private fun FlythroughControls(
     sharedFile: java.io.File?,
     onShareVideo: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Card(
         modifier = modifier.fillMaxWidth().padding(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Slider(value = progress, onValueChange = onSeek)
+            Slider(
+                value = progress,
+                onValueChange = onSeek,
+                modifier = Modifier.semantics { contentDescription = context.getString(R.string.flythrough_009) }
+            )
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(onClick = onPlayPause) {
                     Icon(if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text(if (isPlaying) "暫停" else "播放")
+                    Text(if (isPlaying) stringResource(R.string.detail_039) else stringResource(R.string.detail_040))
                 }
                 IconButton(onClick = onRestart) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "重播")
+                    Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.flythrough_010))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SPEED_OPTIONS.forEach { option ->
@@ -413,18 +422,18 @@ private fun FlythroughControls(
                 OutlinedButton(onClick = onSnapshot, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Filled.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("快照")
+                    Text(stringResource(R.string.flythrough_011))
                 }
                 Button(onClick = onRecord, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("錄影")
+                    Text(stringResource(R.string.flythrough_012))
                 }
                 if (sharedFile != null) {
                     OutlinedButton(onClick = onShareVideo, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("分享")
+                        Text(stringResource(R.string.flythrough_013))
                     }
                 }
             }
@@ -433,7 +442,7 @@ private fun FlythroughControls(
 }
 
 /** 把 HUD（距離／速度／高度）疊加到地圖快照上，讓分享出去的圖片也有資訊。 */
-private fun annotateHud(source: Bitmap, hud: FlyoverHud): Bitmap {
+private fun annotateHud(context: Context, source: Bitmap, hud: FlyoverHud): Bitmap {
     val result = source.copy(Bitmap.Config.ARGB_8888, true) ?: return source
     val scale = (source.width / 1080f).coerceAtLeast(0.5f)
     val canvas = Canvas(result)
@@ -449,7 +458,7 @@ private fun annotateHud(source: Bitmap, hud: FlyoverHud): Bitmap {
     canvas.drawText("%.2f km".format(hud.distanceKm), pad + 20f * scale, pad + 50f * scale, paintText)
     paintText.typeface = Typeface.DEFAULT
     paintText.textSize = 26f * scale
-    canvas.drawText("速度 %.0f km/h".format(hud.speedKmh), pad + 20f * scale, pad + 84f * scale, paintText)
-    canvas.drawText("高度 %.0f m".format(hud.altitudeM), pad + 20f * scale, pad + 114f * scale, paintText)
+    canvas.drawText(context.getString(R.string.flythrough_014).format(hud.speedKmh), pad + 20f * scale, pad + 84f * scale, paintText)
+    canvas.drawText(context.getString(R.string.flythrough_015).format(hud.altitudeM), pad + 20f * scale, pad + 114f * scale, paintText)
     return result
 }

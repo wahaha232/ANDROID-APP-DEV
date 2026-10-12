@@ -1,5 +1,6 @@
 package com.startinsnow.gpstracker.ui.nav
 
+import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -11,16 +12,18 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import com.startinsnow.gpstracker.R
 
 /** 底部導航的三個主要頁面。 */
 enum class TopLevelDestination(
     val route: String,
-    val label: String,
+    @StringRes val labelRes: Int,
     val icon: ImageVector
 ) {
-    HOME(Routes.HOME, "首頁", Icons.Filled.Home),
-    HISTORY(Routes.HISTORY, "紀錄", Icons.Filled.History),
-    SETTINGS(Routes.SETTINGS, "設定", Icons.Filled.Settings)
+    HOME(Routes.HOME, R.string.nav_home, Icons.Filled.Home),
+    HISTORY(Routes.HISTORY, R.string.nav_history, Icons.Filled.History),
+    SETTINGS(Routes.SETTINGS, R.string.nav_settings, Icons.Filled.Settings)
 }
 
 @Composable
@@ -30,11 +33,12 @@ fun GpsBottomBar(
 ) {
     NavigationBar {
         TopLevelDestination.entries.forEach { destination ->
+            val label = stringResource(destination.labelRes)
             NavigationBarItem(
                 selected = currentRoute == destination.route,
                 onClick = { onSelect(destination) },
-                icon = { Icon(destination.icon, contentDescription = destination.label) },
-                label = { Text(destination.label) },
+                icon = { Icon(destination.icon, contentDescription = label) },
+                label = { Text(label) },
                 colors = NavigationBarItemDefaults.colors()
             )
         }

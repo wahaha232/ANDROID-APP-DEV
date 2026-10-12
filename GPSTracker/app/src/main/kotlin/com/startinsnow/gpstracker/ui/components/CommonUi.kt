@@ -1,5 +1,7 @@
 package com.startinsnow.gpstracker.ui.components
 
+import com.startinsnow.gpstracker.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -151,7 +153,7 @@ fun InfoBanner(
             modifier = Modifier.weight(1f)
         )
         if (onDismiss != null) {
-            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("關閉") }
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_001)) }
         }
     }
 }

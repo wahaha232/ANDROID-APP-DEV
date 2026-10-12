@@ -1,5 +1,7 @@
 package com.startinsnow.gpstracker.ui.recording
 
+import com.startinsnow.gpstracker.R
+import androidx.compose.ui.res.stringResource
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -129,7 +131,7 @@ fun RecordingScreen(
         viewModel.photoManager.bindCamera(lifecycleOwner, previewView) { result ->
             cameraReady = result.isSuccess
             cameraError = result.exceptionOrNull()?.let {
-                "相機無法使用：${it.message ?: it::class.java.simpleName}"
+                context.getString(R.string.recording_001, it.message ?: it::class.java.simpleName)
             }
         }
     }
@@ -177,13 +179,13 @@ fun RecordingScreen(
         if (hasCameraPermission) {
             cameraError = null
         } else {
-            cameraError = "沒有相機權限，無法拍照"
+            cameraError = context.getString(R.string.recording_002)
         }
 
         // 必須用「剛更新過的 state 變數」重新判斷，不可用組合期算出的 hasLocationPermission 值，
         // 否則剛授權成功時可能被誤判成沒有權限（該 val 是舊一次組合的值）。
         if (!(hasFineLocation || hasCoarseLocation)) {
-            TrackingStateHolder.postMessage("需要定位權限才能記錄軌跡，請允許「精確位置」後再試一次")
+            TrackingStateHolder.postMessage(context.getString(R.string.recording_003))
         } else {
             startOrResumeRecording()
             if (!hadLocationBefore && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
@@ -270,15 +272,15 @@ fun RecordingScreen(
                 title = {
                     Text(
                         when (state.status) {
-                            TrackStatus.PAUSED -> "已暫停"
-                            else -> "記錄中"
+                            TrackStatus.PAUSED -> stringResource(R.string.recording_004)
+                            else -> stringResource(R.string.recording_005)
                         },
                         style = MaterialTheme.typography.titleLarge
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "收起")
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.recording_006))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
@@ -304,7 +306,7 @@ fun RecordingScreen(
                             contentDescription = null
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(if (state.status == TrackStatus.PAUSED) "繼續" else "暫停")
+                        Text(if (state.status == TrackStatus.PAUSED) stringResource(R.string.recording_007) else stringResource(R.string.detail_039))
                     }
                     Button(
                         onClick = { photoPromptStage = PhotoPromptStage.END },
@@ -312,7 +314,7 @@ fun RecordingScreen(
                     ) {
                         Icon(Icons.Filled.Stop, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("結束")
+                        Text(stringResource(R.string.recording_008))
                     }
                 }
             }
@@ -341,16 +343,31 @@ fun RecordingScreen(
 
             if (state.isAutoPaused) {
                 InfoBanner(
-                    text = "自動暫停中（靜止超過 1 分鐘）",
+                    text = context.getString(R.string.recording_009),
                     color = MaterialTheme.colorScheme.tertiary
                 )
             }
             if (!hasLocationPermission) {
                 InfoBanner(
-                    text = "沒有定位權限，尚未開始記錄",
+                    text = context.getString(R.string.recording_010),
                     color = MaterialTheme.colorScheme.error,
                     icon = Icons.Filled.ErrorOutline
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = {
+                            permissionLauncher.launch(
+                                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text(stringResource(R.string.recording_011)) }
+                    // 被「永久拒絕」後系統不會再跳出授權視窗，只能請使用者到系統設定手動開啟。
+                    OutlinedButton(
+                        onClick = { openAppSettings(context) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text(stringResource(R.string.recording_012)) }
+                }
             }
 
             state.message?.let { message ->
@@ -359,7 +376,7 @@ fun RecordingScreen(
                     OutlinedButton(
                         onClick = { TrackingStateHolder.clearMessage() },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("知道了") }
+                    ) { Text(stringResource(R.string.recording_013)) }
                 }
             }
 
@@ -387,7 +404,7 @@ fun RecordingScreen(
                     val statusLabel = when {
                         cameraReady -> null
                         cameraError != null -> cameraError
-                        else -> "相機準備中…"
+                        else -> context.getString(R.string.recording_014)
                     }
                     if (statusLabel != null) {
                         Surface(
@@ -414,9 +431,10 @@ fun RecordingScreen(
                     ) {
                         FilledIconButton(
                             onClick = { changeZoom(ZOOM_STEP) },
-                            enabled = cameraReady && cameraZoom.ratio < cameraZoom.maxRatio - 0.001f
+                            enabled = cameraReady && cameraZoom.ratio < cameraZoom.maxRatio - 0.001f,
+                            modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(Icons.Filled.ZoomIn, contentDescription = "放大")
+                            Icon(Icons.Filled.ZoomIn, contentDescription = stringResource(R.string.recording_015))
                         }
                         Surface(
                             color = Color.Black.copy(alpha = 0.55f),
@@ -431,9 +449,10 @@ fun RecordingScreen(
                         }
                         FilledIconButton(
                             onClick = { changeZoom(1f / ZOOM_STEP) },
-                            enabled = cameraReady && cameraZoom.ratio > cameraZoom.minRatio + 0.001f
+                            enabled = cameraReady && cameraZoom.ratio > cameraZoom.minRatio + 0.001f,
+                            modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(Icons.Filled.ZoomOut, contentDescription = "縮小")
+                            Icon(Icons.Filled.ZoomOut, contentDescription = stringResource(R.string.recording_016))
                         }
                     }
 
@@ -443,10 +462,10 @@ fun RecordingScreen(
                             scope.launch {
                                 val error = takePhoto(PhotoType.NORMAL).exceptionOrNull()
                                 if (error == null) {
-                                    snackbarHostState.showSnackbar("已儲存照片")
+                                    snackbarHostState.showSnackbar(context.getString(R.string.recording_017))
                                 } else {
                                     snackbarHostState.showSnackbar(
-                                        "拍照失敗：${error.message ?: error::class.java.simpleName}"
+                                        context.getString(R.string.recording_018, error.message ?: error::class.java.simpleName)
                                     )
                                 }
                             }
@@ -458,7 +477,7 @@ fun RecordingScreen(
                     ) {
                         Icon(
                             Icons.Filled.PhotoCamera,
-                            contentDescription = "拍照",
+                            contentDescription = stringResource(R.string.recording_019),
                             modifier = Modifier.size(30.dp)
                         )
                     }
@@ -470,12 +489,16 @@ fun RecordingScreen(
                 ) {
                     Icon(Icons.Filled.PhotoCamera, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("允許相機權限以拍照")
+                    Text(stringResource(R.string.recording_020))
+                }
+                // 相機權限被永久拒絕時，上面的按鈕不會再跳出授權視窗，提供直接前往系統設定的出口。
+                androidx.compose.material3.TextButton(onClick = { openAppSettings(context) }) {
+                    Text(stringResource(R.string.recording_021))
                 }
             }
 
             Text(
-                "已記錄 ${state.pointCount} 個定位點",
+                stringResource(R.string.recording_022, state.pointCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -497,11 +520,11 @@ fun RecordingScreen(
 
         AlertDialog(
             onDismissRequest = { },
-            title = { Text(if (type == PhotoType.START) "拍攝出發點照片" else "拍攝終點照片") },
+            title = { Text(if (type == PhotoType.START) stringResource(R.string.recording_023) else stringResource(R.string.recording_024)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        if (!cameraReady) "相機尚未準備完成，可稍候再拍或直接跳過。" else "是否要拍攝這張照片？"
+                        if (!cameraReady) stringResource(R.string.recording_025) else stringResource(R.string.recording_026)
                     )
                     dialogError?.let { message ->
                         Text(message, color = MaterialTheme.colorScheme.error)
@@ -513,7 +536,7 @@ fun RecordingScreen(
                 Button(
                     onClick = {
                         if (!cameraReady) {
-                            dialogError = cameraError ?: "相機準備中，請稍候再試"
+                            dialogError = cameraError ?: context.getString(R.string.recording_027)
                             return@Button
                         }
                         scope.launch {
@@ -526,11 +549,11 @@ fun RecordingScreen(
                                     photoPromptStage = PhotoPromptStage.NONE
                                 }
                             }.onFailure { error ->
-                                dialogError = "拍照失敗：${error.message ?: error::class.java.simpleName}"
+                                dialogError = context.getString(R.string.recording_018, error.message ?: error::class.java.simpleName)
                             }
                         }
                     }
-                ) { Text("拍照") }
+                ) { Text(stringResource(R.string.recording_019)) }
             },
             dismissButton = {
                 OutlinedButton(onClick = {
@@ -539,7 +562,7 @@ fun RecordingScreen(
                     } else {
                         photoPromptStage = PhotoPromptStage.NONE
                     }
-                }) { Text("跳過") }
+                }) { Text(stringResource(R.string.recording_028)) }
             }
         )
     }
@@ -547,6 +570,7 @@ fun RecordingScreen(
 
 @Composable
 private fun TrackMetricsCard(state: com.startinsnow.gpstracker.service.RecordingUiState) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column {
@@ -556,7 +580,7 @@ private fun TrackMetricsCard(state: com.startinsnow.gpstracker.service.Recording
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "持續時間",
+                    stringResource(R.string.detail_013),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -565,11 +589,11 @@ private fun TrackMetricsCard(state: com.startinsnow.gpstracker.service.Recording
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                BigMetric("%.2f".format(state.distanceMeters / 1000.0), "距離 (km)")
-                BigMetric("%.1f".format(state.currentSpeedKmh), "速度 (km/h)")
+                BigMetric("%.2f".format(state.distanceMeters / 1000.0), context.getString(R.string.recording_029))
+                BigMetric("%.1f".format(state.currentSpeedKmh), context.getString(R.string.recording_030))
                 BigMetric(
                     if (state.isStepSensorAvailable) state.stepCount.toString() else "—",
-                    "步數"
+                    context.getString(R.string.settings_019)
                 )
             }
         }
@@ -586,4 +610,13 @@ private fun BigMetric(value: String, label: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+/** 開啟本 App 的系統設定頁，讓使用者手動開啟被永久拒絕的權限。 */
+private fun openAppSettings(context: Context) {
+    val intent = android.content.Intent(
+        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        android.net.Uri.fromParts("package", context.packageName, null)
+    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }

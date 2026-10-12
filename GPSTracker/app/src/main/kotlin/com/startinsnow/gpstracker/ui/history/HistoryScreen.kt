@@ -1,5 +1,7 @@
 package com.startinsnow.gpstracker.ui.history
 
+import com.startinsnow.gpstracker.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +56,7 @@ fun HistoryScreen(
     onOpenTrack: (String) -> Unit,
     viewModel: HistoryViewModel = viewModel()
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
@@ -62,7 +65,7 @@ fun HistoryScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text("歷史紀錄", style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(R.string.history_001), style = MaterialTheme.typography.titleLarge) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
@@ -76,7 +79,7 @@ fun HistoryScreen(
                     FilterChip(
                         selected = filter.mode == null,
                         onClick = { viewModel.setModeFilter(null) },
-                        label = { Text("全部") }
+                        label = { Text(stringResource(R.string.history_002)) }
                     )
                 }
                 items(MovementMode.entries) { mode ->
@@ -90,7 +93,7 @@ fun HistoryScreen(
                     FilterChip(
                         selected = filter.onlyWithPhotos,
                         onClick = { viewModel.setOnlyWithPhotos(!filter.onlyWithPhotos) },
-                        label = { Text("有照片") }
+                        label = { Text(stringResource(R.string.history_003)) }
                     )
                 }
             }
@@ -98,8 +101,8 @@ fun HistoryScreen(
             if (tracks.isEmpty()) {
                 EmptyState(
                     icon = Icons.Filled.History,
-                    title = "沒有符合的紀錄",
-                    subtitle = "調整上方篩選條件，或先到首頁開始記錄一段軌跡。",
+                    title = context.getString(R.string.history_004),
+                    subtitle = context.getString(R.string.history_005),
                     modifier = Modifier.weight(1f)
                 )
             } else {
@@ -119,6 +122,7 @@ fun HistoryScreen(
 
 @Composable
 private fun TrackCard(track: TrackEntity, dateFormat: SimpleDateFormat, onClick: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -172,10 +176,10 @@ private fun TrackCard(track: TrackEntity, dateFormat: SimpleDateFormat, onClick:
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                MiniStat(formatDurationShort(track.durationMs), "時間")
-                MiniStat("%.1f".format(track.avgSpeedMps * 3.6), "平均 (km/h)")
-                MiniStat(track.stepCount.toString(), "步數")
-                MiniStat(track.photoCount.toString(), "照片")
+                MiniStat(formatDurationShort(track.durationMs), context.getString(R.string.home_010))
+                MiniStat("%.1f".format(track.avgSpeedMps * 3.6), context.getString(R.string.history_006))
+                MiniStat(track.stepCount.toString(), context.getString(R.string.settings_019))
+                MiniStat(track.photoCount.toString(), context.getString(R.string.detail_016))
             }
         }
     }
@@ -195,6 +199,7 @@ private fun MiniStat(value: String, label: String) {
 
 @Composable
 private fun UploadBadge(status: UploadStatus) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val color: Color = when (status) {
         UploadStatus.NOT_UPLOADED -> MaterialTheme.colorScheme.onSurfaceVariant
         UploadStatus.UPLOADING -> MaterialTheme.colorScheme.tertiary
@@ -202,10 +207,10 @@ private fun UploadBadge(status: UploadStatus) {
         UploadStatus.FAILED -> MaterialTheme.colorScheme.error
     }
     val text = when (status) {
-        UploadStatus.NOT_UPLOADED -> "本機"
-        UploadStatus.UPLOADING -> "上傳中"
-        UploadStatus.UPLOADED -> "已上傳"
-        UploadStatus.FAILED -> "上傳失敗"
+        UploadStatus.NOT_UPLOADED -> context.getString(R.string.history_007)
+        UploadStatus.UPLOADING -> context.getString(R.string.history_008)
+        UploadStatus.UPLOADED -> context.getString(R.string.history_009)
+        UploadStatus.FAILED -> context.getString(R.string.history_010)
     }
     StatusChip(text = text, color = color)
 }

@@ -140,7 +140,7 @@ class TrackingForegroundService : LifecycleService() {
         } catch (t: Throwable) {
             isStarting = false
             TrackingStateHolder.update { it.copy(status = TrackStatus.FINISHED, isStarting = false) }
-            TrackingStateHolder.postMessage("無法啟動前景服務：${t.message ?: t::class.java.simpleName}")
+            TrackingStateHolder.postMessage(getString(R.string.service_001, t.message ?: t::class.java.simpleName))
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
@@ -208,7 +208,7 @@ class TrackingForegroundService : LifecycleService() {
                         pointCount = gpsPointCount,
                         isGpsLost = true,
                         gpsQuality = LocationQuality.LOST,
-                        accuracyLabel = "🔴 尚未收到定位",
+                        accuracyLabel = getString(R.string.service_002),
                         message = null
                     )
                 }
@@ -228,7 +228,7 @@ class TrackingForegroundService : LifecycleService() {
                 collectJob?.cancel()
                 tickerJob?.cancel()
                 TrackingStateHolder.update { it.copy(status = TrackStatus.FINISHED, isStarting = false) }
-                TrackingStateHolder.postMessage("無法開始記錄：${t.message ?: t::class.java.simpleName}")
+                TrackingStateHolder.postMessage(getString(R.string.service_003, t.message ?: t::class.java.simpleName))
                 // 前景服務已在 startRecording() 開頭同步啟動，這裡要一併關閉，避免殘留。
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -255,12 +255,12 @@ class TrackingForegroundService : LifecycleService() {
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (t: Throwable) {
-                    TrackingStateHolder.postMessage("儲存定位點失敗：${t.message ?: t::class.java.simpleName}")
+                    TrackingStateHolder.postMessage(getString(R.string.service_004, t.message ?: t::class.java.simpleName))
                 }
             }
             .catch { e ->
                 // 定位來源錯誤（例如權限被撤銷）不可讓例外往外炸，否則 App 會直接崩潰。
-                TrackingStateHolder.postMessage("定位更新失敗：${e.message ?: e::class.java.simpleName}")
+                TrackingStateHolder.postMessage(getString(R.string.service_005, e.message ?: e::class.java.simpleName))
             }
             .launchIn(lifecycleScope)
     }
@@ -441,7 +441,7 @@ class TrackingForegroundService : LifecycleService() {
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (t: Throwable) {
-                    TrackingStateHolder.postMessage("更新記錄狀態失敗：${t.message ?: t::class.java.simpleName}")
+                    TrackingStateHolder.postMessage(getString(R.string.service_006, t.message ?: t::class.java.simpleName))
                 }
             }
         }
@@ -453,7 +453,7 @@ class TrackingForegroundService : LifecycleService() {
 
         if (locationTracker.qualityManager.isLost(now) && !TrackingStateHolder.state.value.isGpsLost) {
             TrackingStateHolder.update {
-                it.copy(gpsQuality = LocationQuality.LOST, isGpsLost = true, accuracyLabel = "🔴 GPS 遺失")
+                it.copy(gpsQuality = LocationQuality.LOST, isGpsLost = true, accuracyLabel = getString(R.string.service_007))
             }
             if (!hasOpenOutage) {
                 app.trackRepository.startOutageIfNeeded(id, System.currentTimeMillis())
@@ -463,9 +463,9 @@ class TrackingForegroundService : LifecycleService() {
                 // 從頭到尾都沒收到定位：明確告訴使用者原因，而不是讓畫面一直停在 0 km。
                 TrackingStateHolder.postMessage(
                     if (locationTracker.isAnyProviderEnabled()) {
-                        "尚未收到 GPS 定位，請移動到室外或空曠處"
+                        getString(R.string.service_008)
                     } else {
-                        "裝置定位功能未開啟，請開啟定位後再記錄"
+                        getString(R.string.service_009)
                     }
                 )
             }
@@ -585,7 +585,7 @@ class TrackingForegroundService : LifecycleService() {
                         // Zepp Life 等來源常比結束錄製晚才同步到 Health Connect：延後補讀，讀到就更新這筆步數。
                         if (resolvedSteps.sourceTag != StepSourceTag.SENSOR) StepResyncWorker.schedule(applicationContext, id)
                     }.onFailure {
-                        TrackingStateHolder.postMessage("結束記錄時發生錯誤：${it.message ?: it::class.java.simpleName}")
+                        TrackingStateHolder.postMessage(getString(R.string.service_010, it.message ?: it::class.java.simpleName))
                         // 最後防線：至少把它從「錄製中」收尾，避免留下永遠無法結束的幽靈記錄。
                         runCatching { app.trackRepository.abandonTrack(id) }
                     }
@@ -595,7 +595,7 @@ class TrackingForegroundService : LifecycleService() {
             }
             // 記錄結束後自動上傳到網頁儀表板（設定有開啟且有 token 才做）。
             runCatching { uploadToWebDashboard(id) }
-                .onFailure { TrackingStateHolder.postMessage("網頁上傳失敗：${it.message ?: it::class.java.simpleName}") }
+                .onFailure { TrackingStateHolder.postMessage(getString(R.string.detail_030, it.message ?: it::class.java.simpleName)) }
             // 收尾期間若已開始新的記錄（或還有別的收尾在跑），Service 要留給它們，不可在這裡停掉。
             if (trackId == null && !isStarting && finalizingCount == 0) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -612,13 +612,13 @@ class TrackingForegroundService : LifecycleService() {
         WebDashboardSync.uploadIfConfigured(app, trackId)
             .onSuccess { outcome ->
                 when (outcome) {
-                    WebDashboardSync.Outcome.SKIPPED_WIFI_ONLY -> TrackingStateHolder.postMessage("已略過網頁上傳（設定為僅 Wi-Fi）")
-                    WebDashboardSync.Outcome.UPLOADED -> TrackingStateHolder.postMessage("已上傳到網頁儀表板")
+                    WebDashboardSync.Outcome.SKIPPED_WIFI_ONLY -> TrackingStateHolder.postMessage(getString(R.string.service_011))
+                    WebDashboardSync.Outcome.UPLOADED -> TrackingStateHolder.postMessage(getString(R.string.detail_029))
                     WebDashboardSync.Outcome.NOT_CONFIGURED -> Unit
                 }
             }
             .onFailure {
-                TrackingStateHolder.postMessage("網頁上傳失敗：${it.message ?: it::class.java.simpleName}")
+                TrackingStateHolder.postMessage(getString(R.string.detail_030, it.message ?: it::class.java.simpleName))
             }
     }
 
@@ -661,8 +661,8 @@ class TrackingForegroundService : LifecycleService() {
         .setOngoing(true)
         .setOnlyAlertOnce(true)
         .setContentIntent(contentPendingIntent())
-        .addAction(0, if (isPaused) "繼續" else "暫停", actionPendingIntent(if (isPaused) ACTION_RESUME else ACTION_PAUSE))
-        .addAction(0, "結束", actionPendingIntent(ACTION_STOP))
+        .addAction(0, if (isPaused) getString(R.string.recording_007) else getString(R.string.detail_039), actionPendingIntent(if (isPaused) ACTION_RESUME else ACTION_PAUSE))
+        .addAction(0, getString(R.string.recording_008), actionPendingIntent(ACTION_STOP))
         .build()
 
     private fun contentPendingIntent(): PendingIntent {
@@ -680,7 +680,7 @@ class TrackingForegroundService : LifecycleService() {
     private fun notificationText(): String {
         val state = TrackingStateHolder.state.value
         val km = state.distanceMeters / 1000.0
-        return "${state.movementMode.emoji} ${"%.2f".format(km)} km｜%s".format(formatDuration(state.durationMs))
+        return getString(R.string.service_012, state.movementMode.emoji, "%.2f".format(km)).format(formatDuration(state.durationMs))
     }
 
     private fun formatDuration(ms: Long): String {
@@ -747,7 +747,7 @@ class TrackingForegroundService : LifecycleService() {
                     startService(intent)
                 }
             }.onFailure {
-                TrackingStateHolder.postMessage("無法啟動記錄服務：${it.message ?: it::class.java.simpleName}")
+                TrackingStateHolder.postMessage(getString(R.string.service_013, it.message ?: it::class.java.simpleName))
             }
         }
     }

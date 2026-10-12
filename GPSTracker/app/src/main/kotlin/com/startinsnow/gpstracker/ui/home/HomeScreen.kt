@@ -1,5 +1,7 @@
 package com.startinsnow.gpstracker.ui.home
 
+import com.startinsnow.gpstracker.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,6 +68,7 @@ fun HomeScreen(
     onOpenTrack: (String) -> Unit,
     viewModel: HomeViewModel = viewModel()
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val state by viewModel.recordingState.collectAsStateWithLifecycle()
     val tracks by viewModel.recentTracks.collectAsStateWithLifecycle()
     val pendingRecovery by viewModel.pendingRecovery.collectAsStateWithLifecycle()
@@ -97,7 +100,7 @@ fun HomeScreen(
                     Icon(if (isActive) Icons.Filled.PlayArrow else Icons.Filled.MyLocation, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (isActive) "回到記錄畫面" else "開始記錄",
+                        if (isActive) stringResource(R.string.home_001) else stringResource(R.string.home_002),
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
@@ -126,8 +129,8 @@ fun HomeScreen(
 
             item {
                 SectionHeader(
-                    title = "最近紀錄",
-                    actionText = if (tracks.isNotEmpty()) "查看全部" else null,
+                    title = context.getString(R.string.home_003),
+                    actionText = if (tracks.isNotEmpty()) context.getString(R.string.home_004) else null,
                     onAction = onOpenHistory
                 )
             }
@@ -136,8 +139,8 @@ fun HomeScreen(
                 item {
                     EmptyState(
                         icon = Icons.Filled.Map,
-                        title = "還沒有任何紀錄",
-                        subtitle = "按「開始記錄」開始第一次追蹤，你的軌跡與統計會顯示在這裡。"
+                        title = context.getString(R.string.home_005),
+                        subtitle = context.getString(R.string.home_006)
                     )
                 }
             } else {
@@ -151,6 +154,7 @@ fun HomeScreen(
 
 @Composable
 private fun StatusHero(state: RecordingUiState, isActive: Boolean) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val fg = MaterialTheme.colorScheme.onPrimary
     val fgMuted = fg.copy(alpha = 0.85f)
     Box(
@@ -196,7 +200,7 @@ private fun StatusHero(state: RecordingUiState, isActive: Boolean) {
                         color = fg
                     )
                     Text(
-                        "公里" + if (state.isAutoPaused) "・已自動暫停" else "・記錄中",
+                        stringResource(R.string.home_007) + if (state.isAutoPaused) stringResource(R.string.home_008) else stringResource(R.string.home_009),
                         style = MaterialTheme.typography.bodyMedium,
                         color = fgMuted
                     )
@@ -205,15 +209,15 @@ private fun StatusHero(state: RecordingUiState, isActive: Boolean) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    HeroStat(formatDuration(state.durationMs), "時間", fg)
+                    HeroStat(formatDuration(state.durationMs), context.getString(R.string.home_010), fg)
                     HeroStat("%.1f".format(state.currentSpeedKmh), "km/h", fg)
-                    HeroStat(state.stepCount.toString(), "步數", fg)
+                    HeroStat(state.stepCount.toString(), context.getString(R.string.settings_019), fg)
                 }
             } else {
                 Column {
-                    Text("準備出發", style = MaterialTheme.typography.headlineMedium, color = fg)
+                    Text(stringResource(R.string.home_011), style = MaterialTheme.typography.headlineMedium, color = fg)
                     Text(
-                        "記錄你的移動軌跡，資料全程離線保存在裝置上。",
+                        stringResource(R.string.home_012),
                         style = MaterialTheme.typography.bodyMedium,
                         color = fgMuted
                     )
@@ -222,9 +226,9 @@ private fun StatusHero(state: RecordingUiState, isActive: Boolean) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    HeroStat(state.pointCount.toString(), "已記錄定位點", fg)
-                    HeroStat(if (state.hasFix) "已定位" else "搜尋中", "定位狀態", fg)
-                    HeroStat(if (state.isStepSensorAvailable) "可用" else "無", "步數感測器", fg)
+                    HeroStat(state.pointCount.toString(), context.getString(R.string.home_013), fg)
+                    HeroStat(if (state.hasFix) context.getString(R.string.home_014) else context.getString(R.string.home_015), context.getString(R.string.home_016), fg)
+                    HeroStat(if (state.isStepSensorAvailable) context.getString(R.string.home_017) else context.getString(R.string.home_018), context.getString(R.string.home_019), fg)
                 }
             }
         }
@@ -257,17 +261,17 @@ private fun RecoveryCard(
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                "發現未完成的紀錄",
+                stringResource(R.string.home_020),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onTertiaryContainer
             )
             Text(
-                "$dateText 的紀錄尚未正常結束，共 ${candidate.pointCount} 個定位點。要接續記錄，還是結束它？",
+                stringResource(R.string.home_021, dateText, candidate.pointCount),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onTertiaryContainer
             )
-            Button(onClick = onResume, modifier = Modifier.fillMaxWidth()) { Text("接續這筆紀錄") }
-            OutlinedButton(onClick = onAbandon, modifier = Modifier.fillMaxWidth()) { Text("結束這筆未完成紀錄") }
+            Button(onClick = onResume, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.home_022)) }
+            OutlinedButton(onClick = onAbandon, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.home_023)) }
         }
     }
 }

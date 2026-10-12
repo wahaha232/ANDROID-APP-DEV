@@ -3,4 +3,239 @@
     <string name="app_name">GPS TRACKER</string>
     <string name="notif_channel_recording">GPS 軌跡記錄中</string>
     <string name="notif_recording_title">GPS TRACKER 記錄中</string>
+
+    <!-- settings -->
+    <string name="settings_001">未取得「活動辨識」權限，Health Connect 步數可能無法讀取</string>
+    <string name="settings_002">已授權讀取步數，但未授權「背景讀取」：錄製結束時 App 不在前景，可能讀不到 Zepp Life／Google Fit 步數（會改用手機感測器）。</string>
+    <string name="settings_003">已授權 Health Connect 讀取步數</string>
+    <string name="settings_004">未授權 Health Connect 讀取步數</string>
+    <string name="settings_005">檢查中…</string>
+    <string name="settings_006">此裝置未提供 Health Connect。</string>
+    <string name="settings_007">尚未授權 Health Connect 讀取步數，請先按上方授權。</string>
+    <string name="settings_008">\n⚠ 尚未授權「背景讀取」，錄製結束時可能讀不到步數，請再按上方授權。</string>
+    <string name="settings_009">近 7 天 Health Connect 沒有任何步數資料（請確認來源 App 已同步到 Health Connect）。%1$s</string>
+    <string name="settings_010">近 7 天步數來源：\n</string>
+    <string name="settings_011">• %1$s：%2$d 步</string>
+    <string name="settings_012">檢查失敗：%1$s</string>
+    <string name="settings_013">設定</string>
+    <string name="settings_014">記錄</string>
+    <string name="settings_015">高精度 GPS 模式</string>
+    <string name="settings_016">提高定位更新頻率，較耗電</string>
+    <string name="settings_017">自動暫停</string>
+    <string name="settings_018">靜止超過 1 分鐘後自動暫停記錄</string>
+    <string name="settings_019">步數</string>
+    <string name="settings_020">記錄結束時讀取該趟步數；讀取失敗或未授權時自動改用裝置感測器。</string>
+    <string name="settings_021">小米 Zepp Life</string>
+    <string name="settings_022">Google Fit 的步數會同步到 Health Connect（免 Google OAuth）；本 App 會讀取 Google Fit 來源的步數。</string>
+    <string name="settings_023">小米 Zepp Life / Mi Fitness 的步數會同步到 Health Connect；請先在 Zepp Life 開啟同步。本 App 會讀取 Zepp Life／Mi Fitness 來源的步數。</string>
+    <string name="settings_024">使用手機內建步數感測器（最省電、不需額外授權）。</string>
+    <string name="settings_025">授權 Health Connect 讀取步數</string>
+    <string name="settings_026">檢查 Health Connect 資料</string>
+    <string name="settings_027">此裝置未偵測到 Health Connect，請先安裝並啟用。</string>
+    <string name="settings_028">雲端同步</string>
+    <string name="settings_029">啟用 Google Drive 同步</string>
+    <string name="settings_030">將軌跡打包上傳到你的 Google Drive</string>
+    <string name="settings_031">僅限 Wi-Fi 上傳</string>
+    <string name="settings_032">避免使用行動網路流量</string>
+    <string name="settings_033">上傳成功後刪除本機資料</string>
+    <string name="settings_034">成功上傳後清空裝置上的該筆紀錄</string>
+    <string name="settings_035">離線地圖</string>
+    <string name="settings_036">下載離線地圖</string>
+    <string name="settings_037">下載台灣本島區域，無網路時仍可顯示地圖</string>
+    <string name="settings_038" formatted="false">下載中… 0%</string>
+    <string name="settings_039">下載中… %1$d%%</string>
+    <string name="settings_040">離線地圖下載完成</string>
+    <string name="settings_041">下載失敗：%1$s</string>
+    <string name="settings_042">資料保留</string>
+    <string name="settings_043">本機資料保留：%1$s</string>
+    <string name="settings_044">已開啟 Google Drive 同步：只會自動清理「已成功備份」的紀錄，尚未備份的不會被刪除。</string>
+    <string name="settings_045">⚠ 尚未開啟 Google Drive 同步：超過天數的紀錄會被永久刪除且無備份。</string>
+    <string name="settings_046">永久</string>
+    <string name="settings_047">%1$d 天</string>
+    <string name="settings_048">網頁儀表板（GitHub Pages）</string>
+    <string name="settings_049">自動上傳到網頁</string>
+    <string name="settings_050">記錄結束後，把該筆紀錄上傳到 GitHub repo 供網頁讀取</string>
+    <string name="settings_051">GitHub 儲存庫 (owner/repo)</string>
+    <string name="settings_052">分支</string>
+    <string name="settings_053">資料夾路徑</string>
+    <string name="settings_054">GitHub Token（fine-grained PAT）</string>
+    <string name="settings_055">設定好儲存庫、分支、路徑與 token 後，每次記錄結束會自動上傳。\n網頁網址：https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/</string>
+
+    <!-- detail -->
+    <string name="detail_001">登入已取消</string>
+    <string name="detail_002">登入失敗</string>
+    <string name="detail_003">設定為僅限 Wi-Fi 上傳，目前非 Wi-Fi 連線</string>
+    <string name="detail_004">上傳中…</string>
+    <string name="detail_005">沒有可上傳的資料</string>
+    <string name="detail_006">無法取得 Google 授權（可能尚未設定 OAuth Client）</string>
+    <string name="detail_007">已上傳到 Google Drive</string>
+    <string name="detail_008">上傳失敗：%1$s</string>
+    <string name="detail_009">%1$s 軌跡詳情</string>
+    <string name="detail_010">軌跡詳情</string>
+    <string name="detail_011">返回</string>
+    <string name="detail_012">3D 飛越（開源 globe，可分享社群）</string>
+    <string name="detail_013">持續時間</string>
+    <string name="detail_014">平均速度</string>
+    <string name="detail_015">最高速度</string>
+    <string name="detail_016">照片</string>
+    <string name="detail_017">定位點</string>
+    <string name="detail_018">總爬升</string>
+    <string name="detail_019">總下降</string>
+    <string name="detail_020">步數來源：%1$s</string>
+    <string name="detail_021">同步中…</string>
+    <string name="detail_022">重新同步步數</string>
+    <string name="detail_023">分享 GPS TRACKER 匯出檔</string>
+    <string name="detail_024">匯出</string>
+    <string name="detail_025">請先在「設定」開啟 Google Drive 同步</string>
+    <string name="detail_026">上傳</string>
+    <string name="detail_027">請先在「設定 → 網頁儀表板」填入 GitHub Token</string>
+    <string name="detail_028">上傳到網頁中…</string>
+    <string name="detail_029">已上傳到網頁儀表板</string>
+    <string name="detail_030">網頁上傳失敗：%1$s</string>
+    <string name="detail_031">上傳到網頁儀表板</string>
+    <string name="detail_032">刪除這筆紀錄</string>
+    <string name="detail_033">刪除這筆紀錄？</string>
+    <string name="detail_034">軌跡、照片與匯出檔都會一併刪除，且無法復原。</string>
+    <string name="detail_035">刪除</string>
+    <string name="detail_036">取消</string>
+    <string name="detail_037">軌跡回放</string>
+    <string name="detail_038">回放進度</string>
+    <string name="detail_039">暫停</string>
+    <string name="detail_040">播放</string>
+    <string name="detail_041">停止回放</string>
+
+    <!-- recording -->
+    <string name="recording_001">相機無法使用：%1$s</string>
+    <string name="recording_002">沒有相機權限，無法拍照</string>
+    <string name="recording_003">需要定位權限才能記錄軌跡，請允許「精確位置」後再試一次</string>
+    <string name="recording_004">已暫停</string>
+    <string name="recording_005">記錄中</string>
+    <string name="recording_006">收起</string>
+    <string name="recording_007">繼續</string>
+    <string name="recording_008">結束</string>
+    <string name="recording_009">自動暫停中（靜止超過 1 分鐘）</string>
+    <string name="recording_010">沒有定位權限，尚未開始記錄</string>
+    <string name="recording_011">再次要求權限</string>
+    <string name="recording_012">前往系統設定</string>
+    <string name="recording_013">知道了</string>
+    <string name="recording_014">相機準備中…</string>
+    <string name="recording_015">放大</string>
+    <string name="recording_016">縮小</string>
+    <string name="recording_017">已儲存照片</string>
+    <string name="recording_018">拍照失敗：%1$s</string>
+    <string name="recording_019">拍照</string>
+    <string name="recording_020">允許相機權限以拍照</string>
+    <string name="recording_021">沒有跳出授權視窗？前往系統設定開啟相機權限</string>
+    <string name="recording_022">已記錄 %1$d 個定位點</string>
+    <string name="recording_023">拍攝出發點照片</string>
+    <string name="recording_024">拍攝終點照片</string>
+    <string name="recording_025">相機尚未準備完成，可稍候再拍或直接跳過。</string>
+    <string name="recording_026">是否要拍攝這張照片？</string>
+    <string name="recording_027">相機準備中，請稍候再試</string>
+    <string name="recording_028">跳過</string>
+    <string name="recording_029">距離 (km)</string>
+    <string name="recording_030">速度 (km/h)</string>
+
+    <!-- home -->
+    <string name="home_001">回到記錄畫面</string>
+    <string name="home_002">開始記錄</string>
+    <string name="home_003">最近紀錄</string>
+    <string name="home_004">查看全部</string>
+    <string name="home_005">還沒有任何紀錄</string>
+    <string name="home_006">按「開始記錄」開始第一次追蹤，你的軌跡與統計會顯示在這裡。</string>
+    <string name="home_007">公里</string>
+    <string name="home_008">・已自動暫停</string>
+    <string name="home_009">・記錄中</string>
+    <string name="home_010">時間</string>
+    <string name="home_011">準備出發</string>
+    <string name="home_012">記錄你的移動軌跡，資料全程離線保存在裝置上。</string>
+    <string name="home_013">已記錄定位點</string>
+    <string name="home_014">已定位</string>
+    <string name="home_015">搜尋中</string>
+    <string name="home_016">定位狀態</string>
+    <string name="home_017">可用</string>
+    <string name="home_018">無</string>
+    <string name="home_019">步數感測器</string>
+    <string name="home_020">發現未完成的紀錄</string>
+    <string name="home_021">%1$s 的紀錄尚未正常結束，共 %2$d 個定位點。要接續記錄，還是結束它？</string>
+    <string name="home_022">接續這筆紀錄</string>
+    <string name="home_023">結束這筆未完成紀錄</string>
+
+    <!-- flythrough -->
+    <string name="flythrough_001">分享 3D 飛越快照</string>
+    <string name="flythrough_002">3D 飛越</string>
+    <string name="flythrough_003">MapLibre GL JS globe · 免費圖資</string>
+    <string name="flythrough_004">停止錄影</string>
+    <string name="flythrough_005">分享 3D 飛越影片</string>
+    <string name="flythrough_006">分享到 Instagram</string>
+    <string name="flythrough_007">分享到 TikTok</string>
+    <string name="flythrough_008">其他應用程式（系統分享面板）</string>
+    <string name="flythrough_009">飛越進度</string>
+    <string name="flythrough_010">重播</string>
+    <string name="flythrough_011">快照</string>
+    <string name="flythrough_012">錄影</string>
+    <string name="flythrough_013">分享</string>
+    <string name="flythrough_014" formatted="false">速度 %.0f km/h</string>
+    <string name="flythrough_015" formatted="false">高度 %.0f m</string>
+
+    <!-- history -->
+    <string name="history_001">歷史紀錄</string>
+    <string name="history_002">全部</string>
+    <string name="history_003">有照片</string>
+    <string name="history_004">沒有符合的紀錄</string>
+    <string name="history_005">調整上方篩選條件，或先到首頁開始記錄一段軌跡。</string>
+    <string name="history_006">平均 (km/h)</string>
+    <string name="history_007">本機</string>
+    <string name="history_008">上傳中</string>
+    <string name="history_009">已上傳</string>
+    <string name="history_010">上傳失敗</string>
+
+    <!-- common -->
+    <string name="common_001">關閉</string>
+
+    <!-- detail_vm -->
+    <string name="detail_vm_001">找不到這筆紀錄</string>
+    <string name="detail_vm_002">這筆紀錄尚未結束</string>
+    <string name="detail_vm_003">步數來源設為手機感測器，無需同步；若要使用 Zepp Life 或 Google Fit，請到「設定」切換步數來源。</string>
+    <string name="detail_vm_004">；網頁上傳失敗：%1$s</string>
+    <string name="detail_vm_005">，並已更新網頁儀表板</string>
+    <string name="detail_vm_006">已更新步數為 %1$d（來源：%2$s）%3$s</string>
+    <string name="detail_vm_007">Health Connect 目前沒有這段時間的步數。請先開啟 Zepp Life（或 Google Fit）讓手環同步，再按一次。</string>
+    <string name="detail_vm_008">讀取 Health Connect 失敗：%1$s（請確認已在「設定」授權讀取步數）</string>
+
+    <!-- recording_vm -->
+    <string name="recording_vm_001">目前沒有進行中的記錄，無法拍照</string>
+
+    <!-- service -->
+    <string name="service_001">無法啟動前景服務：%1$s</string>
+    <string name="service_002">🔴 尚未收到定位</string>
+    <string name="service_003">無法開始記錄：%1$s</string>
+    <string name="service_004">儲存定位點失敗：%1$s</string>
+    <string name="service_005">定位更新失敗：%1$s</string>
+    <string name="service_006">更新記錄狀態失敗：%1$s</string>
+    <string name="service_007">🔴 GPS 遺失</string>
+    <string name="service_008">尚未收到 GPS 定位，請移動到室外或空曠處</string>
+    <string name="service_009">裝置定位功能未開啟，請開啟定位後再記錄</string>
+    <string name="service_010">結束記錄時發生錯誤：%1$s</string>
+    <string name="service_011">已略過網頁上傳（設定為僅 Wi-Fi）</string>
+    <string name="service_012">%1$s %2$s km｜%%s</string>
+    <string name="service_013">無法啟動記錄服務：%1$s</string>
+
+    <!-- flyover -->
+    <string name="flyover_001">3D 飛越錄影</string>
+    <string name="flyover_002">正在錄製 3D 飛越…</string>
+    <string name="flyover_003">錄影中，完成後可分享到社群</string>
+
+    <!-- nav -->
+    <string name="nav_home">首頁</string>
+    <string name="nav_history">紀錄</string>
+    <string name="nav_settings">設定</string>
+    <!-- manual: nested / non-Text sources -->
+    <string name="settings_retention_forever">永久保留</string>
+    <string name="settings_retention_days">%1$d 天</string>
+    <string name="hc_rationale_body">GPS TRACKER 需要讀取 Health Connect 的「步數」，用來記錄每趟活動的步數。\n\n步數只會在記錄結束後，讀取該趟時間區間的資料；不會上傳到第三方服務。\n\n你可以隨時在 Health Connect 中撤銷此權限。</string>
+    <string name="step_source_zepp">Zepp Life（Health Connect）</string>
+    <string name="step_source_google">Google Fit（Health Connect）</string>
+    <string name="step_source_sensor_fallback">手機感測器（Health Connect 尚無資料，可稍後重新同步）</string>
+    <string name="step_source_sensor">手機感測器</string>
 </resources>

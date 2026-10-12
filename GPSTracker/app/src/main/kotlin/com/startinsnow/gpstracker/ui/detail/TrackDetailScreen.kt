@@ -1,5 +1,9 @@
 package com.startinsnow.gpstracker.ui.detail
 
+import com.startinsnow.gpstracker.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -123,25 +127,25 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
     val signInLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val data = result.data
         if (data == null) {
-            uploadStatusText = "登入已取消"
+            uploadStatusText = context.getString(R.string.detail_001)
             return@rememberLauncherForActivityResult
         }
         val task = GoogleSignIn.getSignedInAccountFromIntent(data)
         scope.launch {
             val account = runCatching { task.result }.getOrNull()
             if (account == null) {
-                uploadStatusText = "登入失敗"
+                uploadStatusText = context.getString(R.string.detail_002)
                 return@launch
             }
             val currentSettings = app.settingsRepository.settings.first()
             if (currentSettings.wifiOnlySync && !isOnWifi(context)) {
-                uploadStatusText = "設定為僅限 Wi-Fi 上傳，目前非 Wi-Fi 連線"
+                uploadStatusText = context.getString(R.string.detail_003)
                 return@launch
             }
-            uploadStatusText = "上傳中…"
+            uploadStatusText = context.getString(R.string.detail_004)
             val data = viewModel.buildExportData()
             if (data == null) {
-                uploadStatusText = "沒有可上傳的資料"
+                uploadStatusText = context.getString(R.string.detail_005)
                 return@launch
             }
             val exportDir = withContext(Dispatchers.IO) { TrackZipExporter.buildExportDirectory(app.filesDir, data) }
@@ -150,7 +154,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
             val tokenResult = authManager.getAccessToken(account)
             val token = tokenResult.getOrNull()
             if (token == null) {
-                uploadStatusText = "無法取得 Google 授權（可能尚未設定 OAuth Client）"
+                uploadStatusText = context.getString(R.string.detail_006)
                 app.trackRepository.setUploadStatus(trackId, UploadStatus.FAILED)
                 return@launch
             }
@@ -173,14 +177,14 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                 }
             }
             if (uploadResult.isSuccess) {
-                uploadStatusText = "已上傳到 Google Drive"
+                uploadStatusText = context.getString(R.string.detail_007)
                 app.trackRepository.setUploadStatus(trackId, UploadStatus.UPLOADED)
                 if (currentSettings.deleteLocalAfterUploadEnabled) {
                     viewModel.deleteTrack()
                     onBack()
                 }
             } else {
-                uploadStatusText = "上傳失敗：${uploadResult.exceptionOrNull()?.message}"
+                uploadStatusText = context.getString(R.string.detail_008, uploadResult.exceptionOrNull()?.message)
                 app.trackRepository.setUploadStatus(trackId, UploadStatus.FAILED)
             }
         }
@@ -217,10 +221,10 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(track?.let { "${it.dominantMode.emoji} 軌跡詳情" } ?: "軌跡詳情", style = MaterialTheme.typography.titleLarge) },
+                title = { Text(track?.let { stringResource(R.string.detail_009, it.dominantMode.emoji) } ?: stringResource(R.string.detail_010), style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.detail_011))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
@@ -250,7 +254,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
             ) {
                 Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("3D 飛越（開源 globe，可分享社群）")
+                Text(stringResource(R.string.detail_012))
             }
 
             track?.let { t ->
@@ -270,14 +274,14 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
 
                 val rows = remember(t) {
                     listOf(
-                        StatItem(Icons.Filled.Timer, formatDuration(t.durationMs), "持續時間"),
-                        StatItem(Icons.Filled.Speed, "%.1f".format(t.avgSpeedMps * 3.6), "平均速度", "km/h"),
-                        StatItem(Icons.Filled.Speed, "%.1f".format(t.maxSpeedMps * 3.6), "最高速度", "km/h"),
-                        StatItem(Icons.Filled.DirectionsWalk, t.stepCount.toString(), "步數"),
-                        StatItem(Icons.Filled.PhotoCamera, t.photoCount.toString(), "照片"),
-                        StatItem(Icons.Filled.MyLocation, t.gpsPointCount.toString(), "定位點"),
-                        StatItem(Icons.Filled.TrendingUp, "%.0f".format(t.totalAscentMeters), "總爬升", "m"),
-                        StatItem(Icons.Filled.TrendingDown, "%.0f".format(t.totalDescentMeters), "總下降", "m")
+                        StatItem(Icons.Filled.Timer, formatDuration(t.durationMs), context.getString(R.string.detail_013)),
+                        StatItem(Icons.Filled.Speed, "%.1f".format(t.avgSpeedMps * 3.6), context.getString(R.string.detail_014), "km/h"),
+                        StatItem(Icons.Filled.Speed, "%.1f".format(t.maxSpeedMps * 3.6), context.getString(R.string.detail_015), "km/h"),
+                        StatItem(Icons.Filled.DirectionsWalk, t.stepCount.toString(), context.getString(R.string.settings_019)),
+                        StatItem(Icons.Filled.PhotoCamera, t.photoCount.toString(), context.getString(R.string.detail_016)),
+                        StatItem(Icons.Filled.MyLocation, t.gpsPointCount.toString(), context.getString(R.string.detail_017)),
+                        StatItem(Icons.Filled.TrendingUp, "%.0f".format(t.totalAscentMeters), context.getString(R.string.detail_018), "m"),
+                        StatItem(Icons.Filled.TrendingDown, "%.0f".format(t.totalDescentMeters), context.getString(R.string.detail_019), "m")
                     ).chunked(2)
                 }
                 rows.forEach { rowItems ->
@@ -298,7 +302,10 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                     }
                 }
                 Text(
-                    "步數來源：${com.startinsnow.gpstracker.sync.StepSourceTag.label(t.stepSource)}",
+                    stringResource(
+                        R.string.detail_020,
+                        stringResource(com.startinsnow.gpstracker.sync.StepSourceTag.labelRes(t.stepSource))
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -306,12 +313,12 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                     OutlinedButton(
                         onClick = {
                             scope.launch {
-                                stepSyncText = "同步中…"
+                                stepSyncText = context.getString(R.string.detail_021)
                                 stepSyncText = viewModel.resyncSteps()
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("重新同步步數") }
+                    ) { Text(stringResource(R.string.detail_022)) }
                 }
                 stepSyncText?.let { text ->
                     InfoBanner(text = text, color = MaterialTheme.colorScheme.primary)
@@ -345,7 +352,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                                     putExtra(android.content.Intent.EXTRA_STREAM, uri)
                                     addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
-                                context.startActivity(android.content.Intent.createChooser(intent, "分享 GPS TRACKER 匯出檔"))
+                                context.startActivity(android.content.Intent.createChooser(intent, context.getString(R.string.detail_023)))
                             }
                         }
                     },
@@ -353,7 +360,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                 ) {
                     Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("匯出")
+                    Text(stringResource(R.string.detail_024))
                 }
 
                 OutlinedButton(
@@ -361,7 +368,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                         scope.launch {
                             val currentSettings = app.settingsRepository.settings.first()
                             if (!currentSettings.driveSyncEnabled) {
-                                uploadStatusText = "請先在「設定」開啟 Google Drive 同步"
+                                uploadStatusText = context.getString(R.string.detail_025)
                                 return@launch
                             }
                             signInLauncher.launch(authManager.signInIntent())
@@ -371,7 +378,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                 ) {
                     Icon(Icons.Filled.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("上傳")
+                    Text(stringResource(R.string.detail_026))
                 }
             }
 
@@ -380,15 +387,15 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                     scope.launch {
                         val currentSettings = app.settingsRepository.settings.first()
                         if (currentSettings.githubToken.isBlank()) {
-                            uploadStatusText = "請先在「設定 → 網頁儀表板」填入 GitHub Token"
+                            uploadStatusText = context.getString(R.string.detail_027)
                             return@launch
                         }
                         val data = viewModel.buildExportData()
                         if (data == null) {
-                            uploadStatusText = "沒有可上傳的資料"
+                            uploadStatusText = context.getString(R.string.detail_005)
                             return@launch
                         }
-                        uploadStatusText = "上傳到網頁中…"
+                        uploadStatusText = context.getString(R.string.detail_028)
                         val payload = withContext(Dispatchers.IO) { WebDashboardUploader.buildPayload(data) }
                         WebDashboardUploader().uploadTrack(
                             token = currentSettings.githubToken,
@@ -398,9 +405,9 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                             trackId = trackId,
                             payload = payload
                         ).onSuccess {
-                            uploadStatusText = "已上傳到網頁儀表板"
+                            uploadStatusText = context.getString(R.string.detail_029)
                         }.onFailure {
-                            uploadStatusText = "網頁上傳失敗：${it.message}"
+                            uploadStatusText = context.getString(R.string.detail_030, it.message)
                         }
                     }
                 },
@@ -408,7 +415,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
             ) {
                 Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("上傳到網頁儀表板")
+                Text(stringResource(R.string.detail_031))
             }
 
             OutlinedButton(
@@ -418,14 +425,14 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
             ) {
                 Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("刪除這筆紀錄")
+                Text(stringResource(R.string.detail_032))
             }
 
             if (showDeleteConfirm) {
                 AlertDialog(
                     onDismissRequest = { showDeleteConfirm = false },
-                    title = { Text("刪除這筆紀錄？") },
-                    text = { Text("軌跡、照片與匯出檔都會一併刪除，且無法復原。") },
+                    title = { Text(stringResource(R.string.detail_033)) },
+                    text = { Text(stringResource(R.string.detail_034)) },
                     confirmButton = {
                         TextButton(
                             onClick = {
@@ -433,10 +440,10 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                                 viewModel.deleteTrack()
                                 onBack()
                             }
-                        ) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+                        ) { Text(stringResource(R.string.detail_035), color = MaterialTheme.colorScheme.error) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+                        TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.detail_036)) }
                     }
                 )
             }
@@ -455,9 +462,10 @@ private fun PlaybackCard(
     onStop: () -> Unit,
     onSpeed: (Double) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("軌跡回放", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.detail_037), style = MaterialTheme.typography.titleMedium)
             Text(
                 "${formatDuration(elapsedMs)} / ${formatDuration(totalDurationMs)}",
                 style = MaterialTheme.typography.bodyMedium,
@@ -465,7 +473,8 @@ private fun PlaybackCard(
             )
             Slider(
                 value = if (totalDurationMs > 0) elapsedMs.toFloat() / totalDurationMs else 0f,
-                onValueChange = onSeek
+                onValueChange = onSeek,
+                modifier = Modifier.semantics { contentDescription = context.getString(R.string.detail_038) }
             )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -477,10 +486,11 @@ private fun PlaybackCard(
                         contentDescription = null
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text(if (isPlaying) "暫停" else "播放")
+                    Text(if (isPlaying) stringResource(R.string.detail_039) else stringResource(R.string.detail_040))
                 }
                 Button(onClick = onStop) {
-                    Icon(Icons.Filled.Stop, contentDescription = null)
+                    // 只有圖示的按鈕必須有名稱，否則螢幕閱讀器念不出它的用途。
+                    Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.detail_041))
                 }
             }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

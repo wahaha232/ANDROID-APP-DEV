@@ -3,7 +3,6 @@ package com.startinsnow.gpstracker.sync
 import com.startinsnow.gpstracker.data.prefs.StepSource
 import org.junit.Test
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 
 class StepSourceTagTest {
 
@@ -15,12 +14,15 @@ class StepSourceTagTest {
     }
 
     @Test
-    fun label_unknownTagFallsBackToSensor() {
-        assertEquals(StepSourceTag.label(StepSourceTag.SENSOR), StepSourceTag.label("something-else"))
+    fun labelRes_unknownTagFallsBackToSensor() {
+        assertEquals(StepSourceTag.labelRes(StepSourceTag.SENSOR), StepSourceTag.labelRes("something-else"))
     }
 
     @Test
-    fun label_fallbackTagHintsThatResyncIsPossible() {
-        assertTrue(StepSourceTag.label(StepSourceTag.SENSOR_FALLBACK).contains("重新同步"))
+    fun labelRes_eachTagHasItsOwnLabel() {
+        val ids = listOf(
+            StepSourceTag.ZEPP_LIFE, StepSourceTag.GOOGLE_FIT, StepSourceTag.SENSOR, StepSourceTag.SENSOR_FALLBACK
+        ).map { StepSourceTag.labelRes(it) }
+        assertEquals("all four tags map to distinct strings", 4, ids.toSet().size)
     }
 }
