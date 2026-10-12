@@ -17,7 +17,8 @@
       weekActivities: 3, monthActivities: 12,
       weekDays: 3, monthDays: 12,
       steps: 50000, photos: 20, cycleKm: 30
-    }
+    },
+    steps: { dailyGoal: 8000 }          // 每日步數目標（步數統計分頁的達標線）
   };
 
   var MODE_EMOJI = {
@@ -60,7 +61,7 @@
 
   var TABS = [
     ["overview", "🏆 總覽"], ["badges", "🎖️ 成就徽章"], ["best", "🥇 個人最佳"],
-    ["period", "🎯 期間挑戰"], ["king", "📊 里程王"], ["tour", "🌏 虛擬環遊"],
+    ["period", "🎯 期間挑戰"], ["steps", "👣 步數統計"], ["king", "📊 里程王"], ["tour", "🌏 虛擬環遊"],
     ["history", "📅 歷史上的今天"], ["photos", "📸 攝影挑戰"], ["bingo", "🎲 距離賓果"],
     ["art", "🗺️ 軌跡藝術"]
   ];
@@ -409,6 +410,130 @@
     $("periodBody").innerHTML = html;
   }
 
+  // ===== 步數統計 =====
+  // 步數以「每趟活動」為單位歸入活動開始的那一天（網站只保存每趟的總步數，沒有逐日資料）。
+  var STEP_SOURCE_NAME = {
+    ZEPP_LIFE: "Zepp Life（Health Connect）", GOOGLE_FIT: "Google Fit（Health Connect）",
+    SENSOR: "手機感測器", SENSOR_FALLBACK: "手機感測器（Health Connect 尚無資料）"
+  };
+  var stepMode = "day";
+
+  function stepTracks() { return tracks().filter(function (t) { return (t.stepCount || 0) > 0; }); }
+
+  // 依模式（日／週／月）建立最近區間的桶，並把每趟步數加進對應的桶。
+  function stepBuckets(mode, list) {
+    var now = Date.now(), buckets = [], index = {}, i, d, key, dim;
+    if (mode === "day") {
+      for (i = 29; i >= 0; i--) {
+        d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+        buckets.push({ key: dayKey(d.getTime()), label: pad(d.getMonth() + 1) + "/" + pad(d.getDate()), sum: 0, goal: T.steps.dailyGoal });
+      }
+    } else if (mode === "week") {
+      for (i = 11; i >= 0; i--) {
+        d = new Date(startOfWeek(now)); d.setDate(d.getDate() - i * 7);
+        buckets.push({ key: String(d.getTime()), label: pad(d.getMonth() + 1) + "/" + pad(d.getDate()), sum: 0, goal: T.steps.dailyGoal * 7 });
+      }
+    } else {
+      for (i = 11; i >= 0; i--) {
+        d = new Date(startOfMonth(now)); d.setMonth(d.getMonth() - i);
+        dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        buckets.push({ key: String(d.getTime()), label: String(d.getFullYear()).slice(2) + "/" + pad(d.getMonth() + 1), sum: 0, goal: T.steps.dailyGoal * dim });
+      }
+    }
+    buckets.forEach(function (b, idx) { index[b.key] = idx; });
+    list.forEach(function (t) {
+      var k = mode === "day" ? dayKey(t.startTimeMs) : mode === "week" ? String(startOfWeek(t.startTimeMs)) : String(startOfMonth(t.startTimeMs));
+      if (index[k] !== undefined) buckets[index[k]].sum += t.stepCount || 0;
+    });
+    return buckets;
+  }
+
+  function stepChartHtml(buckets, mode) {
+    var max = 0;
+    buckets.forEach(function (b) { max = Math.max(max, b.sum, b.goal); });
+    max = max * 1.08 || 1;
+    var every = mode === "day" ? 5 : mode === "week" ? 2 : 1;
+    var unit = mode === "day" ? "每日" : mode === "week" ? "每週" : "每月";
+    var html = '<div class="step-chart">';
+    buckets.forEach(function (b, i) {
+      var h = b.sum > 0 ? Math.max(1.5, b.sum / max * 100) : 0;
+      var showLbl = i % every === 0 || i === buckets.length - 1;
+      html += '<div class="step-col" title="' + b.label + "：" + fmtInt(b.sum) + " 步（目標 " + fmtInt(b.goal) + "）\">" +
+        '<div class="step-bar-wrap"><i class="step-bar' + (b.sum >= b.goal ? " hit" : "") + '" style="height:' + h.toFixed(1) + '%"></i>' +
+        '<s style="bottom:' + (b.goal / max * 100).toFixed(1) + '%"></s></div>' +
+        '<span class="step-lbl">' + (showLbl ? b.label : "") + "</span></div>";
+    });
+    html += "</div>";
+    html += '<div class="muted" style="margin-top:6px">虛線為' + unit + "目標 " + fmtInt(T.steps.dailyGoal) + " 步" +
+      (mode === "day" ? "" : " × " + (mode === "week" ? "7 天" : "當月天數")) + "；綠色長條代表達標。</div>";
+    return html;
+  }
+
+  function drawStepChart() {
+    var box = $("stepChartBox");
+    if (!box) return;
+    Array.prototype.forEach.call(document.querySelectorAll("#panel-steps [data-sm]"), function (b) {
+      b.className = b.getAttribute("data-sm") === stepMode ? "on" : "";
+    });
+    box.innerHTML = stepChartHtml(stepBuckets(stepMode, stepTracks()), stepMode);
+  }
+
+  function renderSteps() {
+    var list = stepTracks();
+    var panel = $("panel-steps");
+    if (!list.length) {
+      panel.innerHTML = '<div class="empty-note">尚無步數資料。請在 App「設定 → 步數來源」選擇 Zepp Life、Google Fit 或手機感測器，之後上傳的紀錄就會帶有步數。</div>';
+      return;
+    }
+    var now = Date.now();
+    var total = 0, dayMap = {}, bestTrack = list[0], sources = {};
+    list.forEach(function (t) {
+      total += t.stepCount;
+      var k = dayKey(t.startTimeMs);
+      dayMap[k] = (dayMap[k] || 0) + t.stepCount;
+      if (t.stepCount > bestTrack.stepCount) bestTrack = t;
+      var s = t.stepSource || "UNKNOWN";
+      sources[s] = (sources[s] || 0) + 1;
+    });
+    var days = Object.keys(dayMap);
+    var bestDay = days[0], hitDays = 0;
+    days.forEach(function (k) {
+      if (dayMap[k] > dayMap[bestDay]) bestDay = k;
+      if (dayMap[k] >= T.steps.dailyGoal) hitDays++;
+    });
+    var wk = 0, mo = 0;
+    list.forEach(function (t) {
+      if (t.startTimeMs >= startOfWeek(now)) wk += t.stepCount;
+      if (t.startTimeMs >= startOfMonth(now)) mo += t.stepCount;
+    });
+
+    var html = '<div class="section-title">👣 步數總覽</div><div class="cards">';
+    html += card(fmtInt(total), "累積步數", "共 " + fmtInt(list.length) + " 筆活動有步數");
+    html += card(fmtInt(total / days.length), "平均每個活動日步數", "共 " + fmtInt(days.length) + " 個活動日");
+    html += card(fmtInt(dayMap[bestDay]), "最高單日步數", bestDay.replace(/-/g, "/"));
+    html += card(fmtInt(bestTrack.stepCount), "單趟最高步數", fmtDay(bestTrack.startTimeMs));
+    html += card(fmtInt(wk), "本週步數");
+    html += card(fmtInt(mo), "本月步數");
+    html += card(fmtInt(hitDays) + " / " + fmtInt(days.length), "達標活動日", "目標 " + fmtInt(T.steps.dailyGoal) + " 步／日");
+    html += "</div>";
+
+    html += '<div class="section-title">📈 步數趨勢</div>';
+    html += '<div class="range-row"><button data-sm="day">近 30 天</button><button data-sm="week">近 12 週</button><button data-sm="month">近 12 個月</button></div>';
+    html += '<div id="stepChartBox"></div>';
+
+    var srcKeys = Object.keys(sources);
+    html += '<div class="section-title">🔎 步數來源</div><div class="cards">';
+    srcKeys.forEach(function (s) { html += card(fmtInt(sources[s]) + " 筆", STEP_SOURCE_NAME[s] || "未標示（舊紀錄）"); });
+    html += "</div>";
+    html += '<div class="muted" style="margin-top:10px">步數以每趟活動為單位，歸入活動開始的那一天；網站沒有逐日的全天步數。' +
+      "「手機感測器（Health Connect 尚無資料）」代表錄製結束時 Zepp Life 還沒同步，之後補同步成功會自動更新該筆。</div>";
+    panel.innerHTML = html;
+    Array.prototype.forEach.call(panel.querySelectorAll("[data-sm]"), function (b) {
+      b.addEventListener("click", function () { stepMode = b.getAttribute("data-sm"); drawStepChart(); });
+    });
+    drawStepChart();
+  }
+
   function renderKing() {
     var now = Date.now();
     var all = validTracks();
@@ -660,7 +785,7 @@
   // ===== 分頁切換 =====
   var RENDERERS = {
     overview: renderOverview, badges: renderBadges, best: renderBest, period: renderPeriod,
-    king: renderKing, tour: renderTour, history: renderHistory, photos: renderPhotos,
+    steps: renderSteps, king: renderKing, tour: renderTour, history: renderHistory, photos: renderPhotos,
     bingo: renderBingo, art: renderArt
   };
   function showTab(id) {

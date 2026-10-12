@@ -30,6 +30,8 @@
       var totalKm = 0;
       valid.forEach(function (t) { totalKm += (t.distanceMeters || 0) / 1000; });
       state.totalKm = totalKm;
+      state.totalSteps = 0;
+      valid.forEach(function (t) { state.totalSteps += t.stepCount || 0; });
       state.count = valid.length;
       state.updatedAt = (m && m.updatedAt) || null;
 
@@ -65,6 +67,7 @@
     $("cards").innerHTML =
       card(fmtKm(state.totalKm) + " km", "全站有效累計里程（計一次）") +
       card(state.count + " 筆", "有效活動數") +
+      (state.totalSteps > 0 ? card(state.totalSteps.toLocaleString("zh-Hant") + " 步", "累積步數（詳見競賽中心「步數統計」）") : "") +
       card(done + " / " + g.length, "已達成目標") +
       card(fmtDate(state.updatedAt), "紀錄資料更新時間");
 

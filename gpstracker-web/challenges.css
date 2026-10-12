@@ -107,3 +107,16 @@
 .bingo-cell.done { border-color: var(--green); background: var(--green-soft); }
 .bingo-cell .bt { font-weight: 700; margin-bottom: 4px; }
 .bingo-cell .bs { color: var(--muted); font-size: 11px; }
+
+/* ===== 步數統計（長條圖，純 CSS，無外部函式庫） ===== */
+.range-row button.on { background: var(--grad); border-color: transparent; color: #fff; }
+.step-chart {
+  display: flex; align-items: stretch; gap: 4px; height: 200px; padding: 16px 12px 8px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.step-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.step-bar-wrap { position: relative; flex: 1; display: flex; align-items: flex-end; }
+.step-bar { display: block; width: 100%; background: linear-gradient(180deg, var(--primary), var(--primary-2)); border-radius: 4px 4px 0 0; transition: height .4s var(--ease); }
+.step-bar.hit { background: linear-gradient(180deg, var(--green), var(--accent)); }
+.step-bar-wrap s { position: absolute; left: -2px; right: -2px; height: 0; border-top: 1px dashed rgba(251, 191, 36, .85); pointer-events: none; }
+.step-lbl { height: 16px; margin-top: 4px; font-size: 10px; color: var(--muted); text-align: center; white-space: nowrap; overflow: visible; }

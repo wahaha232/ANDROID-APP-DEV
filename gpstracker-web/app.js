@@ -121,13 +121,18 @@
     return fetchJson(trackId + ".json", false).then(function (t) { trackCache[trackId] = t; return t; });
   }
 
+  // 步數來源標籤（App 新版上傳才有 stepSource；舊紀錄沒有就不顯示）。
+  var STEP_SOURCE_SHORT = { ZEPP_LIFE: "Zepp Life", GOOGLE_FIT: "Google Fit", SENSOR: "手機感測器", SENSOR_FALLBACK: "手機感測器·待補同步" };
+  function stepSourceSuffix(src) { return STEP_SOURCE_SHORT[src] ? "（" + STEP_SOURCE_SHORT[src] + "）" : ""; }
+
   function renderSummary() {
-    var totalDist = 0, totalDur = 0, totalAscent = 0;
+    var totalDist = 0, totalDur = 0, totalAscent = 0, totalSteps = 0;
     manifest.tracks.forEach(function (t) {
+      totalSteps += t.stepCount || 0;
       totalDist += t.distanceMeters || 0; totalDur += t.durationMs || 0; totalAscent += t.totalAscentMeters || 0;
     });
     $("summary").textContent = manifest.tracks.length + " 筆紀錄 · 總里程 " + (totalDist / 1000).toFixed(2) +
-      " km · 總時間 " + fmtDur(totalDur) + " · 總爬升 " + Math.round(totalAscent) + " m";
+      " km · 總時間 " + fmtDur(totalDur) + " · 總爬升 " + Math.round(totalAscent) + " m" + (totalSteps > 0 ? " · 總步數 " + totalSteps.toLocaleString("zh-Hant") : "");
     renderQuests(totalDist / 1000);
   }
 
@@ -260,7 +265,7 @@
       stat(fmtDur(t.durationMs || 0), "持續時間") +
       stat(((t.avgSpeedMps || 0) * 3.6).toFixed(1), "平均速度 (km/h)") +
       stat(((t.maxSpeedMps || 0) * 3.6).toFixed(1), "最高速度 (km/h)") +
-      stat((t.stepCount || 0), "步數") +
+      stat((t.stepCount || 0), "步數" + stepSourceSuffix(t.stepSource)) +
       stat(Math.round(t.totalAscentMeters || 0), "總爬升 (m)") +
       stat(Math.round(t.totalDescentMeters || 0), "總下降 (m)") +
       stat((t.gpsPointCount || 0), "定位點") +
