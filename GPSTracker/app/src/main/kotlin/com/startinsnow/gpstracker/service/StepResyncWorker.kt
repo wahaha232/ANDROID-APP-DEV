@@ -46,7 +46,7 @@ class StepResyncWorker(context: Context, params: WorkerParameters) : CoroutineWo
 
         // 步數有更新（或上次上傳失敗重試）時，重傳到網頁儀表板，讓網站顯示補同步後的步數。
         if (changed || runAttemptCount > 0) {
-            val outcome = WebDashboardSync.uploadIfConfigured(app, trackId)
+            val outcome = WebDashboardSync.uploadIfConfigured(app, trackId, onlyIfAlreadyOnWeb = true)
             val needRetry = outcome.isFailure || outcome.getOrNull() == WebDashboardSync.Outcome.SKIPPED_WIFI_ONLY
             if (needRetry && runAttemptCount < MAX_RETRIES) return Result.retry()
         }

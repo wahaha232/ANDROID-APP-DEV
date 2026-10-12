@@ -1,5 +1,10 @@
 package com.startinsnow.gpstracker.sync
 
+import java.time.ZoneId
+import java.time.Period
+import java.time.LocalDateTime
+import java.time.LocalDate
+import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
@@ -91,6 +96,41 @@ class HealthConnectStepReader(private val context: Context) {
             pages++
         } while (!pageToken.isNullOrEmpty() && pages < MAX_PAGES)
         found
+    }
+
+    /**
+     * 最近 [days] 天（含今天）每天的步數：去除重複的合計，以及每個來源 App 分開的數字。
+     * 以本地時區的日曆日切分。來源 App 清單由區間內的原始記錄掃描得出。
+     */
+    suspend fun dailySteps(days: Int): Result<List<DailyStepsRow>> = runCatching {
+        val client = HealthConnectClient.getOrCreate(context)
+        val zone = ZoneId.systemDefault()
+        val endDate = LocalDate.now(zone)
+        val startDate = endDate.minusDays(days - 1L)
+        val startMs = startDate.atStartOfDay(zone).toInstant().toEpochMilli()
+        val nowMs = System.currentTimeMillis()
+        val range = TimeRangeFilter.between(startDate.atStartOfDay(), LocalDateTime.now(zone))
+
+        suspend fun perDay(filter: Set<DataOrigin>): Map<LocalDate, Long> =
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(StepsRecord.COUNT_TOTAL),
+                    timeRangeFilter = range,
+                    timeRangeSlicer = Period.ofDays(1),
+                    dataOriginFilter = filter
+                )
+            ).associate { it.startTime.toLocalDate() to (it.result[StepsRecord.COUNT_TOTAL] ?: 0L) }
+
+        val total = perDay(emptySet())
+        val perOrigin = originsInRange(startMs, nowMs).getOrThrow().associateWith { perDay(setOf(DataOrigin(it))) }
+        (0 until days).map { i ->
+            val date = startDate.plusDays(i.toLong())
+            DailyStepsRow(
+                date = date,
+                total = total[date] ?: 0L,
+                perOrigin = perOrigin.mapValues { it.value[date] ?: 0L }.filterValues { it > 0L }
+            )
+        }
     }
 
     /** 單一來源 App 在區間內的步數（aggregate，依時間比例切分）。 */

@@ -17,16 +17,37 @@ object WebDashboardSync {
         /** 設定為僅 Wi-Fi，但目前不是 Wi-Fi。 */
         SKIPPED_WIFI_ONLY,
 
+        /** 事後補傳時發現網頁上已沒有這筆（使用者在網頁刪除了），不重傳以免讓它復活。 */
+        SKIPPED_NOT_ON_WEB,
+
         UPLOADED
     }
 
-    suspend fun uploadIfConfigured(app: GpsTrackerApplication, trackId: String): Result<Outcome> = runCatching {
+    /**
+     * @param onlyIfAlreadyOnWeb true 時只更新「網頁上還存在」的軌跡（步數補同步用）；
+     *   錄製剛結束的第一次上傳要傳 false（此時網頁上本來就還沒有）。
+     */
+    suspend fun uploadIfConfigured(
+        app: GpsTrackerApplication,
+        trackId: String,
+        onlyIfAlreadyOnWeb: Boolean = false
+    ): Result<Outcome> = runCatching {
         val settings = app.settingsRepository.settings.first()
         if (!settings.webUploadEnabled || settings.githubToken.isBlank() || settings.webRepo.isBlank()) {
             return@runCatching Outcome.NOT_CONFIGURED
         }
         if (settings.webWifiOnly && !WebDashboardUploader.isOnWifi(app)) {
             return@runCatching Outcome.SKIPPED_WIFI_ONLY
+        }
+        if (onlyIfAlreadyOnWeb) {
+            val onWeb = WebDashboardUploader().isTrackInManifest(
+                token = settings.githubToken,
+                repo = settings.webRepo,
+                branch = settings.webBranch,
+                dataPath = settings.webDataPath,
+                trackId = trackId
+            ).getOrThrow()
+            if (!onWeb) return@runCatching Outcome.SKIPPED_NOT_ON_WEB
         }
         val track = app.trackRepository.getTrack(trackId) ?: return@runCatching Outcome.NOT_CONFIGURED
         val data = ExportTrackData(

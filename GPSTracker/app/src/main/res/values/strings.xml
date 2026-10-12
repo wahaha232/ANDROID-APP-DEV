@@ -270,4 +270,11 @@
     <string name="mode_public_transport">大眾運輸</string>
     <string name="mode_airplane">飛機</string>
     <string name="mode_other">其他</string>
+    <string name="today_steps_sync_button">同步到網站</string>
+    <string name="today_steps_sync_running">上傳逐日步數中…</string>
+    <string name="today_steps_sync_done">已把每天的步數上傳到網站（約 1–2 分鐘後網站更新）。</string>
+    <string name="today_steps_sync_unchanged">步數沒有變化，網站上已經是最新的。</string>
+    <string name="today_steps_sync_not_configured">請先在「設定」填入 GitHub Token 與儲存庫（網頁儀表板），才能上傳到網站。</string>
+    <string name="today_steps_sync_wifi">設定為「僅限 Wi-Fi 上傳」，目前不是 Wi-Fi 連線。</string>
+    <string name="today_steps_sync_failed">上傳失敗：%1$s</string>
 </resources>

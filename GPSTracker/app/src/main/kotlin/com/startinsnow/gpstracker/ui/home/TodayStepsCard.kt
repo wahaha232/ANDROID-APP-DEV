@@ -25,6 +25,8 @@ import com.startinsnow.gpstracker.sync.StepSourceTag
 fun TodayStepsCard(
     state: TodaySteps,
     onRefresh: () -> Unit,
+    syncMessage: String?,
+    onSyncToWeb: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -41,7 +43,13 @@ fun TodayStepsCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(stringResource(R.string.today_steps_title), style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = onRefresh) { Text(stringResource(R.string.today_steps_refresh)) }
+                Row {
+                    TextButton(onClick = onSyncToWeb) { Text(stringResource(R.string.today_steps_sync_button)) }
+                    TextButton(onClick = onRefresh) { Text(stringResource(R.string.today_steps_refresh)) }
+                }
+            }
+            syncMessage?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
 
             when (state) {

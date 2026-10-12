@@ -68,6 +68,37 @@ class WebDashboardUploader(
         }
     }
 
+    /**
+     * 這筆軌跡目前是否還在網頁的 manifest 裡。用在「事後補傳」（步數補同步）：
+     * 使用者若已在網頁「紀錄管理」刪除，就不能再把它傳回去讓它復活。
+     */
+    suspend fun isTrackInManifest(
+        token: String,
+        repo: String,
+        branch: String,
+        dataPath: String,
+        trackId: String
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            val existing = getContent(token, repo, branch, "${dataPath.trim('/')}/manifest.json")
+                ?: return@runCatching false
+            val tracks = JSONObject(existing.content).optJSONArray("tracks") ?: return@runCatching false
+            (0 until tracks.length()).any { tracks.getJSONObject(it).optString("trackId") == trackId }
+        }
+    }
+
+    /** 寫入（新增或覆寫）repo 內的任意檔案，例如逐日步數 steps.json。 */
+    suspend fun putFile(
+        token: String,
+        repo: String,
+        branch: String,
+        path: String,
+        content: String,
+        message: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { putContent(token, repo, branch, path, content, message) }
+    }
+
     private data class ContentFile(val content: String, val sha: String?)
 
     private fun getContent(token: String, repo: String, branch: String, path: String): ContentFile? {

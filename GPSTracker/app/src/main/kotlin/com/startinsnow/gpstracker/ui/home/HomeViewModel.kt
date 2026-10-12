@@ -53,6 +53,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val recentTracks = app.trackRepository.observeTracks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val _stepsSyncMessage = MutableStateFlow<String?>(null)
+    val stepsSyncMessage: StateFlow<String?> = _stepsSyncMessage
+
+    /** 把每天的步數（各來源分開＋去重合計）上傳到網站，讓網站的「步數統計」有逐日資料。 */
+    fun syncStepsToWeb() {
+        viewModelScope.launch {
+            _stepsSyncMessage.value = app.getString(com.startinsnow.gpstracker.R.string.today_steps_sync_running)
+            val result = withContext(Dispatchers.IO) { com.startinsnow.gpstracker.sync.DailyStepsSync.sync(app, force = true) }
+            _stepsSyncMessage.value = result.fold(
+                onSuccess = {
+                    when (it) {
+                        com.startinsnow.gpstracker.sync.DailyStepsSync.Outcome.UPLOADED ->
+                            app.getString(com.startinsnow.gpstracker.R.string.today_steps_sync_done)
+                        com.startinsnow.gpstracker.sync.DailyStepsSync.Outcome.UNCHANGED ->
+                            app.getString(com.startinsnow.gpstracker.R.string.today_steps_sync_unchanged)
+                        com.startinsnow.gpstracker.sync.DailyStepsSync.Outcome.NOT_CONFIGURED ->
+                            app.getString(com.startinsnow.gpstracker.R.string.today_steps_sync_not_configured)
+                        com.startinsnow.gpstracker.sync.DailyStepsSync.Outcome.SKIPPED_WIFI_ONLY ->
+                            app.getString(com.startinsnow.gpstracker.R.string.today_steps_sync_wifi)
+                    }
+                },
+                onFailure = {
+                    app.getString(com.startinsnow.gpstracker.R.string.today_steps_sync_failed, it.message ?: it::class.java.simpleName)
+                }
+            )
+        }
+    }
+
     private val _todaySteps = MutableStateFlow<TodaySteps>(TodaySteps.Loading)
     val todaySteps: StateFlow<TodaySteps> = _todaySteps
 

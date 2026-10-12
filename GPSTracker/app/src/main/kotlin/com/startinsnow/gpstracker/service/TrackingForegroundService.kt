@@ -625,7 +625,7 @@ class TrackingForegroundService : LifecycleService() {
                 when (outcome) {
                     WebDashboardSync.Outcome.SKIPPED_WIFI_ONLY -> TrackingStateHolder.postMessage(getString(R.string.service_011))
                     WebDashboardSync.Outcome.UPLOADED -> TrackingStateHolder.postMessage(getString(R.string.detail_029))
-                    WebDashboardSync.Outcome.NOT_CONFIGURED -> Unit
+                    WebDashboardSync.Outcome.NOT_CONFIGURED, WebDashboardSync.Outcome.SKIPPED_NOT_ON_WEB -> Unit
                 }
             }
             .onFailure {

@@ -131,7 +131,7 @@ class TrackDetailViewModel(
                     if (steps > 0) {
                         val tag = StepSourceTag.forSource(source)
                         app.trackRepository.updateSteps(trackId, steps, tag)
-                        val web = WebDashboardSync.uploadIfConfigured(app, trackId)
+                        val web = WebDashboardSync.uploadIfConfigured(app, trackId, onlyIfAlreadyOnWeb = true)
                         val webNote = when {
                             web.isFailure -> app.getString(R.string.detail_vm_004, web.exceptionOrNull()?.message)
                             web.getOrNull() == WebDashboardSync.Outcome.UPLOADED -> app.getString(R.string.detail_vm_005)

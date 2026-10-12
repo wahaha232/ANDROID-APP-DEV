@@ -73,6 +73,7 @@ fun HomeScreen(
     val tracks by viewModel.recentTracks.collectAsStateWithLifecycle()
     val pendingRecovery by viewModel.pendingRecovery.collectAsStateWithLifecycle()
     val todaySteps by viewModel.todaySteps.collectAsStateWithLifecycle()
+    val stepsSyncMessage by viewModel.stepsSyncMessage.collectAsStateWithLifecycle()
 
     // 回到前景（含從設定頁授權 Health Connect 回來）就重新讀取今日步數。
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
@@ -102,7 +103,14 @@ fun HomeScreen(
         ) {
             item { StatusHero(state = state, isActive = isActive) }
 
-            item { TodayStepsCard(state = todaySteps, onRefresh = { viewModel.refreshTodaySteps() }) }
+            item {
+                TodayStepsCard(
+                    state = todaySteps,
+                    onRefresh = { viewModel.refreshTodaySteps() },
+                    syncMessage = stepsSyncMessage,
+                    onSyncToWeb = { viewModel.syncStepsToWeb() }
+                )
+            }
 
             item {
                 Button(
