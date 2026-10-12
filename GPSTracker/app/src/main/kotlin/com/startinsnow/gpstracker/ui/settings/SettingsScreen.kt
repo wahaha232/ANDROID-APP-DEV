@@ -210,6 +210,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                                     val permissions = mutableSetOf(HealthConnectStepReader.READ_PERMISSION)
                                     hcBackgroundRequested = HealthConnectStepReader(context).isBackgroundReadSupported()
                                     if (hcBackgroundRequested) permissions += HealthConnectStepReader.BACKGROUND_PERMISSION
+                                    // 讀取授權前的歷史步數（一次同步更久遠的每日步數）
+                                    if (HealthConnectStepReader(context).isHistoryReadSupported()) {
+                                        permissions += HealthConnectStepReader.HISTORY_PERMISSION
+                                    }
                                     hcLauncher.launch(permissions)
                                 }
                             },

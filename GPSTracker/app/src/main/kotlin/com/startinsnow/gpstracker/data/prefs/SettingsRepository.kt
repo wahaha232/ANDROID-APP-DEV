@@ -21,7 +21,7 @@ enum class StepSource { DEVICE_SENSOR, GOOGLE_FIT, ZEPP_LIFE }
 data class AppSettings(
     val gpsMode: GpsMode = GpsMode.ADAPTIVE,
     val autoPauseEnabled: Boolean = true,
-    val stepSource: StepSource = StepSource.ZEPP_LIFE,
+    val stepSource: StepSource = StepSource.GOOGLE_FIT,
     val driveSyncEnabled: Boolean = false,
     val wifiOnlySync: Boolean = true,
     val dataRetentionDays: Int = 0, // 0 = 永久保留
@@ -68,7 +68,7 @@ class SettingsRepository(private val context: Context) {
         AppSettings(
             gpsMode = runCatching { GpsMode.valueOf(prefs[Keys.GPS_MODE] ?: GpsMode.ADAPTIVE.name) }.getOrDefault(GpsMode.ADAPTIVE),
             autoPauseEnabled = prefs[Keys.AUTO_PAUSE] ?: true,
-            stepSource = runCatching { StepSource.valueOf(prefs[Keys.STEP_SOURCE] ?: StepSource.ZEPP_LIFE.name) }.getOrDefault(StepSource.ZEPP_LIFE),
+            stepSource = runCatching { StepSource.valueOf(prefs[Keys.STEP_SOURCE] ?: StepSource.GOOGLE_FIT.name) }.getOrDefault(StepSource.GOOGLE_FIT),
             driveSyncEnabled = prefs[Keys.DRIVE_SYNC] ?: false,
             wifiOnlySync = prefs[Keys.WIFI_ONLY] ?: true,
             dataRetentionDays = prefs[Keys.RETENTION_DAYS] ?: 0,

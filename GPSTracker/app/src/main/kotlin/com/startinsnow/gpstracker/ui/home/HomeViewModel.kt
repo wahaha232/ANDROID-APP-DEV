@@ -115,13 +115,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val others = breakdown.filterKeys {
             !HealthConnectStepReader.isZepp(it) && !HealthConnectStepReader.isGoogleFit(it) && !HealthConnectStepReader.isPhone(it)
         }.toList()
-        val primary = when (source) {
+        // 首頁一律以 Google Fit 為主（小米 Zepp Life 的步數會先同步到 Google Fit 再進入 Health Connect）；
+        // 沒有 Google Fit 資料時才依設定的來源退回其他來源。
+        val shownSource = if (googleFit != null) StepSource.GOOGLE_FIT else source
+        val primary = when (shownSource) {
             StepSource.ZEPP_LIFE -> zepp
             StepSource.GOOGLE_FIT -> googleFit
             StepSource.DEVICE_SENSOR -> phone
         } ?: 0L
         val total = resolver.readHealthConnectAll(startMs, nowMs).getOrNull()
-        return TodaySteps.Value(source, primary, zepp, googleFit, phone, others, total)
+        return TodaySteps.Value(shownSource, primary, zepp, googleFit, phone, others, total)
     }
 
     /** 使用者選擇「不接續」時，把未完成的 Track 收尾（不會刪掉已記錄的資料）。 */

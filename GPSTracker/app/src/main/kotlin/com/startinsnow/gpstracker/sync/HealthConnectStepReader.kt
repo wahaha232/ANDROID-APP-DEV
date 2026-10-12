@@ -65,6 +65,17 @@ class HealthConnectStepReader(private val context: Context) {
             HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
     }.getOrDefault(false)
 
+    /** 目前 Health Connect 版本是否支援「讀取歷史資料」權限。 */
+    @OptIn(ExperimentalFeatureAvailabilityApi::class)
+    suspend fun isHistoryReadSupported(): Boolean = runCatching {
+        HealthConnectClient.getOrCreate(context).features
+            .getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY) ==
+            HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+    }.getOrDefault(false)
+
+    suspend fun hasHistoryPermission(): Boolean =
+        runCatching { grantedPermissions().contains(HISTORY_PERMISSION) }.getOrDefault(false)
+
     /** 是否已授權背景讀取（錄製結束時 App 多半不在前景，沒有它讀取會被系統拒絕）。 */
     suspend fun hasBackgroundPermission(): Boolean =
         runCatching { grantedPermissions().contains(BACKGROUND_PERMISSION) }.getOrDefault(false)
@@ -107,8 +118,13 @@ class HealthConnectStepReader(private val context: Context) {
         val zone = ZoneId.systemDefault()
         val endDate = LocalDate.now(zone)
         val startDate = endDate.minusDays(days - 1L)
-        val startMs = startDate.atStartOfDay(zone).toInstant().toEpochMilli()
         val nowMs = System.currentTimeMillis()
+        // 來源清單只掃描最近 14 天的原始記錄（來源 App 不會頻繁變動）；整段歷史的步數用 aggregate 由系統彙總，
+        // 不把上萬筆原始記錄讀進記憶體。
+        val discoverStartMs = maxOf(
+            startDate.atStartOfDay(zone).toInstant().toEpochMilli(),
+            endDate.minusDays(13).atStartOfDay(zone).toInstant().toEpochMilli()
+        )
         val range = TimeRangeFilter.between(startDate.atStartOfDay(), LocalDateTime.now(zone))
 
         suspend fun perDay(filter: Set<DataOrigin>): Map<LocalDate, Long> =
@@ -122,7 +138,7 @@ class HealthConnectStepReader(private val context: Context) {
             ).associate { it.startTime.toLocalDate() to (it.result[StepsRecord.COUNT_TOTAL] ?: 0L) }
 
         val total = perDay(emptySet())
-        val perOrigin = originsInRange(startMs, nowMs).getOrThrow().associateWith { perDay(setOf(DataOrigin(it))) }
+        val perOrigin = originsInRange(discoverStartMs, nowMs).getOrThrow().associateWith { perDay(setOf(DataOrigin(it))) }
         (0 until days).map { i ->
             val date = startDate.plusDays(i.toLong())
             DailyStepsRow(
@@ -185,6 +201,7 @@ class HealthConnectStepReader(private val context: Context) {
     companion object {
         val READ_PERMISSION: String = HealthPermission.getReadPermission(StepsRecord::class)
         const val BACKGROUND_PERMISSION = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
+        const val HISTORY_PERMISSION = "android.permission.health.READ_HEALTH_DATA_HISTORY"
 
         // 來源分類。「手機本身」是 Health Connect 內建的系統計步來源，package 為
         // com.android.healthconnect.phone.<每支手機不同的隨機碼>，所以只能用前綴判斷。

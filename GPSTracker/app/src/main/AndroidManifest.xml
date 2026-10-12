@@ -22,6 +22,8 @@
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <!-- 錄製結束（App 不在前景）與延後補同步時讀取 Health Connect 步數所需 -->
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
+    <!-- 讀取授權之前的歷史步數（預設只能讀授權前 30 天）：一次同步更久遠的每日步數需要 -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
 
     <!-- 將照片寫入系統相簿：Android 10（Q）以下才需要此權限，Q 以上用 MediaStore 免權限 -->
     <uses-permission

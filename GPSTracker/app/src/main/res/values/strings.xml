@@ -249,12 +249,12 @@
     <string name="today_steps_source">來源：%1$s</string>
     <string name="today_steps_no_data">Health Connect 目前沒有今天的步數。請先開啟 Zepp Life（或 Google Fit）讓手環同步，再按「重新整理」。</string>
     <string name="today_steps_row_zepp">Zepp Life：%1$s 步</string>
-    <string name="today_steps_row_google">Google Fit：%1$s 步</string>
+    <string name="today_steps_row_google">Google Fit（含小米 Zepp Life 同步）：%1$s 步</string>
     <string name="today_steps_row_phone">手機本身（系統計步）：%1$s 步</string>
     <string name="today_steps_row_other">%1$s：%2$s 步</string>
-    <string name="today_steps_zepp_missing">Health Connect 裡沒有 Zepp Life／小米的步數：它尚未把步數寫入 Health Connect。請在 Zepp Life 的設定中開啟「同步到 Health Connect」並授權寫入步數，再讓手環同步一次。</string>
+    <string name="today_steps_zepp_missing">小米 Zepp Life 的步數會先同步到 Google Fit，再由 Google Fit 寫入 Health Connect；手環同步後這裡就會更新。</string>
     <string name="today_steps_row_total">合計（Health Connect 去除重複）：%1$s 步</string>
-    <string name="today_steps_total_note">合計不是各來源相加：同一段路被多個來源同時記錄時，Health Connect 依優先順序只算一次。若某個來源的數字明顯偏高（例如 Google Fit 與手機實際步數差很多），請到系統「Health Connect → 資料來源優先順序」把「手機」排在前面。</string>
+    <string name="today_steps_total_note">合計由 Health Connect 依優先順序去除重複，不是各來源相加。</string>
     <!-- recording: prepare screen -->
     <string name="recording_prepare_title">準備記錄</string>
     <string name="recording_start_button">開始記錄</string>

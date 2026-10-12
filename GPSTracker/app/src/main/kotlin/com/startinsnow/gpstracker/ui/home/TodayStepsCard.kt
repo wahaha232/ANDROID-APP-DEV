@@ -79,7 +79,7 @@ fun TodayStepsCard(
                         Detail(stringResource(R.string.today_steps_row_other, pkg, "%,d".format(steps)))
                     }
                     // Health Connect 裡沒有出現小米／Zepp Life：不是顯示錯誤，而是它根本沒寫入。
-                    if (state.zepp == null) Hint(stringResource(R.string.today_steps_zepp_missing))
+                    if (state.zepp == null && state.googleFit == null) Hint(stringResource(R.string.today_steps_zepp_missing))
                     state.total?.let { total ->
                         Detail(stringResource(R.string.today_steps_row_total, "%,d".format(total)))
                         Text(

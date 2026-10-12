@@ -23,7 +23,8 @@ object DailyStepsSync {
 
     private const val PREFS = "daily_steps_sync"
     private const val KEY_LAST_HASH = "last_hash"
-    const val DEFAULT_DAYS = 60
+    /** 一次涵蓋的天數：Health Connect 能讀到多少就同步多少（沒有資料的天會是 0）。 */
+    const val DEFAULT_DAYS = 1095 // 3 年
 
     suspend fun sync(app: GpsTrackerApplication, days: Int = DEFAULT_DAYS, force: Boolean = false): Result<Outcome> = runCatching {
         val settings = app.settingsRepository.settings.first()
@@ -34,7 +35,8 @@ object DailyStepsSync {
         check(reader.isAvailable()) { "Health Connect unavailable" }
         check(reader.hasPermission()) { "Health Connect permission missing" }
 
-        val rows = reader.dailySteps(days).getOrThrow()
+        // 完全沒有資料的日子不上傳（網站把缺少的日期當 0），歷史很長時檔案才不會被零灌大。
+        val rows = reader.dailySteps(days).getOrThrow().filter { it.total > 0L || it.perOrigin.isNotEmpty() }
         val daysJson = buildDaysJson(rows)
         val hash = sha1(daysJson.toString())
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
