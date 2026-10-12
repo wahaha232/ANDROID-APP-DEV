@@ -68,17 +68,15 @@
         version: 8, projection: { type: "globe" }, sky: {},
         sources: {
           base: { type: "raster", tiles: [BASE_TILES], tileSize: 256, attribution: BASE_ATTR },
-          dem: { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256, attribution: DEM_ATTR }
+          dem: { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256, maxzoom: 15, attribution: DEM_ATTR }
         },
         layers: [
-          { id: "base", type: "raster", source: "base" },
-          { id: "hillshade", type: "hillshade", source: "dem" }
+          { id: "base", type: "raster", source: "base" }
         ]
       },
       center: [121.0, 23.5], zoom: 1.6, pitch: 0, antialias: true
     });
     map.on("load", function () {
-      map.setTerrain({ source: "dem", exaggeration: 1.3 });
       map.addSource("route", { type: "geojson", data: GPST.emptyLine() });
       map.addLayer({ id: "route-line", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#00E676", "line-width": 5 } });
       map.addSource("allroutes", { type: "geojson", data: GPST.emptyFC() });
@@ -241,7 +239,18 @@
     });
   }
 
+  // 地形與山影只在「顯示某筆軌跡」時才啟用：開頁時是全球視角，地形在那個尺度沒有意義，
+  // 卻會先載入並處理一批高程圖磚、拖慢首次畫面。
+  var terrainOn = false;
+  function ensureTerrain() {
+    if (terrainOn) return;
+    terrainOn = true;
+    map.addLayer({ id: "hillshade", type: "hillshade", source: "dem" }, "route-line");
+    map.setTerrain({ source: "dem", exaggeration: 1.3 });
+  }
+
   function drawTrack(t) {
+    ensureTerrain();
     var coords = (t.points || []).map(function (p) { return [p[0], p[1]]; });
     map.getSource("route").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
     var photos = (t.photos || []).map(function (p) {

@@ -4,9 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>GPS Tracker 3D 回放</title>
+  <!-- 提前與圖磚主機建立連線（DNS + TLS），省下首批圖磚請求的握手時間 -->
+  <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin />
+  <link rel="preconnect" href="https://s3.amazonaws.com" crossorigin />
+  <link rel="preload" href="vendor/maplibre-gl.js" as="script" />
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
   <script src="common.js?v=042e6b86"></script>
-  <script src="vendor/maplibre-gl.js"></script>
+  <script defer src="vendor/maplibre-gl.js"></script>
   <style>
     html, body { height: 100%; margin: 0; background: #000; overflow: hidden; color: #eaf0fb;
       font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
@@ -73,21 +77,61 @@
 
   function $(id) { return document.getElementById(id); }
 
-  map = new maplibregl.Map({
-    container: "map",
-    style: { version: 8, projection: { type: "globe" }, sky: {},
-      sources: {
-        base: { type: "raster", tiles: [BASE_TILES], tileSize: 256, attribution: BASE_ATTR },
-        dem: { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256, attribution: DEM_ATTR }
-      },
-      layers: [
-        { id: "base", type: "raster", source: "base" },
-        { id: "hillshade", type: "hillshade", source: "dem", paint: { "hillshade-exaggeration": 0.5 } }
-      ] },
-    center: [121, 23.5], zoom: 1.6, pitch: 0, bearing: 0, antialias: true
-  });
+  function emptyLine() { return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } }; }
+  function emptyFC() { return { type: "FeatureCollection", features: [] }; }
 
-  map.on("load", function () {
+  // ===== 載入流程（針對速度）=====
+  // 1) 軌跡 JSON 在頁面一解析就開始下載，與 1 MB 的 MapLibre 腳本並行（原本要等地圖整個載入完才開始抓）。
+  // 2) 地圖直接建在軌跡起點的視角：原本先以全球視角（z3）載入約 100 張用不到的世界圖磚，再跳到軌跡。
+  // 3) 高程圖磚只到 z15：宣告 maxzoom，避免請求不存在的 z16 圖磚。
+  var trackPromise = null;
+  if (trackId) {
+    trackPromise = fetch(RAW + trackId + ".json", { cache: "no-cache" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+    trackPromise.catch(function () { /* 錯誤由 DOMContentLoaded 後的處理顯示 */ });
+  }
+
+  var DISPLAY_MAX_POINTS = 2000; // 軌跡「顯示線」的最大點數；位置／HUD 仍用完整資料
+  var dispCoords = [], dispStep = 1;
+
+  function prepareTrack(t) {
+    var pts = t.points || [];
+    coords = pts.map(function (p) { return [p[0], p[1]]; });
+    hudData = pts.map(function (p) { return [p[3] || 0, p[2] || 0]; });
+    cum = [0]; total = 0;
+    for (var i = 1; i < coords.length; i++) { total += hav(coords[i - 1], coords[i]); cum.push(total); }
+    // 長軌跡（上萬點）每幀重建並序列化整條線很吃 CPU：顯示用的線抽樣到最多 DISPLAY_MAX_POINTS 點。
+    dispStep = Math.max(1, Math.ceil(coords.length / DISPLAY_MAX_POINTS));
+    dispCoords = [];
+    for (var j = 0; j < coords.length; j += dispStep) dispCoords.push(coords[j]);
+    if (coords.length && dispCoords[dispCoords.length - 1] !== coords[coords.length - 1]) dispCoords.push(coords[coords.length - 1]);
+  }
+
+  function createMap() {
+    var hasTrack = coords.length > 0;
+    map = new maplibregl.Map({
+      container: "map",
+      style: { version: 8, projection: { type: "globe" }, sky: {},
+        sources: {
+          base: { type: "raster", tiles: [BASE_TILES], tileSize: 256, maxzoom: 19, attribution: BASE_ATTR },
+          dem: { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256, maxzoom: 15, attribution: DEM_ATTR }
+        },
+        layers: [
+          { id: "base", type: "raster", source: "base" },
+          { id: "hillshade", type: "hillshade", source: "dem", paint: { "hillshade-exaggeration": 0.5 } }
+        ] },
+      // 有軌跡就直接從起點視角開始（與播放第一幀相同），沒有才顯示全球。
+      center: hasTrack ? coords[0] : [121, 23.5],
+      zoom: hasTrack ? 15.2 : 1.6,
+      pitch: hasTrack ? 60 : 0,
+      bearing: coords.length > 1 ? bearing(coords[0], coords[1]) : 0,
+      antialias: true,
+      fadeDuration: 0 // 圖磚不做淡入動畫：畫面更快就緒
+    });
+    map.on("load", onMapLoad);
+  }
+
+  function onMapLoad() {
     map.setTerrain({ source: "dem", exaggeration: 1.3 });
     map.addSource("planned", { type: "geojson", data: emptyLine() });
     map.addLayer({ id: "planned-line", type: "line", source: "planned", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 4, "line-opacity": 0.35, "line-dasharray": [2, 2] } });
@@ -95,32 +139,22 @@
     map.addLayer({ id: "traveled-line", type: "line", source: "traveled", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#00E676", "line-width": 6 } });
     map.addSource("marker", { type: "geojson", data: emptyFC() });
     map.addLayer({ id: "marker-dot", type: "circle", source: "marker", paint: { "circle-radius": 9, "circle-color": "#FF3D00", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
-    loadTrack();
-  });
 
-  function emptyLine() { return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } }; }
-  function emptyFC() { return { type: "FeatureCollection", features: [] }; }
-
-  function loadTrack() {
-    if (!trackId) { $("status").textContent = "缺少 ?track= 參數"; return; }
-    fetch(RAW + trackId + ".json", { cache: "no-cache" })
-      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(function (t) {
-        var pts = t.points || [];
-        coords = pts.map(function (p) { return [p[0], p[1]]; });
-        hudData = pts.map(function (p) { return [p[3] || 0, p[2] || 0]; });
-        cum = [0]; total = 0;
-        for (var i = 1; i < coords.length; i++) { total += hav(coords[i - 1], coords[i]); cum.push(total); }
-        map.getSource("planned").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
-        fit();
-        applyFrame(true);
-        $("status").style.display = "none";
-        $("controls").style.display = "";
-        buildChips();
-        if (coords.length > 1) { playing = true; updatePlayBtn(); lastTs = 0; requestAnimationFrame(tick); }
-      })
-      .catch(function (e) { $("status").textContent = "讀取失敗：" + e.message; });
+    map.getSource("planned").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: dispCoords } });
+    applyFrame(true);
+    $("status").style.display = "none";
+    $("controls").style.display = "";
+    buildChips();
+    if (coords.length > 1) { playing = true; updatePlayBtn(); lastTs = 0; requestAnimationFrame(tick); }
   }
+
+  // 等 DOM 與（defer 的）MapLibre 腳本都就緒，並且軌跡資料已經到手，才建立地圖。
+  document.addEventListener("DOMContentLoaded", function () {
+    if (!trackId) { $("status").textContent = "缺少 ?track= 參數"; return; }
+    trackPromise
+      .then(function (t) { prepareTrack(t); createMap(); })
+      .catch(function (e) { $("status").textContent = "讀取失敗：" + e.message; });
+  });
 
   function hav(a, b) {
     var R = 6371000, dLat = (b[1] - a[1]) * Math.PI / 180, dLon = (b[0] - a[0]) * Math.PI / 180;
@@ -155,7 +189,8 @@
     var now = performance.now();
     if (force || now - lastTravel > 60) {
       lastTravel = now;
-      map.getSource("traveled").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords.slice(0, p.i).concat([p.pos]) } });
+      var k = Math.ceil(p.i / dispStep);
+      map.getSource("traveled").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: dispCoords.slice(0, k).concat([p.pos]) } });
       map.getSource("marker").setData({ type: "Feature", geometry: { type: "Point", coordinates: p.pos }, properties: {} });
     }
     $("hud-dist").textContent = ((progress * total) / 1000).toFixed(2);
