@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://s3.amazonaws.com" crossorigin />
   <link rel="preload" href="vendor/maplibre-gl.js" as="script" />
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
-  <script src="common.js?v=042e6b86"></script>
+  <script src="common.js?v=d579a5fd"></script>
   <script defer src="vendor/maplibre-gl.js"></script>
   <style>
     html, body { height: 100%; margin: 0; background: #000; overflow: hidden; color: #eaf0fb;
@@ -86,7 +86,7 @@
   // 3) 高程圖磚只到 z15：宣告 maxzoom，避免請求不存在的 z16 圖磚。
   var trackPromise = null;
   if (trackId) {
-    trackPromise = fetch(RAW + trackId + ".json", { cache: "no-cache" })
+    trackPromise = fetch(GPST.bust(RAW + trackId + ".json", true), { cache: "no-cache" })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
     trackPromise.catch(function () { /* 錯誤由 DOMContentLoaded 後的處理顯示 */ });
   }

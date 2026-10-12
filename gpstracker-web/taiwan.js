@@ -21,7 +21,7 @@
   function fmtM(v) { return (v >= 0 ? "+" : "") + (Math.round(v * 10) / 10).toLocaleString("zh-Hant", { maximumFractionDigits: 1 }) + " m"; }
   function fmtDate(ms) { var d = new Date(ms); return d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
   function loadJSON(url, revalidate) {
-    return fetch(url, revalidate ? { cache: "no-cache" } : undefined).then(function (r) {
+    return fetch(GPST.bust(url, !revalidate), revalidate ? { cache: "no-cache" } : undefined).then(function (r) {
       if (!r.ok) throw new Error(url + " " + r.status);
       return r.json();
     });

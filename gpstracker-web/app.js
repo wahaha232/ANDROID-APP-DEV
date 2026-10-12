@@ -91,7 +91,8 @@
   // ---- 資料 ----
   function fetchJson(name, revalidate) {
     var opts = revalidate ? { cache: "no-cache" } : undefined;
-    return fetch(DATA_BASE + name, opts).then(function (r) {
+    // manifest 等 revalidate 的資料用即時參數（刪除後立刻生效）；軌跡檔用每分鐘參數。
+    return fetch(GPST.bust(DATA_BASE + name, !revalidate), opts).then(function (r) {
       if (!r.ok) throw new Error(name + " " + r.status);
       return r.json();
     });

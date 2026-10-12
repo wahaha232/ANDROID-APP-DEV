@@ -24,5 +24,14 @@
     return { type: "FeatureCollection", features: [] };
   }
 
-  window.GPST = { resolveConfig: resolveConfig, emptyLine: emptyLine, emptyFC: emptyFC };
+  // 快取破壞參數。GitHub Pages 的 CDN 對檔案設 max-age=600，而且不一定理會瀏覽器的 cache:"no-cache"，
+  // 所以「刪除／更新資料」後最久會看到 10 分鐘前的舊內容（例如在紀錄管理刪除了，首頁還在）。
+  // 給 URL 加上變動的參數就會繞過 CDN 的快取。
+  // coarse = true：參數每分鐘才變一次（同一分鐘內可共用快取，最多落後 1 分鐘），給較大的軌跡檔用。
+  function bust(url, coarse) {
+    var t = coarse ? Math.floor(Date.now() / 60000) : Date.now();
+    return url + (url.indexOf("?") >= 0 ? "&" : "?") + "t=" + t;
+  }
+
+  window.GPST = { resolveConfig: resolveConfig, emptyLine: emptyLine, emptyFC: emptyFC, bust: bust };
 })();

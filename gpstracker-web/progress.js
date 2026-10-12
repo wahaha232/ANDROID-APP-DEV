@@ -14,7 +14,7 @@
   function fmtKm(v) { return (Math.round(v * 100) / 100).toLocaleString("zh-Hant", { maximumFractionDigits: 2 }); }
   function fmtDate(ms) { if (!ms) return "未知"; var d = new Date(ms); return d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
   function loadJSON(name, revalidate) {
-    return fetch(DATA_BASE + name, revalidate ? { cache: "no-cache" } : undefined).then(function (r) {
+    return fetch(GPST.bust(DATA_BASE + name, !revalidate), revalidate ? { cache: "no-cache" } : undefined).then(function (r) {
       if (!r.ok) throw new Error(name + " " + r.status);
       return r.json();
     });

@@ -102,7 +102,7 @@
     // 無 token 時走同源相對路徑（快速）；有 token 時走 raw 以反映最新（跨網域）。
     var url = cfg.token
       ? "https://raw.githubusercontent.com/" + cfg.repo + "/" + cfg.branch + "/" + readBase() + name + "?_=" + Date.now()
-      : (GPST_CONF.dataBase + name);
+      : GPST.bust(GPST_CONF.dataBase + name);
     return fetch(url, { cache: "no-cache" }).then(function (r) { if (!r.ok) throw new Error(name + " " + r.status); return r.json(); });
   }
 
@@ -200,7 +200,7 @@
   // ---- 下載 ----
   async function fetchTrack(id) {
     var url = (cfg.token ? ("https://raw.githubusercontent.com/" + cfg.repo + "/" + cfg.branch + "/" + readBase() + id + ".json") : (GPST_CONF.dataBase + id + ".json"));
-    var r = await fetch(url + (cfg.token ? "?_=" + Date.now() : ""), { cache: "no-cache" });
+    var r = await fetch(cfg.token ? url + "?_=" + Date.now() : GPST.bust(url, true), { cache: "no-cache" });
     if (!r.ok) throw new Error("無法讀取 " + id);
     return r.json();
   }
