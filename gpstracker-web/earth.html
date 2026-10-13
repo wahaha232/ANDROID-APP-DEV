@@ -5,11 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="GPS TRACKER 地球征服計畫：全球里程、世界探索、地球垂直極限、地球軌道與逃逸等子挑戰。" />
   <meta name="theme-color" content="#0b1220" />
+  <link rel="canonical" href="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/earth.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="GPS Tracker" />
+  <meta property="og:locale" content="zh_TW" />
+  <meta property="og:title" content="地球征服計畫" />
+  <meta property="og:description" content="GPS TRACKER 地球征服計畫：全球里程、世界探索、地球垂直極限、地球軌道與逃逸等子挑戰。" />
+  <meta property="og:url" content="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/earth.html" />
+  <meta property="og:image" content="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/og-cover.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">🌍</text></svg>' />
   <title>地球征服計畫</title>
-  <link href="style.css?v=1ceea449" rel="stylesheet" />
-  <link href="gt-ui.css?v=00fde20f" rel="stylesheet" />
-  <link href="earth.css?v=4981d8e1" rel="stylesheet" />
+  <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
+  <link href="gt-ui.css?v=331d0b4c" rel="stylesheet" />
+  <link href="earth.css?v=33806f82" rel="stylesheet" />
   <script defer src="common.js?v=46cd05d5"></script>
   <script defer src="gt-nav.js?v=81b7d379"></script>
   <script defer src="solar-levels.js?v=38941ca7"></script>
@@ -18,6 +29,7 @@
   <script defer src="earth-core.js?v=5d6a722d"></script>
 </head>
 <body>
+  <a class="gt-skip" href="#main">跳到主要內容</a>
   <header>
     <div class="brand">
       <span class="logo">🌍</span>
@@ -38,7 +50,8 @@
 
   <nav id="tabs" class="e-tabs"></nav>
 
-  <main class="earth-main">
+  <main class="earth-main" id="main" tabindex="-1">
+    <noscript><div class="gt-state" style="margin:16px"><h3>請開啟 JavaScript</h3><p>本頁需要 JavaScript 才能顯示活動資料。</p></div></noscript>
     <section id="panel-overview" class="e-panel"></section>
     <section id="panel-mileage" class="e-panel"></section>
     <section id="panel-explore" class="e-panel"></section>

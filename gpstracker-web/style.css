@@ -20,6 +20,7 @@
   --green-soft: rgba(52, 211, 153, .08);
   --primary-soft: rgba(76, 141, 255, .12);
   --grad: linear-gradient(135deg, var(--primary), var(--primary-2));
+  --grad-btn: linear-gradient(135deg, #2b66c8, #6544d6); /* 白字按鈕專用：對比 ≥ 4.5:1（hover 亮度 +10% 後仍 ≥ 4.6:1） */
   --grad-progress: linear-gradient(90deg, var(--primary), var(--accent) 55%, var(--green));
   --radius: 14px;
   --radius-sm: 10px;
@@ -40,7 +41,7 @@ body {
   font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
   font-size: 14px; line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  display: flex; flex-direction: column; height: 100vh;
+  display: flex; flex-direction: column; height: 100vh; height: 100dvh; /* 手機網址列不遮住底部 */
 }
 ::selection { background: rgba(76, 141, 255, .4); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -76,110 +77,30 @@ h1 { font-size: 17px; font-weight: 700; letter-spacing: .02em; margin: 0; }
 .summary { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
 header > :last-child { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 header .btn { padding: 6px 12px; font-size: 12.5px; border-radius: 999px; }
-.toggle {
-  font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; cursor: pointer;
-  padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
-}
-.toggle:hover { color: var(--text); border-color: var(--border-strong); }
 input[type=checkbox] { accent-color: var(--primary); }
 
 main { flex: 1; display: flex; min-height: 0; }
 /* 內容頁（非地圖儀表板）的主區域：垂直捲動的一般區塊，內容撐滿寬度 */
 .ch-main, .earth-main, .solar-main, .pg-main, .rec-main { display: block; }
 
-/* ───── 側欄 ───── */
-#sidebar {
-  width: 312px; min-width: 220px; background: rgba(15, 24, 40, .86);
-  border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0;
-}
-.filters { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-.filters input, .filters select { width: 100%; }
-.filters input, .filters select,
+/* ───── 表單控制項 ───── */
 input[type=search], input[type=date], select {
   padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--surface-2); color: var(--text); font-size: 13px; font-family: inherit;
   transition: border-color .15s, box-shadow .15s;
 }
-.filters input:focus, .filters select:focus,
 input[type=search]:focus, input[type=date]:focus, select:focus {
   outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(76, 141, 255, .22);
 }
-/* 精簡版任務卡：限制高度並可捲動，確保下方軌跡列表始終可見 */
-.quests { padding: 12px 12px 0; display: flex; flex-direction: column; gap: 6px; max-height: 34%; overflow-y: auto; flex: none; }
-.quests-title { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.quest {
-  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 10px; flex: none;
-}
-.quest .q-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.quest .q-title { font-size: 13px; font-weight: 600; }
-.quest .q-pct { font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.quest .q-bar { height: 4px; border-radius: 2px; background: var(--track); margin-top: 5px; overflow: hidden; }
-.quest .q-bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--green)); border-radius: 3px; }
-.quest.done { border-color: rgba(76, 141, 255, .45); }
-.quest.done .q-bar > i { background: var(--grad); }
-.quest .q-sub { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
 
-#trackList { list-style: none; margin: 0; padding: 0 10px 12px; overflow-y: auto; flex: 1; }
-#trackList li {
-  position: relative; padding: 10px 12px 10px 15px; margin-bottom: 6px; border-radius: var(--radius-sm);
-  background: var(--surface-2); cursor: pointer; border: 1px solid var(--border);
-  transition: border-color .15s, background .15s, transform .15s var(--ease);
-}
-#trackList li::before {
-  content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0;
-  background: transparent; transition: background .15s;
-}
-#trackList li:hover { border-color: var(--border-strong); transform: translateX(2px); }
-#trackList li.active { border-color: var(--primary); background: linear-gradient(90deg, rgba(76, 141, 255, .18), var(--surface-2)); }
-#trackList li.active::before { background: var(--grad); }
-#trackList .t-date { font-size: 11.5px; color: var(--muted); }
-#trackList .t-main { font-size: 15px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
-#trackList .t-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.empty { padding: 24px 20px; color: var(--muted); font-size: 13px; text-align: center; }
-
-/* ───── 地圖與明細 ───── */
-#content { flex: 1; position: relative; display: flex; flex-direction: column; min-width: 0; }
+/* ───── 地圖 ───── */
 #map { flex: 1; min-height: 240px; }
-.hint {
-  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); white-space: nowrap; max-width: 92%;
-  overflow: hidden; text-overflow: ellipsis;
-  background: rgba(10, 15, 25, .78); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-  border: 1px solid var(--border-strong); padding: 8px 16px; border-radius: 999px;
-  font-size: 12.5px; color: var(--muted); box-shadow: var(--shadow);
-}
-
-.detail {
-  position: relative; z-index: 5; max-height: 46%; overflow-y: auto; background: var(--surface);
-  border-top: 1px solid var(--border-strong); border-radius: 18px 18px 0 0;
-  box-shadow: 0 -14px 34px rgba(0, 0, 0, .4); padding: 16px 20px;
-}
-.detail.hidden { display: none; }
-.detail-head { display: flex; justify-content: space-between; align-items: center; }
-.detail-head h2 { font-size: 16px; font-weight: 700; margin: 0; }
-.icon-btn {
-  background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); border-radius: 50%;
-  width: 30px; height: 30px; font-size: 13px; cursor: pointer; transition: color .15s, border-color .15s;
-}
-.icon-btn:hover { color: var(--text); border-color: var(--border-strong); }
-
-.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 10px; margin: 14px 0; }
-.stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
-.stat .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.stat .l { font-size: 11px; color: var(--muted); margin-top: 2px; }
-
-.chart-block { margin: 14px 0; }
-.chart-title { font-size: 11.5px; color: var(--muted); margin-bottom: 6px; font-weight: 600; letter-spacing: .04em; }
 canvas { width: 100%; }
-.chart-block canvas { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-
-.photo-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--muted); }
-
-.detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 8px; }
 
 /* ───── 按鈕 ───── */
 .btn {
   display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
-  background: var(--grad); color: #fff; border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: var(--grad-btn); color: #fff; border: 1px solid transparent; border-radius: var(--radius-sm);
   padding: 8px 14px; font-size: 13px; font-weight: 600; font-family: inherit; line-height: 1.3;
   cursor: pointer; text-decoration: none;
   box-shadow: 0 4px 14px rgba(76, 141, 255, .28);
@@ -202,8 +123,6 @@ canvas { width: 100%; }
 }
 @media (max-width: 720px) {
   main { flex-direction: column; }
-  #sidebar { width: 100%; max-height: 40%; border-right: none; border-bottom: 1px solid var(--border); }
-  .hint { white-space: normal; text-align: center; border-radius: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

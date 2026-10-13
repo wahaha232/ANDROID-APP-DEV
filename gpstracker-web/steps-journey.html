@@ -5,11 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="用累計步數換算成里程，看看在太陽系、地球、台灣征服計畫中能走到哪裡。" />
   <meta name="theme-color" content="#0b1220" />
+  <link rel="canonical" href="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/steps-journey.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="GPS Tracker" />
+  <meta property="og:locale" content="zh_TW" />
+  <meta property="og:title" content="步數環遊里程" />
+  <meta property="og:description" content="用累計步數換算成里程，看看在太陽系、地球、台灣征服計畫中能走到哪裡。" />
+  <meta property="og:url" content="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/steps-journey.html" />
+  <meta property="og:image" content="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/og-cover.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">👟</text></svg>' />
   <title>步數環遊里程</title>
-  <link href="style.css?v=1ceea449" rel="stylesheet" />
-  <link href="gt-ui.css?v=00fde20f" rel="stylesheet" />
-  <link href="steps-journey.css?v=3c9a6eec" rel="stylesheet" />
+  <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
+  <link href="gt-ui.css?v=331d0b4c" rel="stylesheet" />
+  <link href="steps-journey.css?v=b4904831" rel="stylesheet" />
   <script defer src="common.js?v=46cd05d5"></script>
   <script defer src="gt-nav.js?v=81b7d379"></script>
   <script defer src="solar-levels.js?v=38941ca7"></script>
@@ -17,6 +28,7 @@
   <script defer src="taiwan-levels.js?v=ccfe21e1"></script>
 </head>
 <body>
+  <a class="gt-skip" href="#main">跳到主要內容</a>
   <header>
     <div class="brand">
       <span class="logo">👟</span>
@@ -30,7 +42,8 @@
     </div>
   </header>
 
-  <main class="sj-main">
+  <main class="sj-main" id="main" tabindex="-1">
+    <noscript><div class="gt-state" style="margin:16px"><h3>請開啟 JavaScript</h3><p>本頁需要 JavaScript 才能顯示活動資料。</p></div></noscript>
     <div class="sj-note">
       本頁<strong>獨立</strong>運作：只用「累計步數 × 步幅」換算成里程，再對照太陽系、地球、台灣征服計畫的關卡門檻。
       與其他頁面的 GPS 里程完全分開，不會互相加總。里程為估算值，僅供遊戲樂趣參考。

@@ -4,14 +4,26 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0b1220" />
+  <meta name="description" content="GPS Tracker 活動故事：3D 路線預覽、海拔剖面、移動方式與統計，可下載 GPX／JSON。" />
+  <link rel="canonical" href="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/activity.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="GPS Tracker" />
+  <meta property="og:locale" content="zh_TW" />
+  <meta property="og:title" content="活動故事 · GPS Tracker" />
+  <meta property="og:description" content="GPS Tracker 活動故事：3D 路線預覽、海拔剖面、移動方式與統計，可下載 GPX／JSON。" />
+  <meta property="og:url" content="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/activity.html" />
+  <meta property="og:image" content="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/og-cover.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">🛰️</text></svg>' />
   <title>活動故事 · GPS Tracker</title>
   <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin />
   <link rel="preconnect" href="https://s3.amazonaws.com" crossorigin />
   <link rel="preload" href="vendor/maplibre-gl.js" as="script" />
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
-  <link href="style.css?v=1ceea449" rel="stylesheet" />
-  <link href="gt-ui.css?v=00fde20f" rel="stylesheet" />
+  <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
+  <link href="gt-ui.css?v=331d0b4c" rel="stylesheet" />
   <script src="common.js?v=46cd05d5"></script>
   <script src="gt-core.js?v=a62ecf03"></script>
   <script src="gt-metro.js?v=6334f477"></script>
@@ -29,6 +41,7 @@
   <script defer src="activity.js?v=350a07aa"></script>
 </head>
 <body>
+  <a class="gt-skip" href="#main">跳到主要內容</a>
   <header>
     <div class="brand">
       <span class="logo" aria-hidden="true">🛰️</span>
@@ -40,7 +53,8 @@
     <div class="gt-nav"><a href="index.html">首頁</a><a href="history.html">歷史紀錄</a><a href="explore.html">探索挑戰</a><a href="records.html">紀錄管理</a></div>
   </header>
 
-  <main class="gt-main" id="main">
+  <main class="gt-main" id="main" tabindex="-1">
+    <noscript><div class="gt-state" style="margin:16px"><h3>請開啟 JavaScript</h3><p>本頁需要 JavaScript 才能顯示活動資料。</p></div></noscript>
     <div class="gt-wrap" style="gap:20px">
       <div class="gt-crumb"><a href="history.html" id="crumb">← 歷史紀錄</a></div>
 

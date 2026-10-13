@@ -13,7 +13,7 @@
   transition: color .15s, border-color .15s, background .15s;
 }
 .tabs button:hover { color: var(--text); border-color: var(--border-strong); }
-.tabs button.active { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 4px 14px rgba(76, 141, 255, .3); }
+.tabs button.active { background: var(--grad-btn); color: #fff; border-color: transparent; box-shadow: 0 4px 14px rgba(76, 141, 255, .3); }
 
 .panel { display: none; }
 .panel.active { display: block; animation: fadeUp .3s var(--ease); }
@@ -86,7 +86,7 @@
   padding: 7px 13px; font-size: 13px; font-family: inherit; cursor: pointer; transition: border-color .15s, background .15s;
 }
 .range-row button:hover { border-color: var(--primary); background: var(--surface-3); }
-.range-row button.btn { background: var(--grad); border-color: transparent; }
+.range-row button.btn { background: var(--grad-btn); border-color: transparent; }
 
 .progress-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 15px; margin-bottom: 10px; }
 .progress-card .pc-head { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
@@ -109,7 +109,7 @@
 .bingo-cell .bs { color: var(--muted); font-size: 11px; }
 
 /* ===== 步數統計（長條圖，純 CSS，無外部函式庫） ===== */
-.range-row button.on { background: var(--grad); border-color: transparent; color: #fff; }
+.range-row button.on { background: var(--grad-btn); border-color: transparent; color: #fff; }
 .step-chart {
   display: flex; align-items: stretch; gap: 4px; height: 200px; padding: 16px 12px 8px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);

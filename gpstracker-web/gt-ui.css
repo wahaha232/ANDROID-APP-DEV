@@ -23,6 +23,15 @@ a.logo { color: inherit; text-decoration: none; transition: border-color .15s; }
 a.logo:hover { border-color: var(--primary); }
 .gt-subnav a { min-height: 34px; padding: 4px 12px; font-size: 13px; flex: none; }
 
+/* ───── 跳到主要內容（鍵盤／輔助科技）───── */
+.gt-skip {
+  position: absolute; left: 12px; top: -72px; z-index: 1000; padding: 10px 16px; border-radius: 10px;
+  background: var(--surface-3); color: var(--text); border: 1px solid var(--primary);
+  font-size: 14px; font-weight: 600; text-decoration: none; transition: top .15s;
+}
+.gt-skip:focus { top: 8px; }
+main:focus { outline: none; }
+
 /* ───── 版面 ───── */
 /* style.css 的 main 是 flex；這裡改成區塊，內容才會撐到 .gt-wrap 的 max-width */
 .gt-main { display: block; flex: 1; min-height: 0; overflow-y: auto; }
@@ -153,7 +162,7 @@ a.logo:hover { border-color: var(--primary); }
 .gt-card { position: relative; }
 .gt-card-sub { font-size: 12.5px; color: var(--muted); }
 .gt-card-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; font-variant-numeric: tabular-nums; }
-.gt-card-note { font-size: 12px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.gt-card-note { font-size: 12px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
 .gt-card-actions { display: flex; gap: 6px; margin-top: auto; padding-top: 8px; position: relative; z-index: 1; flex-wrap: wrap; }
 .gt-card-actions .btn { min-height: 38px; padding: 6px 12px; font-size: 12.5px; }
 .gt-allmap { height: min(62vh, 560px); min-height: 320px; border: 1px solid var(--border-strong); border-radius: 16px; overflow: hidden; position: relative; background: #0a1222; }

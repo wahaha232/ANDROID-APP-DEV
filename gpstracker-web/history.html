@@ -5,11 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="GPS Tracker 歷史紀錄：搜尋、篩選、排序所有活動，進入活動故事或 3D 路線回放，也可在地圖上檢視全部軌跡。" />
   <meta name="theme-color" content="#0b1220" />
+  <link rel="canonical" href="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/history.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="GPS Tracker" />
+  <meta property="og:locale" content="zh_TW" />
+  <meta property="og:title" content="歷史紀錄 · GPS Tracker" />
+  <meta property="og:description" content="GPS Tracker 歷史紀錄：搜尋、篩選、排序所有活動，進入活動故事或 3D 路線回放，也可在地圖上檢視全部軌跡。" />
+  <meta property="og:url" content="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/history.html" />
+  <meta property="og:image" content="https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/og-cover.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="13" font-size="14">📁</text></svg>' />
   <title>歷史紀錄 · GPS Tracker</title>
   <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin />
-  <link href="style.css?v=1ceea449" rel="stylesheet" />
-  <link href="gt-ui.css?v=00fde20f" rel="stylesheet" />
+  <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
+  <link href="gt-ui.css?v=331d0b4c" rel="stylesheet" />
   <script defer src="common.js?v=46cd05d5"></script>
   <script defer src="gt-core.js?v=a62ecf03"></script>
   <script defer src="gt-data.js?v=8a4c1c06"></script>
@@ -17,6 +28,7 @@
   <script defer src="history.js?v=60f1ab3e"></script>
 </head>
 <body>
+  <a class="gt-skip" href="#main">跳到主要內容</a>
   <header>
     <div class="brand">
       <span class="logo" aria-hidden="true">📁</span>
@@ -28,7 +40,8 @@
     <div class="gt-nav"><a href="index.html">首頁</a><a href="explore.html">探索挑戰</a><a href="records.html">紀錄管理</a></div>
   </header>
 
-  <main class="gt-main" id="main">
+  <main class="gt-main" id="main" tabindex="-1">
+    <noscript><div class="gt-state" style="margin:16px"><h3>請開啟 JavaScript</h3><p>本頁需要 JavaScript 才能顯示活動資料。</p></div></noscript>
     <div class="gt-wrap" style="gap:12px">
       <div class="gt-toolbar" role="search">
         <label class="gt-sr" for="search">搜尋活動</label>

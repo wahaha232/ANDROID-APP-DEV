@@ -24,7 +24,7 @@
   transition: color .15s, border-color .15s, background .15s;
 }
 .sj-chip:hover { color: var(--text); border-color: var(--border-strong); }
-.sj-chip.on { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 4px 14px rgba(76, 141, 255, .3); }
+.sj-chip.on { background: var(--grad-btn); color: #fff; border-color: transparent; box-shadow: 0 4px 14px rgba(76, 141, 255, .3); }
 
 .sj-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
 .sj-card {
