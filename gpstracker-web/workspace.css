@@ -22,6 +22,7 @@ body.panel-closed .ws-app { grid-template-columns: minmax(0, 1fr) 0; }
 .ws-topbar > * { pointer-events: auto; }
 .ws-btn { display: inline-flex; align-items: center; justify-content: center; gap: 2px; min-height: 40px; min-width: 40px; padding: 0 14px; border-radius: 999px; color: var(--text); font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; }
 .ws-btn:hover { border-color: var(--primary); }
+.ws-navbtns { display: inline-flex; gap: 6px; }
 .ws-modes { display: inline-flex; border-radius: 999px; padding: 3px; gap: 2px; }
 .ws-modes button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .ws-modes button:hover { color: var(--text); }

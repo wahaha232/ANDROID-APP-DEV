@@ -4,7 +4,7 @@
   "use strict";
 
   var MAIN = [
-    { id: "home", href: "index.html", label: "總覽" },
+    { id: "home", href: "index.html", label: "首頁" },
     { id: "history", href: "history.html", label: "歷史紀錄" },
     { id: "explore", href: "explore.html", label: "探索挑戰" },
     { id: "manage", href: "records.html", label: "紀錄管理" }
@@ -40,6 +40,18 @@
     }
   }
   function link(href) { return carry ? href + "?" + carry : href; }
+
+  // 品牌圖示也是回首頁的連結（導覽列在手機上已滿，不再多加項目）。
+  var logo = header.querySelector(".brand .logo");
+  if (logo && logo.tagName !== "A") {
+    var home = document.createElement("a");
+    home.className = logo.className;
+    home.href = link("index.html");
+    home.title = "回首頁";
+    home.setAttribute("aria-label", "回首頁");
+    home.innerHTML = logo.innerHTML;
+    logo.parentNode.replaceChild(home, logo);
+  }
 
   var actions = header.lastElementChild;
   if (!actions || actions.classList.contains("brand")) {

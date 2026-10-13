@@ -467,6 +467,7 @@
 
   // ===== 啟動 =====
   function init() {
+    $("home").href = GT.url("index.html", {}); // 帶著自訂資料來源參數回首頁
     // 先反映網址指定的模式（地圖載入前面板與頂列就已是正確的模式）。
     document.body.dataset.mode = initialMode;
     Array.prototype.forEach.call(document.querySelectorAll(".ws-modes button"), function (b) { b.setAttribute("aria-selected", b.dataset.mode === initialMode); });
