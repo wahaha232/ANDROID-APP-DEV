@@ -1,4 +1,5 @@
-// 首頁（活動總覽）：只讀 manifest.json（+ 選用的 meta.json、steps.json）。不載入地圖引擎，也不載入全部軌跡。
+// 首頁（活動總覽）：只讀 manifest.json（+ 選用的 meta.json、steps.json、voyager.json）。不載入地圖引擎，也不載入全部軌跡。
+// 里程一律用 SOLAR_CORE.validTracks（去重、排除異常）加總，與五大挑戰、全挑戰進度同一口徑。
 // 只有最新一筆（精選卡）與時間軸可見的幾筆會各自按需載入一個軌跡檔來畫路線縮圖。
 (function () {
   "use strict";
@@ -47,18 +48,35 @@
     });
   }
 
-  function renderStats(tracks, daily) {
-    var dist = 0, dur = 0, asc = 0, steps = 0;
-    tracks.forEach(function (t) {
-      dist += t.distanceMeters || 0; dur += t.durationMs || 0; asc += t.totalAscentMeters || 0; steps += t.stepCount || 0;
-    });
-    var html = stat(C.fmtKm(dist), "km", "累積距離") + stat(C.fmtInt(tracks.length), "筆", "活動數量");
+  function renderStats(totals, valid, updatedAt, daily) {
+    var G = GTCH, dur = 0, asc = 0, steps = 0;
+    valid.forEach(function (t) { dur += t.durationMs || 0; asc += t.totalAscentMeters || 0; steps += t.stepCount || 0; });
+    var age = updatedAt ? Date.now() - updatedAt : null;
+    var html = stat(G.fmtKm(totals.totalKm), "km", "累積總里程", "有效活動合計，每筆只計一次") +
+      stat(C.fmtInt(totals.validCount), "筆", "活動紀錄數量", totals.excluded > 0 ? "另有 " + totals.excluded + " 筆因資料異常未計入" : "") +
+      stat(totals.lastActivityMs ? G.fmtDay(totals.lastActivityMs) : "—", "", "最近活動日期") +
+      stat(updatedAt ? G.fmtDateTime(updatedAt) : "未知", "", "資料最後更新", age != null ? G.fmtAge(age) : "");
     if (dur > 0) html += stat(C.fmtDur(dur), "", "累積時間");
     if (asc > 0) html += stat(C.fmtInt(asc), "m", "累積爬升");
     if (steps > 0) html += stat(C.fmtInt(steps), "步", "活動步數", "各筆活動記錄的步數合計");
     if (daily) html += stat(C.fmtInt(daily.total), "步", "每日步數累計", daily.days + " 天（Health Connect／Google Fit）");
     $("stats").innerHTML = html;
-    $("statsSec").hidden = false;
+    var ds = $("dataStatus");
+    if (!totals.recordCount) { ds.textContent = "尚無活動資料"; ds.className = "gt-status warn"; }
+    else if (age != null && age > G.MANIFEST_STALE_MS) { ds.textContent = "⚠️ 資料可能非最新（" + G.fmtAge(age) + "更新）"; ds.className = "gt-status warn"; }
+    else { ds.textContent = "✅ 資料已載入"; ds.className = "gt-status ok"; }
+    var note = $("statsNote");
+    if (totals.excluded > 0) { note.textContent = "有 " + totals.excluded + " 筆紀錄因重複或 GPS 異常（距離／時間缺漏、均速過高）未計入里程；它們仍會出現在歷史紀錄。"; note.hidden = false; }
+    else note.hidden = true;
+  }
+
+  // 五大挑戰：與探索挑戰中心共用 GTCH 的卡片與計算，里程來自同一份有效活動。
+  function renderChallenges(tracks, updatedAt, voyager) {
+    var res = GTCH.buildPlans(tracks, voyager, { updatedAt: updatedAt });
+    $("challenges").innerHTML = res.plans.map(function (p) { return GTCH.renderPlanCard(p, function (h) { return GT.url(h, {}); }); }).join("");
+  }
+  function renderChallengesError(msg) {
+    $("challenges").innerHTML = '<div class="gt-state err" style="grid-column:1/-1"><h3>無法計算挑戰進度</h3><p>' + esc(msg) + "</p></div>";
   }
 
   function renderTimeline(tracks, meta) {
@@ -83,6 +101,7 @@
 
   function renderEmpty() {
     $("summary").textContent = "尚無紀錄";
+    $("timelineSec").hidden = true;
     $("hero").innerHTML = '<div class="gt-state"><h3>還沒有任何活動紀錄</h3>' +
       "<p>在手機 App 錄製一趟活動並上傳到網站後，這裡就會出現你的第一則活動故事。</p>" +
       '<a class="btn gt-btn secondary" href="explore.html">先看看探索挑戰</a></div>';
@@ -90,6 +109,9 @@
 
   function renderError(msg) {
     $("summary").textContent = "讀取失敗";
+    $("dataStatus").textContent = "⚠️ 資料讀取失敗"; $("dataStatus").className = "gt-status err";
+    $("stats").innerHTML = '<div class="gt-state err" style="grid-column:1/-1"><h3>無法讀取活動資料</h3><p>' + esc(msg) + "</p></div>";
+    renderChallengesError(msg);
     $("hero").innerHTML = '<div class="gt-state err"><h3>無法讀取活動資料</h3><p>' + esc(msg) + "</p>" +
       '<button class="btn gt-btn" id="retry">重新載入</button></div>';
     $("retry").onclick = load;
@@ -106,17 +128,27 @@
 
   function load() {
     $("hero").innerHTML = '<div class="gt-skel" style="height:320px"></div>';
-    Promise.all([GT.loadManifest(), GT.loadMeta()]).then(function (r) {
-      var tracks = r[0].tracks, meta = r[1];
+    $("stats").innerHTML = '<div class="gt-skel" style="height:90px;grid-column:1/-1"></div>';
+    $("challenges").innerHTML = '<div class="gt-skel" style="height:220px"></div>';
+    $("dataStatus").textContent = "載入中…"; $("dataStatus").className = "gt-status";
+    var main = Promise.all([GT.loadManifest(), GT.loadMeta()]);
+    // Voyager 參考資料：失敗時保留最後一次有效值（loadVoyager 不會 reject，也不會把數值歸零）。
+    var voy = GTCH.loadVoyager(function (n) { return GT.fetchJson(n, true); });
+
+    main.then(function (r) {
+      var m = r[0], tracks = m.tracks, meta = r[1];
+      var totals = GTCH.computeTotals(tracks), valid = SOLAR_CORE.validTracks(tracks);
+      $("summary").textContent = totals.validCount + " 筆活動 · 累積 " + GTCH.fmtKm(totals.totalKm) + " km";
+      renderStats(totals, valid, m.updatedAt, null);
       if (!tracks.length) { renderEmpty(); return; }
-      var dist = 0;
-      tracks.forEach(function (t) { dist += t.distanceMeters || 0; });
-      $("summary").textContent = tracks.length + " 筆活動 · 累積 " + C.fmtKm(dist) + " km";
       renderHero(tracks[0], meta);
-      renderStats(tracks, null);
       renderTimeline(tracks, meta);
-      loadDaily().then(function (d) { if (d) renderStats(tracks, d); });
+      loadDaily().then(function (d) { if (d) renderStats(totals, valid, m.updatedAt, d); });
     }, function (e) { renderError(e.message); });
+
+    Promise.all([main, voy]).then(function (r) {
+      renderChallenges(r[0][0].tracks, r[0][0].updatedAt, r[1]);
+    }, function () { /* manifest 失敗：renderError 已顯示 */ });
   }
 
   load();

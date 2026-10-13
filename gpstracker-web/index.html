@@ -23,12 +23,18 @@
     if (new URLSearchParams(location.search).get("track")) location.replace("activity.html" + location.search);
   </script>
   <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
-  <link href="gt-ui.css?v=331d0b4c" rel="stylesheet" />
+  <link href="gt-ui.css?v=abd3e3cc" rel="stylesheet" />
   <script defer src="common.js?v=46cd05d5"></script>
+  <script defer src="solar-levels.js?v=38941ca7"></script>
+  <script defer src="solar-core.js?v=3bca26ad"></script>
+  <script defer src="earth-levels.js?v=b6ea575c"></script>
+  <script defer src="taiwan-levels.js?v=ccfe21e1"></script>
+  <script defer src="progress-core.js?v=b2883d11"></script>
   <script defer src="gt-core.js?v=a62ecf03"></script>
   <script defer src="gt-data.js?v=8a4c1c06"></script>
+  <script defer src="gt-challenges.js?v=69f3897d"></script>
   <script defer src="gt-nav.js?v=81b7d379"></script>
-  <script defer src="home.js?v=44d73ace"></script>
+  <script defer src="home.js?v=a845a25e"></script>
 </head>
 <body>
   <a class="gt-skip" href="#main">跳到主要內容</a>
@@ -46,18 +52,25 @@
   <main class="gt-main" id="main" tabindex="-1">
     <noscript><div class="gt-state" style="margin:16px"><h3>請開啟 JavaScript</h3><p>本頁需要 JavaScript 才能顯示活動資料。</p></div></noscript>
     <div class="gt-wrap">
+      <section id="statsSec" aria-labelledby="stats-h">
+        <div class="gt-sec-head"><h2 id="stats-h">累積活動摘要</h2><span id="dataStatus" class="gt-status" aria-live="polite">載入中…</span></div>
+        <div id="stats" class="gt-stats"><div class="gt-skel" style="height:90px;grid-column:1/-1"></div></div>
+        <p class="gt-note" id="statsNote" hidden></p>
+      </section>
+
+      <section id="chSec" aria-labelledby="ch-h">
+        <div class="gt-sec-head"><h2 id="ch-h">五大挑戰</h2><a href="progress.html">全挑戰進度表 →</a></div>
+        <div id="challenges" class="gt-ch-grid"><div class="gt-skel" style="height:220px"></div></div>
+        <p class="gt-note">挑戰進度以累積 GPS 里程換算，屬遊戲化目標，不代表實際抵達該地；所有挑戰共用同一份里程，每筆活動只計一次。Voyager 為探測器的參考距離，你追不上它。</p>
+      </section>
+
       <section aria-labelledby="hero-h">
-        <h2 id="hero-h" class="gt-sr">最近一次活動</h2>
+        <div class="gt-sec-head"><h2 id="hero-h">最近活動</h2></div>
         <div id="hero"><div class="gt-skel" style="height:320px"></div></div>
       </section>
 
-      <section id="statsSec" aria-labelledby="stats-h" hidden>
-        <div class="gt-sec-head"><h2 id="stats-h">累積統計</h2></div>
-        <div id="stats" class="gt-stats"></div>
-      </section>
-
       <section id="timelineSec" aria-labelledby="tl-h" hidden>
-        <div class="gt-sec-head"><h2 id="tl-h">最近活動</h2><a href="history.html">全部紀錄 →</a></div>
+        <div class="gt-sec-head"><h2 id="tl-h">活動時間軸</h2><a href="history.html">全部紀錄 →</a></div>
         <ol id="timeline" class="gt-timeline"></ol>
       </section>
 

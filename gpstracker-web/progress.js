@@ -7,7 +7,7 @@
   var DATA_BASE = CONFIG.dataBase;
   var CORE = window.PROGRESS_CORE;
 
-  var state = { totalKm: 0, count: 0, updatedAt: null, goals: [], voyager: null, voyagerStale: false, voyagerErr: null };
+  var state = { totalKm: 0, count: 0, updatedAt: null, goals: [], voyager: null, voyagerStatus: null };
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return (n < 10 ? "0" : "") + n; }
@@ -35,12 +35,9 @@
       state.count = valid.length;
       state.updatedAt = (m && m.updatedAt) || null;
 
-      // 航海家（獨立參考資料；失敗則保留缺值並標示）
-      return loadJSON("voyager.json", true).then(function (v) {
-        state.voyager = v; state.voyagerErr = null;
-        state.voyagerStale = v && v.updatedAt ? (Date.now() - v.updatedAt) / 86400000 > 7 : true;
-      }).catch(function (e) {
-        state.voyager = null; state.voyagerErr = e.message; state.voyagerStale = true;
+      // 航海家（獨立參考資料）：讀取失敗或資料不合理時沿用瀏覽器保存的「最後一次有效值」，並標示過期／失敗與最後成功時間；絕不歸零。
+      return GTCH.loadVoyager(function (n) { return loadJSON(n, true); }).then(function (st) {
+        state.voyagerStatus = st; state.voyager = st.data;
       });
     }).then(function () {
       state.goals = CORE.buildGoals({
@@ -74,9 +71,10 @@
     var noteLines = [];
     noteLines.push("所有目標共用同一份有效里程，不會重複加總；累計里程改變時，全部挑戰同步更新（本頁載入即重算）。");
     if (ageDays !== null && ageDays > 3) noteLines.push("⚠️ 紀錄資料距今約 " + Math.floor(ageDays) + " 天，可能非最新。");
-    if (state.voyagerErr) noteLines.push("⚠️ 航海家資料同步失敗／缺少（" + state.voyagerErr + "），該項目以缺值顯示並標示。");
-    else if (state.voyagerStale) noteLines.push("⚠️ 航海家資料已過期（> 7 天），顯示最後一次有效資料。");
-    $("note").className = "pg-note" + ((state.voyagerErr || state.voyagerStale) ? " warn" : "");
+    var vs = state.voyagerStatus, vBad = !!vs && vs.state !== "ok";
+    if (vs && vs.data) noteLines.push("NASA Voyager 參考距離（以日心為基準，即距太陽）資料時間：" + fmtDate(vs.updatedAt) + "・來源 " + (vs.data.source || "NASA/JPL Horizons") + "。");
+    if (vBad) noteLines.push(vs.label + (vs.updatedAt ? "（最後成功更新：" + fmtDate(vs.updatedAt) + "）" : "") + (vs.error ? " 原因：" + vs.error : ""));
+    $("note").className = "pg-note" + (vBad ? " warn" : "");
     $("note").innerHTML = noteLines.map(escapeHtml).join("<br>");
 
     buildFilters();
@@ -91,6 +89,8 @@
     state.goals.forEach(function (g) { seen[g.challenge] = true; });
     Object.keys(seen).forEach(function (c) { var o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o); });
     sel.dataset.built = "1";
+    // 首頁／探索頁的 Voyager 卡片以 #voyager 連過來：直接篩選出 NASA 航海家追逐賽。
+    if (location.hash === "#voyager" && seen[GTCH.NAME.voyager]) sel.value = GTCH.NAME.voyager;
   }
 
   function renderTable() {
@@ -114,7 +114,7 @@
       list.forEach(function (g) {
         var pctText = g.pct.toFixed(g.pct >= 100 ? 1 : (g.pct >= 1 ? 2 : 6)) + "%";
         html += '<tr' + (g.done ? ' class="done"' : "") + ">" +
-          '<td class="name">' + escapeHtml(g.name) + (g.done ? " ✅" : "") + "</td>" +
+          '<td class="name">' + escapeHtml(g.name) + (g.done ? " ✅" : "") + (g.kind === "reference" ? ' <small style="color:var(--muted)">（日心距離・參考）</small>' : "") + "</td>" +
           '<td><span class="pg-kind ' + g.kind + '">' + kindLabel(g.kind) + "</span></td>" +
           '<td class="num">' + fmtKm(g.current) + " km</td>" +
           '<td class="num">' + fmtKm(g.target) + " km</td>" +

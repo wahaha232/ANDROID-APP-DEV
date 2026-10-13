@@ -257,7 +257,8 @@
 
     // 航海家追逐（參考距離，玩家追不上）
     if (state.voyager && state.voyager.probes) {
-      html += '<div class="sj-group"><div class="sj-group-head"><span>🛰️ NASA 航海家追逐賽（參考）</span><span class="cnt">距太陽的距離</span></div><ul class="sj-list">';
+      html += '<div class="sj-group"><div class="sj-group-head"><span>🛰️ NASA 航海家追逐賽（參考）</span><span class="cnt">距太陽（日心）的距離</span></div>' +
+        (state.voyagerStatus && state.voyagerStatus.state !== "ok" ? '<div class="sj-empty" style="padding:8px 14px;color:var(--amber)">' + state.voyagerStatus.label + "（參考資料時間 " + GTCH.fmtDateTime(state.voyagerStatus.updatedAt) + "）</div>" : "") + '<ul class="sj-list">';
       Object.keys(state.voyager.probes).forEach(function (key) {
         var p = state.voyager.probes[key];
         var name = key === "voyager1" ? "🛰️ 航海家一號" : "🛰️ 航海家二號";
@@ -317,9 +318,9 @@
     document.addEventListener("visibilitychange", function () { if (!document.hidden && state.daily) refresh(false); });
     Promise.all([
       loadJSON("steps.json").catch(function () { return null; }),
-      loadJSON("voyager.json").catch(function () { return null; })
+      GTCH.loadVoyager(loadJSON) // 失敗時沿用最後一次有效值並標示，不會消失或歸零
     ]).then(function (res) {
-      state.voyager = res[1];
+      state.voyagerStatus = res[1]; state.voyager = res[1].data;
       if (!res[0] || !res[0].days || !res[0].days.length) {
         $("summary").textContent = "尚無逐日步數資料";
         $("sjSummary").innerHTML = '<div class="sj-empty">尚無逐日步數資料。請在 App 首頁按「同步到網站」，上傳每天的步數後再回來看。</div>';

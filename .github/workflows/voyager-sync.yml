@@ -48,6 +48,28 @@ jobs:
           v1_sun, v1_earth = probe("-31")
           v2_sun, v2_earth = probe("-32")
 
+          # 合理性檢查：任何一項不合理就以非 0 結束，不覆寫 voyager.json（保留最後一次有效值，網站會標示「資料過期」）。
+          # 只擋明顯錯誤（0、負數、解析錯位）；正常的逐日變化（約 0.01 AU/天）不會被擋。
+          def fail(msg):
+              print("SANITY CHECK FAILED:", msg, file=sys.stderr)
+              sys.exit(1)
+
+          path = "gpstracker-web/data/voyager.json"
+          prev = None
+          if os.path.exists(path):
+              try:
+                  prev = json.load(open(path, encoding="utf-8"))["probes"]
+              except Exception:
+                  prev = None
+          for key, sun, earth in (("voyager1", v1_sun, v1_earth), ("voyager2", v2_sun, v2_earth)):
+              if not (50 < sun < 1000):
+                  fail(f"{key} distance from Sun out of range: {sun} AU")
+              if not (50 < earth < 1000) or abs(earth - sun) > 1.2:
+                  fail(f"{key} distance from Earth inconsistent: {earth} AU vs {sun} AU")
+              if prev and key in prev and prev[key].get("au"):
+                  if abs(sun - prev[key]["au"]) / prev[key]["au"] > 0.05:
+                      fail(f"{key} changed more than 5% since last valid value: {prev[key]['au']} -> {sun} AU")
+
           out = {
               "updatedAt": int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000),
               "generatedAt": datetime.date.today().isoformat(),

@@ -123,7 +123,10 @@
   }
 
   function tracks() { return manifest.tracks || []; }
-  function validTracks() { return tracks().filter(function (t) { return (t.distanceMeters || 0) > 0 || (t.durationMs || 0) > 0; }); }
+  // 有效活動：與首頁、征服計畫、全挑戰進度同一定義（SOLAR_CORE.validTracks：去重、距離與時間皆 > 0、排除異常高速）。
+  function validTracks() { return window.SOLAR_CORE.validTracks(tracks()); }
+  // 顯示用數字：不封頂（超過目標就照實顯示），最多兩位小數。
+  function fmtNum(v) { return String(Math.round((+v || 0) * 100) / 100); }
   function kmOf(t) { return (t.distanceMeters || 0) / 1000; }
   function inRange(t, a, b) { var s = t.startTimeMs; return s >= a && s < b; }
 
@@ -293,7 +296,7 @@
         var progText;
         if (b.name === "跨區域旅程" && !b.pending) progText = "跨度 " + b.m.cur.toFixed(3) + "° / " + b.m.target + "°";
         else if (b.name === "制高點" && !b.pending) progText = Math.round(b.m.cur) + " m / " + b.m.target + " m";
-        else progText = Math.min(Math.round(b.m.cur), b.m.target) + " / " + b.m.target;
+        else progText = fmtNum(b.m.cur) + " / " + b.m.target;
         html += '<div class="badge' + (done ? " unlocked" : "") + '">' +
           '<div class="ic">' + b.ic + '</div><div style="flex:1;min-width:0">' +
           '<div class="bt">' + b.name + (done ? " ✅" : "") + "</div>" +
@@ -722,12 +725,12 @@
     var html = '<div class="section-title">🌏 虛擬環遊</div>' +
       '<div class="muted" style="margin-bottom:8px">用你的總里程虛擬走到這些目標（真實距離）。</div>';
     MILESTONES.forEach(function (m) {
-      var ratio = Math.min(1, c.totalKm / m.km);
+      var pct = c.totalKm / m.km * 100;   // 百分比可超過 100%；只有進度條的填滿寬度封頂（pbar 內）
       var remaining = Math.max(0, m.km - c.totalKm);
       var done = c.totalKm >= m.km;
       html += '<div class="progress-card"><div class="pc-head"><span>' + m.name + '</span><span>' +
-        (done ? "已達成 🎉" : fmtKm(remaining) + " km") + "</span></div>" + pbar(ratio) +
-        '<div class="pc-sub">目標 ' + fmtKm(m.km) + " km · 進度 " + (ratio * 100).toFixed(ratio >= 0.01 ? 2 : 6) + "%</div></div>";
+        (done ? "已達成 🎉（超出 +" + fmtKm(c.totalKm - m.km) + " km）" : "還差 " + fmtKm(remaining) + " km") + "</span></div>" + pbar(pct / 100) +
+        '<div class="pc-sub">目標 ' + fmtKm(m.km) + " km · 進度 " + GTCH.fmtPct(pct) + "</div></div>";
     });
     $("panel-tour").innerHTML = html;
   }
@@ -808,7 +811,7 @@
       var cur = b.f(c);
       var done = cur >= b.target;
       html += '<div class="bingo-cell' + (done ? " done" : "") + '"><div class="bt">' + (done ? "✅ " : "⬜ ") + b.t + "</div>" +
-        '<div class="bs">' + Math.min(cur, b.target) + " / " + b.target + (done ? "（達成）" : "") + "</div></div>";
+        '<div class="bs">' + fmtNum(cur) + " / " + b.target + (done ? "（達成）" : "") + "</div></div>";
     });
     html += "</div>";
     $("panel-bingo").innerHTML = html;

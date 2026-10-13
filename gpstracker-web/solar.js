@@ -7,7 +7,6 @@
   var L = window.SOLAR_LEVELS;
   var CORE = window.SOLAR_CORE;
   var LEVELS = CORE.levels; // 已依 km 單調遞增排序
-  var VOYAGER_STALE_DAYS = 7;     // 超過此天數視為資料過期
 
   var state = { totalKm: 0, valid: [], unlock: {}, filter: "all", prevUnlocked: null };
 
@@ -97,51 +96,36 @@
   }
 
   // ===== 航海家追逐 =====
+  // 讀取失敗或資料不合理時，沿用瀏覽器保存的「最後一次有效值」並明確標示（見 gt-challenges.js 的 loadVoyager）；不會歸零，也不會把舊資料當成即時資料。
   function renderVoyager() {
-    loadJSON("voyager.json", true).then(function (data) {
-      renderVoyagerData(data, null);
-    }).catch(function (e) {
-      renderVoyagerData(null, e.message);
-    });
+    GTCH.loadVoyager(function (n) { return loadJSON(n, true); }).then(renderVoyagerData);
   }
-  function renderVoyagerData(data, errMsg) {
-    var box = $("voyager");
-    var voyagers = L.voyagers;
-    var html = "";
-    var noteCls = "", noteText = "";
-    if (errMsg || !data || !data.probes) {
-      noteCls = "err";
-      noteText = "⚠️ 同步失敗／尚無資料（" + (errMsg || "voyager.json 不存在") + "）。保留上次有效資料；請稍後由排程同步。";
-    }
+  function renderVoyagerData(st) {
+    var box = $("voyager"), data = st.data, voyagers = L.voyagers, html = "";
     voyagers.forEach(function (v) {
       var p = data && data.probes ? data.probes[v.id] : null;
       if (!p) {
         html += '<div class="voyager-card"><div class="vc-name">' + v.display + '</div>' +
-          '<div class="vc-row"><span class="k">距太陽</span><span>—</span></div>' +
-          '<div class="vc-row"><span class="k">距地球</span><span>—</span></div>' +
+          '<div class="vc-row"><span class="k">距太陽（日心）</span><span>—</span></div>' +
+          '<div class="vc-row"><span class="k">距地球（地心）</span><span>—</span></div>' +
           '<div class="vc-row"><span class="k">與你里程差距</span><span>—</span></div>' +
-          '<div class="sync-note ' + noteCls + '">' + noteText + "</div></div>";
+          '<div class="sync-note err">' + st.label + (st.error ? "（" + st.error + "）" : "") + "</div></div>";
         return;
       }
       var gap = p.fromSunKm - state.totalKm;
       html += '<div class="voyager-card"><div class="vc-name">' + v.display + "</div>" +
-        '<div class="vc-row"><span class="k">距太陽</span><span>' + fmtKm(p.fromSunKm) + " km</span></div>" +
-        '<div class="vc-row"><span class="k">距地球</span><span>' + fmtKm(p.fromEarthKm) + " km</span></div>" +
+        '<div class="vc-row"><span class="k">距太陽（日心）</span><span>' + fmtKm(p.fromSunKm) + " km</span></div>" +
+        '<div class="vc-row"><span class="k">距地球（地心）</span><span>' + fmtKm(p.fromEarthKm) + " km</span></div>" +
         '<div class="vc-row"><span class="k">你的累積里程</span><span>' + fmtKm(state.totalKm) + " km</span></div>" +
         '<div class="vc-row"><span class="k">差距（距太陽 − 你的里程）</span><span>' + fmtKm(gap) + " km</span></div>" +
-        '<div class="sync-note">' + statusLine(data) + "</div></div>";
+        '<div class="sync-note">' + statusLine(st) + "</div></div>";
     });
     box.innerHTML = html;
   }
-  function statusLine(data) {
-    var src = data.source || "NASA/JPL Horizons";
-    var updated = data.updatedAt ? fmtDateTime(data.updatedAt) : "未知";
-    var ageDays = data.updatedAt ? (Date.now() - data.updatedAt) / 86400000 : Infinity;
-    var cls = ageDays > VOYAGER_STALE_DAYS ? "sync-note stale" : "sync-note";
-    var stateText = data.updatedAt
-      ? (ageDays > VOYAGER_STALE_DAYS ? "⚠️ 資料已過期（> " + VOYAGER_STALE_DAYS + " 天），保留上次有效資料" : "✅ 同步正常")
-      : "⚠️ 尚未成功同步";
-    return '<span class="' + cls + '">' + stateText + " · 更新 " + updated + " · 來源 " + src +
+  function statusLine(st) {
+    var data = st.data, src = data.source || "NASA/JPL Horizons";
+    var cls = st.state === "ok" ? "sync-note" : "sync-note stale";
+    return '<span class="' + cls + '">' + st.label + " · 參考資料時間 " + fmtDateTime(st.updatedAt) + " · 來源 " + src +
       "（參考中心不同：探測器距太陽/地球 vs. 你的地表移動里程）</span>";
   }
 
