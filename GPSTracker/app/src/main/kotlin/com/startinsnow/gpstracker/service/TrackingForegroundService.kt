@@ -21,6 +21,8 @@ import com.startinsnow.gpstracker.core.model.PointReliability
 import com.startinsnow.gpstracker.core.model.TrackStatus
 import com.startinsnow.gpstracker.core.geo.GeoMath
 import com.startinsnow.gpstracker.data.prefs.GpsMode
+import com.startinsnow.gpstracker.data.prefs.AutoPauseDelay
+import com.startinsnow.gpstracker.movement.AutoPausePolicy
 import com.startinsnow.gpstracker.export.ExportTrackData
 import com.startinsnow.gpstracker.location.AdaptiveSamplingPolicy
 import com.startinsnow.gpstracker.location.LocationQualityManager
@@ -75,6 +77,10 @@ class TrackingForegroundService : LifecycleService() {
     private var isPaused = false
     private var isAutoPaused = false
     private var autoPauseEnabled = true
+    /** 使用者設定的「靜止多久後自動暫停」（毫秒）；預設 60 秒，見 AutoPauseDelay。 */
+    private var autoPauseThresholdMs = AUTO_PAUSE_THRESHOLD_MS
+    /** 較重的週期工作（電量、背景時的通知）改為每 [SLOW_TICK_INTERVAL_MS] 才做一次；計時與自動暫停判斷每秒進行。 */
+    private var lastSlowTickElapsedMs = 0L
     private var stationarySinceElapsedMs: Long? = null
 
     private var activeDurationMs = 0L
@@ -162,6 +168,7 @@ class TrackingForegroundService : LifecycleService() {
             try {
                 val settings = app.settingsRepository.settings.first()
                 autoPauseEnabled = settings.autoPauseEnabled
+                autoPauseThresholdMs = AutoPauseDelay.toMillis(settings.autoPauseSeconds)
                 val highAccuracyGps = settings.gpsMode == GpsMode.HIGH_ACCURACY
                 batteryMode = BatteryModeResolver.modeFor(
                     BatteryModeResolver.currentBatteryPercent(this@TrackingForegroundService)
@@ -281,7 +288,10 @@ class TrackingForegroundService : LifecycleService() {
     /** 讓「自動暫停」等設定在記錄期間被修改時也能立即生效。 */
     private fun observeSettings() {
         app.settingsRepository.settings
-            .onEach { autoPauseEnabled = it.autoPauseEnabled }
+            .onEach {
+                autoPauseEnabled = it.autoPauseEnabled
+                autoPauseThresholdMs = AutoPauseDelay.toMillis(it.autoPauseSeconds)
+            }
             .catch { /* 讀取設定失敗不影響記錄 */ }
             .launchIn(lifecycleScope)
     }
@@ -496,21 +506,23 @@ class TrackingForegroundService : LifecycleService() {
             }
         }
 
-        if (autoPauseEnabled && !isPaused && !isAutoPaused &&
-            stationarySinceElapsedMs != null &&
-            (now - stationarySinceElapsedMs!!) > AUTO_PAUSE_THRESHOLD_MS
-        ) {
+        if (AutoPausePolicy.shouldAutoPause(autoPauseEnabled, isPaused, isAutoPaused, stationarySinceElapsedMs, now, autoPauseThresholdMs)) {
             pauseRecording(auto = true)
         }
 
-        batteryMode = BatteryModeResolver.modeFor(BatteryModeResolver.currentBatteryPercent(this@TrackingForegroundService))
-        TrackingStateHolder.update {
-            it.copy(
-                durationMs = currentDurationMs(),
-                batteryPercent = BatteryModeResolver.currentBatteryPercent(this@TrackingForegroundService)
-            )
+        // 計時每秒更新（畫面上的「秒」才會跳動）；電量這類較重的工作每 SLOW_TICK_INTERVAL_MS 才做一次。
+        val slowTick = now - lastSlowTickElapsedMs >= SLOW_TICK_INTERVAL_MS
+        val batteryPercent = if (slowTick) BatteryModeResolver.currentBatteryPercent(this@TrackingForegroundService) else null
+        if (slowTick) {
+            lastSlowTickElapsedMs = now
+            batteryMode = BatteryModeResolver.modeFor(batteryPercent!!)
         }
-        updateNotification()
+        TrackingStateHolder.update {
+            it.copy(durationMs = currentDurationMs(), batteryPercent = batteryPercent ?: it.batteryPercent)
+        }
+        // 通知：亮屏時每秒更新（下拉通知列時秒數會跳動）；熄屏時每 SLOW_TICK_INTERVAL_MS 更新一次以省電。
+        val screenOn = (getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive
+        if (slowTick || screenOn) updateNotification()
     }
 
     private fun pauseRecording(auto: Boolean) {
@@ -734,7 +746,10 @@ class TrackingForegroundService : LifecycleService() {
         const val ACTION_STOP = "com.startinsnow.gpstracker.action.STOP"
 
         const val NOTIFICATION_ID = 1001
-        const val TICK_INTERVAL_MS = 5_000L
+        /** 計時／自動暫停判斷的間隔：1 秒，讓畫面上的時間每秒跳動。 */
+        const val TICK_INTERVAL_MS = 1_000L
+        const val SLOW_TICK_INTERVAL_MS = 5_000L
+        /** 自動暫停的預設靜止時間（使用者未設定時）。實際值由設定的 autoPauseSeconds 決定。 */
         const val AUTO_PAUSE_THRESHOLD_MS = 60_000L
         const val EXTRA_RESUME_TRACK_ID = "extra_resume_track_id"
         const val EXTRA_MANUAL_MODE = "extra_manual_mode"

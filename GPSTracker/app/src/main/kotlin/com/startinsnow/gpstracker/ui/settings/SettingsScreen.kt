@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.startinsnow.gpstracker.data.prefs.GpsMode
+import com.startinsnow.gpstracker.data.prefs.AutoPauseDelay
 import com.startinsnow.gpstracker.ui.components.SectionHeader
 import com.startinsnow.gpstracker.ui.map.OfflineDownloadProgress
 import com.startinsnow.gpstracker.ui.map.OfflineMapManager
@@ -143,6 +144,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     subtitle = context.getString(R.string.settings_018),
                     checked = settings.autoPauseEnabled
                 ) { viewModel.setAutoPause(it) }
+                SectionDivider()
+                AutoPauseDelayRow(
+                    seconds = settings.autoPauseSeconds,
+                    enabled = settings.autoPauseEnabled,
+                    onSave = { viewModel.setAutoPauseSeconds(it) }
+                )
             }
 
             SettingsSection(title = context.getString(R.string.settings_019)) {
@@ -535,3 +542,110 @@ private fun SettingsTextField(
 
 private fun healthConnectAvailable(context: android.content.Context): Boolean =
     runCatching { HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE }.getOrDefault(false)
+
+/** 「靜止多久後自動暫停」：以 時／分／秒 顯示目前設定，點「修改」開啟輸入對話框。 */
+@Composable
+private fun AutoPauseDelayRow(seconds: Int, enabled: Boolean, onSave: (Int) -> Unit) {
+    var showDialog by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(
+                stringResource(R.string.autopause_delay_title),
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                autoPauseDelayText(seconds),
+                style = MaterialTheme.typography.titleMedium,
+                color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        OutlinedButton(onClick = { showDialog = true }, enabled = enabled) { Text(stringResource(R.string.autopause_delay_edit)) }
+    }
+    if (showDialog) {
+        AutoPauseDelayDialog(
+            initialSeconds = seconds,
+            onDismiss = { showDialog = false },
+            onSave = { showDialog = false; onSave(it) }
+        )
+    }
+}
+
+@Composable
+private fun AutoPauseDelayDialog(initialSeconds: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+    val initial = AutoPauseDelay.toHms(initialSeconds)
+    var hours by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initial.hours.toString()) }
+    var minutes by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initial.minutes.toString()) }
+    var secs by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initial.seconds.toString()) }
+    // 欄位留空視為 0；只接受數字、最多 5 位，避免溢位。
+    val total = AutoPauseDelay.totalSeconds(hours.toLongOrNull() ?: 0L, minutes.toLongOrNull() ?: 0L, secs.toLongOrNull() ?: 0L)
+    val valid = AutoPauseDelay.isValid(total)
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.autopause_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    stringResource(R.string.autopause_dialog_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HmsField(hours, { hours = it }, stringResource(R.string.autopause_label_hours), Modifier.weight(1f))
+                    HmsField(minutes, { minutes = it }, stringResource(R.string.autopause_label_minutes), Modifier.weight(1f))
+                    HmsField(secs, { secs = it }, stringResource(R.string.autopause_label_seconds), Modifier.weight(1f))
+                }
+                if (valid) {
+                    Text(
+                        autoPauseDelayText(total.toInt()),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Text(
+                        stringResource(R.string.autopause_range_error),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(enabled = valid, onClick = { onSave(total.toInt()) }) {
+                Text(stringResource(R.string.autopause_save))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.autopause_cancel)) }
+        }
+    )
+}
+
+@Composable
+private fun HmsField(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { onChange(it.filter(Char::isDigit).take(5)) },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+        modifier = modifier
+    )
+}
+
+/** 例如 90 秒 -> 「1 分 30 秒」；3600 秒 -> 「1 時」。 */
+@Composable
+private fun autoPauseDelayText(seconds: Int): String {
+    val t = AutoPauseDelay.toHms(seconds)
+    val parts = buildList {
+        if (t.hours > 0) add(stringResource(R.string.autopause_fmt_hours, t.hours))
+        if (t.minutes > 0) add(stringResource(R.string.autopause_fmt_minutes, t.minutes))
+        if (t.seconds > 0) add(stringResource(R.string.autopause_fmt_seconds, t.seconds))
+    }
+    return parts.joinToString(" ")
+}

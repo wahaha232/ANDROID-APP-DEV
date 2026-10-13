@@ -20,6 +20,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun setGpsMode(mode: GpsMode) = viewModelScope.launch { app.settingsRepository.setGpsMode(mode) }
     fun setAutoPause(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setAutoPauseEnabled(enabled) }
+    fun setAutoPauseSeconds(seconds: Int) = viewModelScope.launch { app.settingsRepository.setAutoPauseSeconds(seconds) }
     fun setStepSource(source: StepSource) = viewModelScope.launch { app.settingsRepository.setStepSource(source) }
     fun setDriveSync(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setDriveSyncEnabled(enabled) }
     fun setWifiOnly(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setWifiOnlySync(enabled) }
