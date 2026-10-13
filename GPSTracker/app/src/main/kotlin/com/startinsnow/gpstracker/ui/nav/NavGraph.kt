@@ -26,6 +26,7 @@ object Routes {
     const val RECORDING = "recording?resumeTrackId={resumeTrackId}"
     const val HISTORY = "history"
     const val SETTINGS = "settings"
+    const val RECAP = "recap"
     const val DETAIL = "detail/{trackId}"
     const val FLYTHROUGH = "flythrough/{trackId}"
     fun detail(trackId: String) = "detail/$trackId"
@@ -66,6 +67,7 @@ fun GpsTrackerNavHost(navController: NavHostController = rememberNavController()
                     onStartRecording = { navController.navigate(Routes.recording()) { launchSingleTop = true } },
                     onResumeRecording = { trackId -> navController.navigate(Routes.recording(trackId)) { launchSingleTop = true } },
                     onOpenHistory = { navController.navigate(Routes.HISTORY) { launchSingleTop = true } },
+                    onOpenRecap = { navController.navigate(Routes.RECAP) { launchSingleTop = true } },
                     onOpenTrack = { trackId -> navController.navigate(Routes.detail(trackId)) { launchSingleTop = true } }
                 )
             }
@@ -90,6 +92,9 @@ fun GpsTrackerNavHost(navController: NavHostController = rememberNavController()
             }
             composable(Routes.HISTORY) {
                 HistoryScreen(onOpenTrack = { trackId -> navController.navigate(Routes.detail(trackId)) { launchSingleTop = true } })
+            }
+            composable(Routes.RECAP) {
+                com.startinsnow.gpstracker.ui.recap.RecapScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen()

@@ -66,6 +66,7 @@ fun HomeScreen(
     onResumeRecording: (String) -> Unit,
     onOpenHistory: () -> Unit,
     onOpenTrack: (String) -> Unit,
+    onOpenRecap: () -> Unit = {},
     viewModel: HomeViewModel = viewModel()
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -141,6 +142,13 @@ fun HomeScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
+            }
+
+            item {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onOpenRecap,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) { Text(stringResource(R.string.home_recap)) }
             }
 
             pendingRecovery?.let { candidate ->

@@ -117,6 +117,16 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
     val outages by viewModel.outages.collectAsStateWithLifecycle()
 
     var mapController by remember { mutableStateOf<GpsMapController?>(null) }
+    // 路線顏色（單色／速度／海拔）與自動亮點：只用「可信」點，與地圖上的路線同一份資料。
+    var colorMode by remember { mutableStateOf(com.startinsnow.gpstracker.core.analysis.ColorMode.NONE) }
+    val analysisPoints = remember(points) {
+        points.filter { it.reliability == "TRUSTED" }.sortedBy { it.timestampMs }.map {
+            com.startinsnow.gpstracker.core.analysis.AnalysisPoint(it.latitude, it.longitude, it.altitudeMeters, it.speedMps?.toDouble(), it.timestampMs)
+        }
+    }
+    val speedAvailable = remember(analysisPoints) { com.startinsnow.gpstracker.core.analysis.RouteAnalysis.speedSeriesKmh(analysisPoints) != null }
+    val altitudeAvailable = remember(analysisPoints) { com.startinsnow.gpstracker.core.analysis.RouteAnalysis.altitudeSeries(analysisPoints) != null }
+    val routeHighlights = remember(analysisPoints) { com.startinsnow.gpstracker.core.analysis.RouteAnalysis.highlights(analysisPoints) }
     var uploadStatusText by remember { mutableStateOf<String?>(null) }
     var stepSyncText by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -190,13 +200,20 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
         }
     }
 
-    LaunchedEffect(points, photos, outages, mapController) {
+    LaunchedEffect(points, photos, outages, mapController, colorMode) {
         val controller = mapController ?: return@LaunchedEffect
         val trusted = points.filter { it.reliability == "TRUSTED" }.sortedBy { it.timestampMs }
         val coords = trusted.map { it.latitude to it.longitude }
         // 上萬點時縮減「地圖顯示」用的座標，避免字串組裝與 native 繪製造成卡頓 / OOM。
         // 資料庫、GPX / JSON / CSV 匯出仍使用完整資料，不做任何縮減。
         controller.setRoute(RouteSimplifier.simplify(coords))
+        if (colorMode != com.startinsnow.gpstracker.core.analysis.ColorMode.NONE) {
+            val sampled = com.startinsnow.gpstracker.core.analysis.RouteAnalysis.downsample(analysisPoints, 3000)
+            val values = com.startinsnow.gpstracker.core.analysis.RouteAnalysis.series(sampled, colorMode)
+            if (values != null) {
+                controller.setRouteColored(com.startinsnow.gpstracker.core.analysis.RouteAnalysis.colorSegments(sampled, values, colorMode).segments)
+            }
+        }
         coords.firstOrNull()?.let { controller.setPoints(GpsMapController.SOURCE_START, listOf(it)) }
         coords.lastOrNull()?.let { controller.setPoints(GpsMapController.SOURCE_END, listOf(it)) }
         controller.setPoints(
@@ -256,6 +273,46 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.detail_012))
             }
+
+            val legendText = remember(analysisPoints, colorMode) {
+                val values = com.startinsnow.gpstracker.core.analysis.RouteAnalysis.series(analysisPoints, colorMode)
+                if (values == null) null else {
+                    val (lo, hi) = com.startinsnow.gpstracker.core.analysis.RouteAnalysis.range(values)
+                    if (colorMode == com.startinsnow.gpstracker.core.analysis.ColorMode.SPEED)
+                        context.getString(R.string.route_legend_speed, Math.round(lo).toInt(), Math.round(hi).toInt())
+                    else context.getString(R.string.route_legend_altitude, Math.round(lo).toInt(), Math.round(hi).toInt())
+                }
+            }
+            RouteExtras(
+                colorMode = colorMode,
+                speedAvailable = speedAvailable,
+                altitudeAvailable = altitudeAvailable,
+                legendText = legendText,
+                highlights = routeHighlights,
+                onColorMode = { colorMode = it },
+                onHighlight = { h -> mapController?.flyTo(h.latitude, h.longitude, 15.0, 55.0, 0.0) },
+                onShare = {
+                    track?.let { t ->
+                        val df = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.getDefault())
+                        val bmp = com.startinsnow.gpstracker.ui.share.ShareCardRenderer.render(
+                            context = context,
+                            title = df.format(java.util.Date(t.startTimeMs)) + " " + t.dominantMode.emoji,
+                            subtitle = "%.2f km".format(t.distanceMeters / 1000.0),
+                            points = analysisPoints,
+                            colorMode = colorMode,
+                            stats = listOf(
+                                com.startinsnow.gpstracker.ui.share.ShareStat("%.2f".format(t.distanceMeters / 1000.0), "km", context.getString(R.string.share_stat_distance)),
+                                com.startinsnow.gpstracker.ui.share.ShareStat(formatDuration(t.durationMs), "", context.getString(R.string.share_stat_duration)),
+                                com.startinsnow.gpstracker.ui.share.ShareStat("%.1f".format(t.avgSpeedMps * 3.6), "km/h", context.getString(R.string.share_stat_speed)),
+                                com.startinsnow.gpstracker.ui.share.ShareStat("%.0f".format(t.totalAscentMeters), "m", context.getString(R.string.share_stat_ascent))
+                            )
+                        )
+                        com.startinsnow.gpstracker.ui.share.ShareUtils.shareBitmap(
+                            context, bmp, "gps-tracker-" + t.trackId.take(8) + ".png", context.getString(R.string.share_card_chooser)
+                        )
+                    }
+                }
+            )
 
             track?.let { t ->
                 Row(verticalAlignment = Alignment.Bottom) {

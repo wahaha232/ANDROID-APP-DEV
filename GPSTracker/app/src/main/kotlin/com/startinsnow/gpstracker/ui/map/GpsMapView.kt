@@ -35,6 +35,21 @@ class GpsMapController {
         style?.getSourceAs<GeoJsonSource>(SOURCE_ROUTE)?.setGeoJson(lineStringGeoJson(coordinates))
     }
 
+    /** 依速度／海拔上色的路線：每段一個 Feature，屬性 color 是 #rrggbb；沒有 color 的 Feature 用預設綠色。 */
+    fun setRouteColored(segments: List<com.startinsnow.gpstracker.core.analysis.ColoredSegment>) {
+        val features = JSONArray()
+        segments.forEach { seg ->
+            val coords = JSONArray()
+            seg.coordinates.forEach { (lat, lon) -> coords.put(JSONArray().put(lon).put(lat)) }
+            val geometry = JSONObject().put("type", "LineString").put("coordinates", coords)
+            features.put(
+                JSONObject().put("type", "Feature").put("geometry", geometry)
+                    .put("properties", JSONObject().put("color", seg.color))
+            )
+        }
+        style?.getSourceAs<GeoJsonSource>(SOURCE_ROUTE)?.setGeoJson(JSONObject().put("type", "FeatureCollection").put("features", features).toString())
+    }
+
     fun setPoints(sourceId: String, points: List<Pair<Double, Double>>) {
         style?.getSourceAs<GeoJsonSource>(sourceId)?.setGeoJson(pointsGeoJson(points))
     }
@@ -189,7 +204,14 @@ fun GpsMapView(
 
                         style.addLayer(
                             LineLayer("route-layer", GpsMapController.SOURCE_ROUTE).withProperties(
-                                PropertyFactory.lineColor("#00C853"),
+                                PropertyFactory.lineColor(
+                                    org.maplibre.android.style.expressions.Expression.toColor(
+                                        org.maplibre.android.style.expressions.Expression.coalesce(
+                                            org.maplibre.android.style.expressions.Expression.get("color"),
+                                            org.maplibre.android.style.expressions.Expression.literal("#00C853")
+                                        )
+                                    )
+                                ),
                                 PropertyFactory.lineWidth(4f)
                             )
                         )
