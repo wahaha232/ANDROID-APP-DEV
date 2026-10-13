@@ -34,6 +34,21 @@ test("活動名稱：meta 標題優先，否則『日期 + 類型』", () => {
   assert.equal(G.activityTitle(e, { t1: { title: "" } }), "2026/10/11 單車");
 });
 
+test("可編輯的移動方式：meta.mode 優先，沒有就用 App 判斷；篩選、搜尋、標題都跟著變", () => {
+  const e = track({ trackId: "m1", dominantMode: "BICYCLE" });
+  const meta = { m1: { mode: "TRAIN" } };
+  assert.equal(G.modeOf(e, {}), "BICYCLE");
+  assert.equal(G.modeOf(e, meta), "TRAIN");
+  assert.equal(G.modeOf(e, { m1: { mode: "" } }), "BICYCLE");
+  assert.equal(G.modeOf({ trackId: "z" }, {}), "UNKNOWN");
+  assert.equal(G.modeOverridden(e, meta), true);
+  assert.equal(G.modeOverridden(e, { m1: { mode: "BICYCLE" } }), false);
+  assert.equal(G.activityTitle(e, meta), "2026/10/11 火車／捷運");
+  assert.equal(G.filterTracks([e], { mode: "TRAIN", meta }).length, 1);
+  assert.equal(G.filterTracks([e], { mode: "BICYCLE", meta }).length, 0);
+  assert.equal(G.filterTracks([e], { q: "捷運", meta }).length, 1);
+});
+
 test("搜尋與模式篩選（含 meta 標題/備註）", () => {
   const a = track({ trackId: "a" }), b = track({ trackId: "b", dominantMode: "WALKING", startTimeMs: T0 - 86400e3 });
   const meta = { b: { notes: "河濱公園晨走" } };

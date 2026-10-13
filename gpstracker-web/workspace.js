@@ -23,11 +23,25 @@
   var mode = null, camMode = "follow";
   var map = null, bounds = null, profAlt = null, profSpd = null;
   var hasAlt = false;
+  // GPS 中斷（捷運）：rawTrack＝原始軌跡（匯出用）；track＝插入估算路徑後、只供顯示／回放的版本。
+  var rawTrack = null, gapInfo = { gaps: [], gapEdge: null, usedMetro: false }, dispGap = [];
 
   function $(id) { return document.getElementById(id); }
   function emptyLine() { return GPST.emptyLine(); }
   function emptyFC() { return GPST.emptyFC(); }
   function lineOf(cs) { return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: cs } }; }
+  // 實線路線在「GPS 中斷」邊上斷開（中斷段另用虛線圖層畫）。
+  function runFeature(cs, flags) { return { type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: GT.splitRuns(cs, flags) } }; }
+  // 顯示線（已抽樣）每個頂點對應的「到此點的邊是否屬於中斷段」。
+  function buildDispGap() {
+    var ge = gapInfo.gapEdge, last = 0, n = dispCoords.length;
+    dispGap = [];
+    for (var j = 0; j < n; j++) {
+      var orig = j === n - 1 ? coords.length - 1 : Math.min(j * dispStep, coords.length - 1), f = false;
+      if (ge && j > 0) for (var m = last + 1; m <= orig; m++) if (ge[m]) { f = true; break; }
+      dispGap.push(f); last = orig;
+    }
+  }
 
   // ===== 路線計算（原 flythrough.html，未更動）=====
   function hav(a, b) {
@@ -105,10 +119,10 @@
     document.title = title + " · 3D 路線工作區";
     $("pTitle").textContent = title;
     $("hTitle").textContent = title;
-    var sub = C.fmtDate(track.startTimeMs) + "・" + C.modeName(track.dominantMode) +
+    var sub = C.fmtDate(track.startTimeMs) + "・" + C.modeName(C.modeOf(track, meta)) +
       (track.distanceMeters > 0 ? "・" + C.fmtKm(track.distanceMeters) + " km" : "");
     $("hSub").textContent = sub;
-    $("pMeta").innerHTML = '<span class="gt-chip">' + C.modeEmoji(track.dominantMode) + " " + esc(C.modeName(track.dominantMode)) + "</span><span>" + esc(C.fmtDate(track.startTimeMs)) + "</span>";
+    $("pMeta").innerHTML = '<span class="gt-chip">' + C.modeEmoji(C.modeOf(track, meta)) + " " + esc(C.modeName(C.modeOf(track, meta))) + "</span><span>" + esc(C.fmtDate(track.startTimeMs)) + "</span>";
     renderStats();
 
     // 海拔剖面：只有真的有海拔資料才顯示
@@ -146,7 +160,12 @@
 
     $("aStory").href = GT.activityUrl(trackId);
     $("back").href = GT.activityUrl(trackId);
-    $("aGpx").onclick = function () { GT.saveBlob(trackId + ".gpx", C.gpx(track), "application/gpx+xml"); };
+    // 匯出一律用原始軌跡（估算路徑只用於顯示，不寫進 GPX）。
+    $("aGpx").onclick = function () { GT.saveBlob(trackId + ".gpx", C.gpx(rawTrack || track), "application/gpx+xml"); };
+    if (gapInfo.gaps.length) {
+      $("blkGaps").hidden = false;
+      $("gapBody").innerHTML = GT.gapSummaryHtml(gapInfo.gaps, gapInfo.usedMetro, track.distanceMeters);
+    }
     $("aShare").onclick = function () { GT.share(GT.url("activity.html", { track: trackId }), title).then(toast); };
   }
 
@@ -251,12 +270,21 @@
     map.addLayer({ id: "planned-line", type: "line", source: "planned", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 4, "line-opacity": 0.35, "line-dasharray": [2, 2] } });
     map.addSource("traveled", { type: "geojson", data: emptyLine() });
     map.addLayer({ id: "traveled-line", type: "line", source: "traveled", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#00E676", "line-width": 6 } });
+    // GPS 中斷段（估算）：虛線，顏色＝捷運路線色（沒有對應路線＝灰）。畫在實線之上、照片點之下。
+    map.addSource("gaps", { type: "geojson", data: GT.gapFeatures(gapInfo.gaps) });
+    map.addLayer({ id: "gaps-casing", type: "line", source: "gaps", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#04121f", "line-width": 9, "line-opacity": 0.55 } });
+    map.addLayer({ id: "gaps-line", type: "line", source: "gaps", layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 5, "line-dasharray": [1.4, 1.2] } });
     map.addSource("photos", { type: "geojson", data: emptyFC() });
     map.addLayer({ id: "photos-dot", type: "circle", source: "photos", paint: { "circle-radius": 6, "circle-color": "#FFB300", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
     map.addSource("marker", { type: "geojson", data: emptyFC() });
     map.addLayer({ id: "marker-dot", type: "circle", source: "marker", paint: { "circle-radius": 9, "circle-color": "#FF3D00", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
 
-    map.getSource("planned").setData(lineOf(dispCoords));
+    map.getSource("planned").setData(runFeature(dispCoords, dispGap));
+    gapInfo.gaps.forEach(function (g) {
+      var el = document.createElement("div");
+      el.className = "gt-gap-label"; el.textContent = GT.gapLabel(g);
+      new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(GT.mid(g.kind === "metro" ? g.coords : [g.from, g.to])).addTo(map);
+    });
     map.getSource("photos").setData({ type: "FeatureCollection", features: (track.photos || []).map(function (p) {
       return { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [p[0], p[1]] } };
     }) });
@@ -279,7 +307,8 @@
     lastTravel = now;
     if (mode === "replay") {
       var k = Math.ceil(p.i / dispStep);
-      map.getSource("traveled").setData(lineOf(dispCoords.slice(0, k).concat([p.pos])));
+      var inGap = !!(gapInfo.gapEdge && gapInfo.gapEdge[p.i]);
+      map.getSource("traveled").setData(runFeature(dispCoords.slice(0, k).concat([p.pos]), dispGap.slice(0, k).concat([inGap])));
     }
     map.getSource("marker").setData(mode === "explore" ? emptyFC() : { type: "Feature", geometry: { type: "Point", coordinates: p.pos }, properties: {} });
   }
@@ -298,6 +327,7 @@
     }
     $("hud-speed").textContent = Math.round(spd);
     $("hud-alt").textContent = alt === null ? "--" : Math.round(alt);
+    $("hud-gap").hidden = !(gapInfo.gapEdge && gapInfo.gapEdge[p.i]);
     var seek = $("seek");
     seek.value = String(Math.round(progress * 1000));
     seek.setAttribute("aria-valuetext", "距離 " + ((progress * total) / 1000).toFixed(2) + " 公里");
@@ -387,7 +417,7 @@
 
     // 路線圖層：回放＝逐步走過的綠線；探索／數據＝整條路線完整顯示
     if (m === "replay") map.getSource("traveled").setData(emptyLine());
-    else map.getSource("traveled").setData(lineOf(dispCoords));
+    else map.getSource("traveled").setData(runFeature(dispCoords, dispGap));
 
     if (m === "replay") {
       setSheet(false);
@@ -451,8 +481,15 @@
     }
     $("back").href = GT.activityUrl(trackId);
     Promise.all([GT.loadTrack(trackId), GT.loadMeta()]).then(function (r) {
-      track = r[0]; meta = r[1];
+      rawTrack = r[0]; meta = r[1];
+      // GPS 中斷（例如捷運內）：有中斷段才會去載入 metro.json；失敗就只用虛線標示中斷。
+      return GT.resolveGaps(rawTrack).then(function (res) {
+        gapInfo = res;
+        track = res.gaps.length ? Object.assign({}, rawTrack, { points: res.points }) : rawTrack;
+      });
+    }).then(function () {
       prepareTrack(track);
+      buildDispGap();
       if (coords.length < 2) {
         showStatus('<div>這筆活動沒有足夠的路線資料，無法顯示 3D 路線。</div><a class="btn gt-btn" href="' + GT.activityUrl(trackId) + '">回活動故事</a>', true);
         return;

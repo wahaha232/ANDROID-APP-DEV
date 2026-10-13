@@ -27,7 +27,7 @@
         '<div class="gt-hero-body">' +
           '<div class="gt-eyebrow">最近一次活動</div>' +
           '<h3 class="gt-hero-title">' + esc(title) + "</h3>" +
-          '<div class="gt-hero-meta"><span class="gt-chip">' + C.modeEmoji(e.dominantMode) + " " + esc(C.modeName(e.dominantMode)) + "</span>" +
+          '<div class="gt-hero-meta"><span class="gt-chip">' + C.modeEmoji(C.modeOf(e, meta)) + " " + esc(C.modeName(C.modeOf(e, meta))) + "</span>" +
             "<span>" + esc(C.fmtDate(e.startTimeMs)) + "</span></div>" +
           (note ? '<div class="gt-hero-meta">' + esc(note) + "</div>" : "") +
           (pick.length ? '<div class="gt-kpis">' + pick.map(kpi).join("") + "</div>" : "") +
@@ -67,8 +67,8 @@
       var f = C.trackFields(t).filter(function (x) { return ["distance", "duration", "steps"].indexOf(x.key) >= 0; });
       return '<li><a class="gt-tl-item" href="' + GT.activityUrl(t.trackId) + '" data-id="' + esc(t.trackId) + '">' +
         '<div class="gt-tl-thumb gt-mini" aria-hidden="true"></div>' +
-        "<div><div class=\"gt-tl-title\">" + C.modeEmoji(t.dominantMode) + " " + esc(C.activityTitle(t, meta)) + "</div>" +
-        '<div class="gt-tl-sub">' + esc(C.fmtDate(t.startTimeMs)) + "・" + esc(C.modeName(t.dominantMode)) + "</div>" +
+        "<div><div class=\"gt-tl-title\">" + C.modeEmoji(C.modeOf(t, meta)) + " " + esc(C.activityTitle(t, meta)) + "</div>" +
+        '<div class="gt-tl-sub">' + esc(C.fmtDate(t.startTimeMs)) + "・" + esc(C.modeName(C.modeOf(t, meta))) + "</div>" +
         '<div class="gt-tl-stats">' + f.map(function (x) { return "<span>" + esc(x.value) + " " + esc(x.unit) + "</span>"; }).join("") + "</div></div>" +
         '<span class="gt-tl-go" aria-hidden="true">›</span></a></li>';
     }).join("");

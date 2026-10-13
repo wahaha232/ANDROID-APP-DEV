@@ -21,7 +21,7 @@
 
   function buildModeFilter() {
     var seen = {}, sel = $("modeFilter");
-    tracks.forEach(function (t) { if (t.dominantMode) seen[t.dominantMode] = true; });
+    tracks.forEach(function (t) { seen[C.modeOf(t, meta)] = true; });
     sel.length = 1;
     Object.keys(seen).forEach(function (m) {
       var o = document.createElement("option");
@@ -34,7 +34,7 @@
     var f = C.trackFields(t).filter(function (x) { return ["distance", "duration", "steps", "ascent"].indexOf(x.key) >= 0; });
     var m = meta[t.trackId] || {};
     return '<article class="gt-card" data-id="' + esc(t.trackId) + '">' +
-      '<div class="gt-card-thumb"><span class="gt-chip">' + C.modeEmoji(t.dominantMode) + " " + esc(C.modeName(t.dominantMode)) + "</span>" +
+      '<div class="gt-card-thumb"><span class="gt-chip">' + C.modeEmoji(C.modeOf(t, meta)) + " " + esc(C.modeName(C.modeOf(t, meta))) + "</span>" +
       '<div class="gt-nothumb"><span class="gt-spin" aria-hidden="true"></span></div></div>' +
       '<div class="gt-card-body">' +
         '<h3 class="gt-card-title"><a href="' + GT.activityUrl(t.trackId) + '">' + esc(C.activityTitle(t, meta)) + "</a></h3>" +

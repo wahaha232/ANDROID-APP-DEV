@@ -75,6 +75,61 @@
     }
   }
 
+  // ---- GPS 中斷（捷運內）----
+  // 捷運路線資料（data/metro.json，OpenStreetMap）：只有軌跡真的有中斷段才會下載；失敗就當作沒有（中斷段仍會以虛線標示）。
+  var metroPromise = null;
+  function loadMetro() {
+    if (!metroPromise) metroPromise = fetchJson("metro.json", false).then(function (m) { return m; }, function () { return null; });
+    return metroPromise;
+  }
+  // 回傳 { gaps, points, gapEdge, usedMetro }：points 是插入估算路徑後的點（只用於顯示／回放，GPX/JSON 匯出請用原始軌跡）。
+  function resolveGaps(track) {
+    var pts = track.points || [];
+    if (!window.GTMetro || !GTMetro.findGaps(pts).length) return Promise.resolve({ gaps: [], points: pts, gapEdge: null, usedMetro: false });
+    return loadMetro().then(function (metro) {
+      var gaps = GTMetro.annotate(pts, metro), ins = GTMetro.insertEstimated(pts, gaps);
+      return { gaps: gaps, points: ins.points, gapEdge: ins.gapEdge, usedMetro: gaps.some(function (g) { return g.kind === "metro"; }) };
+    });
+  }
+  // 中斷段在地圖上的虛線（每段一個 Feature，顏色＝捷運路線色；未知＝灰）。
+  function gapFeatures(gaps) {
+    return { type: "FeatureCollection", features: (gaps || []).map(function (g) {
+      return { type: "Feature", properties: { color: g.kind === "metro" && g.lines.length ? g.lines[0].color : "#9aa7bd", kind: g.kind },
+        geometry: { type: "LineString", coordinates: g.kind === "metro" ? g.coords : [g.from, g.to] } };
+    }) };
+  }
+  // 把連續座標依「中斷邊」旗標切成多段實線（flags[j]＝邊 j-1→j 是否屬於中斷段）。
+  function splitRuns(coords, flags) {
+    var runs = [], cur = [];
+    for (var j = 0; j < coords.length; j++) {
+      if (flags && flags[j] && j > 0) { if (cur.length > 1) runs.push(cur); cur = [coords[j]]; }
+      else cur.push(coords[j]);
+    }
+    if (cur.length > 1) runs.push(cur);
+    return runs;
+  }
+  function mid(coords) { return coords[Math.floor(coords.length / 2)]; }
+  function gapLabel(g) {
+    var min = Math.round(g.dtSec / 60);
+    return g.kind === "metro" ? "🚇 " + g.fromName + " → " + g.toName + "（捷運估算）" : "GPS 中斷 " + min + " 分";
+  }
+  function gapSummaryHtml(gaps, usedMetro, totalDistM) {
+    var C = GTCore, esc = C.escapeHtml, straightSum = 0;
+    var items = (gaps || []).map(function (g, n) {
+      straightSum += g.straightM;
+      var dur = C.fmtDur(g.dtSec * 1000);
+      if (g.kind === "metro") {
+        return "<li><b>" + esc(g.fromName) + " → " + esc(g.toName) + "</b>・" + g.lines.map(function (l) { return esc(l.name); }).join(" / ") + "<br>GPS 中斷 " + dur +
+          "；直線 " + (g.straightM / 1000).toFixed(2) + " km，沿捷運路線估算約 " + (g.lengthM / 1000).toFixed(2) + " km（" + g.stops + " 站，平均 " + Math.round(g.speedKmh) + " km/h）</li>";
+      }
+      return "<li><b>GPS 中斷 " + dur + "</b><br>前後兩點直線 " + (g.straightM / 1000).toFixed(2) + " km；沒有對應的捷運路線，只以虛線連接。</li>";
+    });
+    return "<ul class=\"gt-gap-list\">" + items.join("") + "</ul>" +
+      "<p class=\"gt-note\">估算僅供參考，不改變原始紀錄。距離、均速等統計仍以原始 GPS 計算，其中含中斷段的直線距離約 " + (straightSum / 1000).toFixed(2) + " km" +
+      (totalDistM > 0 ? "（占總距離 " + Math.round(straightSum / totalDistM * 100) + "%）" : "") + "。" +
+      (usedMetro ? "<br>捷運路線資料 © OpenStreetMap contributors（ODbL）。" : "") + "</p>";
+  }
+
   // 縮圖 SVG（cls 決定粗細/顏色，樣式在 gt-ui.css）。
   function routeSvg(p, cls, dotR) {
     if (!p) return "";
@@ -178,6 +233,7 @@
     url: url, activityUrl: activityUrl, workspaceUrl: workspaceUrl, carry: carry,
     fetchJson: fetchJson, loadManifest: loadManifest, loadMeta: loadMeta, loadTrack: loadTrack, thumb: thumb,
     routeSvg: routeSvg, lazy: lazy,
+    loadMetro: loadMetro, resolveGaps: resolveGaps, gapFeatures: gapFeatures, splitRuns: splitRuns, mid: mid, gapLabel: gapLabel, gapSummaryHtml: gapSummaryHtml,
     mapStyle: mapStyle, loadMapLibre: loadMapLibre, collapseAttribution: collapseAttribution, saveBlob: saveBlob, share: share
   };
 })();

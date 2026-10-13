@@ -9,7 +9,7 @@
   var DEFAULTS = { repo: "wahaha232/ANDROID-APP-DEV", branch: "main", data: "gpstracker-web/data", token: "" };
 
   var MODE_EMOJI = { WALKING: "🚶", RUNNING: "🏃", BICYCLE: "🚲", CYCLING: "🚲", VEHICLE: "🚗", DRIVING: "🚗", CAR: "🚗", MOTORCYCLE: "🏍️", TRAIN: "🚆", BUS: "🚌", BOAT: "⛵", STATIONARY: "🧍", UNKNOWN: "❓" };
-  var MODE_NAME = { WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", VEHICLE: "車輛", DRIVING: "開車", CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車", BUS: "公車", BOAT: "船", STATIONARY: "靜止", UNKNOWN: "未知" };
+  var MODE_NAME = { WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", VEHICLE: "車輛", DRIVING: "開車", CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車／捷運", BUS: "公車", BOAT: "船", STATIONARY: "靜止", UNKNOWN: "未知" };
 
   var cfg = loadCfg();
   var tracks = [];
@@ -25,6 +25,9 @@
   function fmtKm(v) { return v.toLocaleString("zh-Hant", { maximumFractionDigits: 3 }); }
   function modeEmoji(m) { return MODE_EMOJI[m] || "❓"; }
   function modeName(m) { return MODE_NAME[m] || m || "未知"; }
+  // 使用者可編輯的移動方式（存在 meta.json 的 mode；沒有就用 App 判斷的 dominantMode）。
+  var EDITABLE_MODES = ["WALKING", "RUNNING", "BICYCLE", "MOTORCYCLE", "CAR", "BUS", "TRAIN", "BOAT", "UNKNOWN"];
+  function effMode(t) { var m = meta.tracks[t.trackId]; return (m && m.mode) || t.dominantMode; }
 
   // ---- 設定 ----
   function loadCfg() {
@@ -135,7 +138,7 @@
 
   function buildModeFilter() {
     var set = {};
-    tracks.forEach(function (t) { if (t.dominantMode) set[t.dominantMode] = true; });
+    tracks.forEach(function (t) { var em = effMode(t); if (em) set[em] = true; });
     var sel = $("modeFilter");
     sel.length = 1;
     Object.keys(set).forEach(function (m) { var o = document.createElement("option"); o.value = m; o.textContent = modeEmoji(m) + " " + modeName(m); sel.appendChild(o); });
@@ -146,8 +149,8 @@
     var mf = $("modeFilter").value;
     var list = tracks.filter(function (t) {
       var note = (meta.tracks[t.trackId] && (meta.tracks[t.trackId].title || meta.tracks[t.trackId].notes)) || "";
-      if (mf && t.dominantMode !== mf) return false;
-      if (q && (fmtDate(t.startTimeMs).toLowerCase().indexOf(q) < 0) && String(t.dominantMode).toLowerCase().indexOf(q) < 0 && note.toLowerCase().indexOf(q) < 0) return false;
+      if (mf && effMode(t) !== mf) return false;
+      if (q && (fmtDate(t.startTimeMs).toLowerCase().indexOf(q) < 0) && String(effMode(t)).toLowerCase().indexOf(q) < 0 && modeName(effMode(t)).toLowerCase().indexOf(q) < 0 && note.toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
     var s = $("sortSel").value;
@@ -175,7 +178,8 @@
       html += '<tr data-id="' + t.trackId + '">' +
         '<td><input type="checkbox" class="rowsel" data-id="' + t.trackId + '"' + (selected[t.trackId] ? " checked" : "") + ' /></td>' +
         '<td>' + fmtDate(t.startTimeMs) + '</td>' +
-        '<td>' + modeEmoji(t.dominantMode) + " " + modeName(t.dominantMode) + '</td>' +
+        '<td>' + modeEmoji(effMode(t)) + " " + modeName(effMode(t)) +
+          (m.mode && m.mode !== t.dominantMode ? ' <span class="rec-edited" title="已手動修改；App 原判斷：' + escapeHtml(modeName(t.dominantMode)) + '">✎</span>' : "") + '</td>' +
         '<td class="num">' + fmtKm(kmOf(t)) + '</td>' +
         '<td>' + fmtDur(t.durationMs) + '</td>' +
         '<td class="num">' + (t.stepCount || 0) + '</td>' +
@@ -231,13 +235,17 @@
   function openEdit(id) {
     editingId = id;
     var m = meta.tracks[id] || {};
+    var orig = tracks.filter(function (t) { return t.trackId === id; })[0] || {};
     var back = document.createElement("div");
     back.className = "modal-back"; back.id = "editModal";
     back.innerHTML = '<div class="modal"><h3>編輯備註</h3>' +
       '<label>標題<input id="editTitle" value="' + escapeHtml(m.title || "") + '" /></label>' +
+      '<label>移動方式<select id="editMode"><option value="">維持 App 判斷（' + escapeHtml(modeName(orig.dominantMode)) + '）</option>' +
+      EDITABLE_MODES.map(function (k) { return '<option value="' + k + '"' + (m.mode === k ? " selected" : "") + '>' + modeEmoji(k) + " " + modeName(k) + "</option>"; }).join("") +
+      '</select></label>' +
       '<label>備註<textarea id="editNotes">' + escapeHtml(m.notes || "") + "</textarea></label>" +
       '<div class="btn-row"><button class="btn secondary" id="editCancel">取消</button><button class="btn" id="editSave">儲存</button></div>' +
-      '<div class="rec-note" style="margin-top:10px">只儲存標題/備註到 <code>' + escapeHtml(readBase()) + 'meta.json</code>，原始 GPS 紀錄檔不會被修改。</div></div>';
+      '<div class="rec-note" style="margin-top:10px">只儲存標題／備註／移動方式到 <code>' + escapeHtml(readBase()) + 'meta.json</code>，原始 GPS 紀錄檔不會被修改。</div></div>';
     document.body.appendChild(back);
     $("editCancel").onclick = function () { document.body.removeChild(back); editingId = null; };
     $("editSave").onclick = saveEdit;
@@ -250,6 +258,8 @@
     try {
       if (!meta.tracks[id]) meta.tracks[id] = {};
       meta.tracks[id].title = title; meta.tracks[id].notes = notes;
+      var modeSel = $("editMode").value;
+      if (modeSel) meta.tracks[id].mode = modeSel; else delete meta.tracks[id].mode;   // 空白＝回到 App 判斷的值
       await putFile(readBase() + "meta.json", JSON.stringify({ tracks: meta.tracks }, null, 2), "GPS Tracker: update notes for " + id);
       var back = $("editModal"); if (back) document.body.removeChild(back);
       editingId = null;

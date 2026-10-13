@@ -13,7 +13,7 @@
   };
   var MODE_NAME = {
     WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", VEHICLE: "車輛", DRIVING: "開車",
-    CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車", BUS: "公車", BOAT: "船", STATIONARY: "靜止", UNKNOWN: "未知"
+    CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車／捷運", BUS: "公車", BOAT: "船", STATIONARY: "靜止", UNKNOWN: "未知"
   };
   var STEP_SOURCE = { ZEPP_LIFE: "Zepp Life", GOOGLE_FIT: "Google Fit", SENSOR: "手機感測器", SENSOR_FALLBACK: "手機感測器・待補同步" };
 
@@ -37,6 +37,17 @@
       out.push(last);
     }
     return out;
+  }
+
+  // 活動的移動方式：使用者在「紀錄管理」改過（meta.json 的 mode）就以它為準，否則用 App 判斷的 dominantMode。
+  // 只影響網站的顯示、篩選與搜尋；原始紀錄與挑戰統計仍用 App 判斷的值。
+  function modeOf(t, metaTracks) {
+    var m = metaTracks && t && metaTracks[t.trackId];
+    return (m && m.mode) || (t && t.dominantMode) || "UNKNOWN";
+  }
+  function modeOverridden(t, metaTracks) {
+    var m = metaTracks && t && metaTracks[t.trackId];
+    return !!(m && m.mode && m.mode !== t.dominantMode);
   }
 
   function modeEmoji(m) { return MODE_EMOJI[m] || "❓"; }
@@ -72,17 +83,18 @@
   function activityTitle(entry, metaTracks) {
     var m = metaTracks && entry && metaTracks[entry.trackId];
     if (m && m.title) return String(m.title);
-    return entry ? fmtDay(entry.startTimeMs) + " " + modeName(entry.dominantMode) : "";
+    return entry ? fmtDay(entry.startTimeMs) + " " + modeName(modeOf(entry, metaTracks)) : "";
   }
 
   function filterTracks(list, opt) {
     opt = opt || {};
     var q = (opt.q || "").trim().toLowerCase(), mode = opt.mode || "", meta = opt.meta || {};
     return (list || []).filter(function (t) {
-      if (mode && t.dominantMode !== mode) return false;
+      if (mode && modeOf(t, meta) !== mode) return false;
       if (!q) return true;
       var m = meta[t.trackId] || {};
-      var hay = [fmtDate(t.startTimeMs), fmtDay(t.startTimeMs), t.dominantMode, modeName(t.dominantMode), m.title, m.notes]
+      var eff = modeOf(t, meta);
+      var hay = [fmtDate(t.startTimeMs), fmtDay(t.startTimeMs), eff, modeName(eff), m.title, m.notes]
         .filter(Boolean).join(" ").toLowerCase();
       return hay.indexOf(q) >= 0;
     });
@@ -213,7 +225,7 @@
 
   return {
     MODE_EMOJI: MODE_EMOJI, MODE_NAME: MODE_NAME, MODE_COLOR: MODE_COLOR, altitudeSeries: altitudeSeries,
-    modeEmoji: modeEmoji, modeName: modeName, pad: pad,
+    modeEmoji: modeEmoji, modeName: modeName, modeOf: modeOf, modeOverridden: modeOverridden, pad: pad,
     fmtDay: fmtDay, fmtTime: fmtTime, fmtDate: fmtDate, fmtDur: fmtDur, fmtClock: fmtClock, fmtKm: fmtKm, fmtInt: fmtInt,
     kmh: kmh, stepSourceLabel: stepSourceLabel, escapeHtml: escapeHtml,
     activityTitle: activityTitle, filterTracks: filterTracks, sortTracks: sortTracks, groupByMonth: groupByMonth,

@@ -66,6 +66,8 @@ table.rec-table { width: 100%; border-collapse: collapse; font-size: 13px; min-w
 .badge-sel { font-size: 12px; color: var(--muted); }
 
 /* 每列的「故事」「3D」連結（新版活動故事頁／3D 路線工作區） */
+.rec-edited { color: var(--accent); cursor: help; }
+.modal select { width: 100%; margin-top: 4px; }
 .rec-actions a.rec-link {
   display: inline-flex; align-items: center; background: var(--surface-2); color: var(--accent); border: 1px solid var(--border);
   border-radius: 8px; padding: 4px 10px; font-size: 12px; text-decoration: none;

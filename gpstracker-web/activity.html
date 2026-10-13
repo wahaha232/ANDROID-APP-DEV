@@ -11,10 +11,11 @@
   <link rel="preload" href="vendor/maplibre-gl.js" as="script" />
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
   <link href="style.css?v=1ceea449" rel="stylesheet" />
-  <link href="gt-ui.css?v=08315d6a" rel="stylesheet" />
+  <link href="gt-ui.css?v=f34955b6" rel="stylesheet" />
   <script src="common.js?v=46cd05d5"></script>
-  <script src="gt-core.js?v=9ed6c8c1"></script>
-  <script src="gt-data.js?v=8bbbfbf0"></script>
+  <script src="gt-core.js?v=a62ecf03"></script>
+  <script src="gt-metro.js?v=3f685dd8"></script>
+  <script src="gt-data.js?v=8a4c1c06"></script>
   <script>
     // 軌跡檔在頁面一解析就開始下載，與地圖腳本並行。
     (function () {
@@ -23,9 +24,9 @@
     })();
   </script>
   <script defer src="vendor/maplibre-gl.js"></script>
-  <script defer src="gt-profile.js?v=96a7e38a"></script>
-  <script defer src="gt-nav.js?v=feea0360"></script>
-  <script defer src="activity.js?v=919f752c"></script>
+  <script defer src="gt-profile.js?v=db85fdec"></script>
+  <script defer src="gt-nav.js?v=dd18cf86"></script>
+  <script defer src="activity.js?v=350a07aa"></script>
 </head>
 <body>
   <header>
@@ -64,6 +65,10 @@
       <div class="gt-story-grid" id="grid" hidden>
         <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
           <section class="gt-panel" aria-labelledby="h-stats"><h3 id="h-stats">活動統計</h3><div class="gt-stat-grid" id="stats"></div></section>
+          <section class="gt-panel" id="pnlGaps" aria-labelledby="h-gaps" hidden>
+            <h3 id="h-gaps">GPS 中斷（估算）</h3>
+            <div id="gapBody"></div>
+          </section>
           <section class="gt-panel" id="pnlAlt" aria-labelledby="h-alt" hidden>
             <h3 id="h-alt">海拔剖面</h3>
             <canvas id="profAlt" class="gt-profile"></canvas>

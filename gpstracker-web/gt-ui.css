@@ -218,6 +218,12 @@
 .gt-story-hero .maplibregl-ctrl-attrib a, .gt-allmap .maplibregl-ctrl-attrib a { color: var(--muted) !important; }
 .gt-story-hero .maplibregl-ctrl-attrib-button, .gt-allmap .maplibregl-ctrl-attrib-button { filter: invert(1); }
 
+/* ───── GPS 中斷（估算路徑）標籤與說明 ───── */
+.gt-gap-label { padding: 3px 10px; border-radius: 999px; background: rgba(9, 14, 25, .85); border: 1px solid var(--border-strong); color: var(--text); font-size: 12px; font-weight: 600; white-space: nowrap; box-shadow: 0 2px 10px rgba(0, 0, 0, .5); pointer-events: none; }
+.gt-gap-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.55; }
+.gt-gap-list li { padding: 10px 12px; background: var(--surface-2); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); }
+.hud-gap { color: var(--amber); font-weight: 600; }
+
 /* ───── 響應式 ───── */
 @media (max-width: 900px) {
   .gt-hero { grid-template-columns: 1fr; }

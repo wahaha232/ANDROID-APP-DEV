@@ -9,6 +9,8 @@
   var reduceMotion = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
   var ORBIT_DEG_PER_SEC = 4;
 
+  // GPS 中斷（捷運）：rawTrack＝原始軌跡（匯出用）；track＝插入估算路徑後、只供顯示的版本。
+  var rawTrack = null, gapInfo = { gaps: [], gapEdge: null, usedMetro: false };
   var track = null, meta = {}, map = null, bounds = null, orbit = { on: false, raf: 0, last: 0, visible: true };
 
   function $(id) { return document.getElementById(id); }
@@ -63,9 +65,17 @@
     map.on("load", function () {
       GT.collapseAttribution(map);
       map.setTerrain({ source: "dem", exaggeration: 1.3 });
-      map.addSource("route", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } } });
+      // 實線在「GPS 中斷」邊上斷開；中斷段另以虛線（捷運路線色）畫出估算路徑。
+      map.addSource("route", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: GT.splitRuns(coords, gapInfo.gapEdge) } } });
       map.addLayer({ id: "route-casing", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#04121f", "line-width": 9, "line-opacity": 0.6 } });
       map.addLayer({ id: "route-line", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#22d3ee", "line-width": 5 } });
+      map.addSource("gaps", { type: "geojson", data: GT.gapFeatures(gapInfo.gaps) });
+      map.addLayer({ id: "gaps-casing", type: "line", source: "gaps", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#04121f", "line-width": 9, "line-opacity": 0.55 } });
+      map.addLayer({ id: "gaps-line", type: "line", source: "gaps", layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 5, "line-dasharray": [1.4, 1.2] } });
+      gapInfo.gaps.forEach(function (g) {
+        var el = document.createElement("div"); el.className = "gt-gap-label"; el.textContent = GT.gapLabel(g);
+        new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(GT.mid(g.kind === "metro" ? g.coords : [g.from, g.to])).addTo(map);
+      });
       map.addSource("photos", { type: "geojson", data: { type: "FeatureCollection", features: (track.photos || []).map(function (p) {
         return { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [p[0], p[1]] } };
       }) } });
@@ -107,8 +117,8 @@
     var title = C.activityTitle(track, meta);
     document.title = title + " · GPS Tracker";
     $("title").textContent = title;
-    $("summary").textContent = C.fmtDate(track.startTimeMs) + "・" + C.modeName(track.dominantMode);
-    $("chips").innerHTML = '<span class="gt-chip">' + C.modeEmoji(track.dominantMode) + " " + esc(C.modeName(track.dominantMode)) + "</span>";
+    $("summary").textContent = C.fmtDate(track.startTimeMs) + "・" + C.modeName(C.modeOf(track, meta));
+    $("chips").innerHTML = '<span class="gt-chip">' + C.modeEmoji(C.modeOf(track, meta)) + " " + esc(C.modeName(C.modeOf(track, meta))) + "</span>";
     $("when").textContent = C.fmtDate(track.startTimeMs) + (track.endTimeMs ? " – " + C.fmtTime(track.endTimeMs) : "");
 
     $("goReplay").href = GT.workspaceUrl(trackId, "replay");
@@ -141,6 +151,10 @@
       }).join("");
     }
 
+    if (gapInfo.gaps.length) {
+      $("pnlGaps").hidden = false;
+      $("gapBody").innerHTML = GT.gapSummaryHtml(gapInfo.gaps, gapInfo.usedMetro, track.distanceMeters);
+    }
     var photos = track.photos || [];
     if (photos.length) {
       $("pnlPhotos").hidden = false;
@@ -149,8 +163,9 @@
     var m = meta[trackId];
     if (m && m.notes) { $("pnlNote").hidden = false; $("noteText").textContent = m.notes; }
 
-    $("aGpx").onclick = function () { GT.saveBlob(trackId + ".gpx", C.gpx(track), "application/gpx+xml"); };
-    $("aJson").onclick = function () { GT.saveBlob(trackId + ".json", JSON.stringify(track), "application/json"); };
+    // 匯出一律用原始軌跡（估算路徑只用於顯示）。
+    $("aGpx").onclick = function () { GT.saveBlob(trackId + ".gpx", C.gpx(rawTrack || track), "application/gpx+xml"); };
+    $("aJson").onclick = function () { GT.saveBlob(trackId + ".json", JSON.stringify(rawTrack || track), "application/json"); };
     $("aShare").onclick = function () { GT.share(GT.url("activity.html", { track: trackId }), title).then(toast); };
     $("grid").hidden = false;
   }
@@ -165,7 +180,12 @@
       return;
     }
     Promise.all([GT.loadTrack(trackId), GT.loadMeta()]).then(function (r) {
-      track = r[0]; meta = r[1];
+      rawTrack = r[0]; meta = r[1];
+      return GT.resolveGaps(rawTrack).then(function (res) {
+        gapInfo = res;
+        track = res.gaps.length ? Object.assign({}, rawTrack, { points: res.points }) : rawTrack;
+      });
+    }).then(function () {
       render();
       if (typeof maplibregl === "undefined") $("hint").textContent = "找不到地圖引擎（vendor/maplibre-gl.js）";
       else initMap();
