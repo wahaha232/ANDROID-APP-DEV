@@ -16,6 +16,7 @@
     { href: "earth.html", label: "🌍 地球" },
     { href: "taiwan.html", label: "🇹🇼 台灣" },
     { href: "progress.html", label: "📈 全挑戰進度" },
+    { href: "recap.html", label: "📅 回顧" },
     { href: "steps-journey.html", label: "👟 步數環遊" }
   ];
   var SECTION = {
@@ -23,7 +24,7 @@
     "history.html": "history", "activity.html": "history",
     "records.html": "manage",
     "explore.html": "explore", "challenges.html": "explore", "solar.html": "explore", "earth.html": "explore",
-    "taiwan.html": "explore", "progress.html": "explore", "steps-journey.html": "explore"
+    "taiwan.html": "explore", "progress.html": "explore", "steps-journey.html": "explore", "recap.html": "explore"
   };
 
   var file = location.pathname.split("/").pop();

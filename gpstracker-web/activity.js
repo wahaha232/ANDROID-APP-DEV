@@ -12,6 +12,7 @@
   // GPS 中斷（捷運）：rawTrack＝原始軌跡（匯出用）；track＝插入估算路徑後、只供顯示的版本。
   var rawTrack = null, gapInfo = { gaps: [], gapEdge: null, usedMetro: false };
   var track = null, meta = {}, map = null, bounds = null, orbit = { on: false, raf: 0, last: 0, visible: true };
+  var colorMode = "", mapReady = false, highlights = [];
 
   function $(id) { return document.getElementById(id); }
   function toast(msg) {
@@ -68,7 +69,7 @@
       // 實線在「GPS 中斷」邊上斷開；中斷段另以虛線（捷運路線色）畫出估算路徑。
       map.addSource("route", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: GT.splitRuns(coords, gapInfo.gapEdge) } } });
       map.addLayer({ id: "route-casing", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#04121f", "line-width": 9, "line-opacity": 0.6 } });
-      map.addLayer({ id: "route-line", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#22d3ee", "line-width": 5 } });
+      map.addLayer({ id: "route-line", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["coalesce", ["get", "color"], "#22d3ee"], "line-width": 5 } });
       map.addSource("gaps", { type: "geojson", data: GT.gapFeatures(gapInfo.gaps) });
       map.addLayer({ id: "gaps-casing", type: "line", source: "gaps", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#04121f", "line-width": 9, "line-opacity": 0.55 } });
       map.addLayer({ id: "gaps-line", type: "line", source: "gaps", layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 5, "line-dasharray": [1.4, 1.2] } });
@@ -87,6 +88,12 @@
         el.setAttribute("role", "img"); el.setAttribute("aria-label", label);
         new maplibregl.Marker({ element: el }).setLngLat(at).addTo(map);
       }
+      map.addSource("hl", { type: "geojson", data: { type: "FeatureCollection", features: highlights.map(function (h) {
+        return { type: "Feature", properties: { key: h.key }, geometry: { type: "Point", coordinates: [h.lon, h.lat] } };
+      }) } });
+      map.addLayer({ id: "hl-dots", type: "circle", source: "hl", paint: { "circle-radius": 7, "circle-color": "#a78bfa", "circle-stroke-color": "#fff", "circle-stroke-width": 2 } });
+      mapReady = true;
+      applyRouteColor(colorMode);
       pin("s", "起", "起點", coords[0]);
       pin("e", "終", "終點", coords[coords.length - 1]);
       startOrbit();
@@ -100,6 +107,63 @@
     if (window.IntersectionObserver) {
       new IntersectionObserver(function (en) { orbit.visible = en[0].isIntersecting; }).observe($("map"));
     }
+  }
+
+  // ---- 路線上色（速度／海拔）----
+  // 只列出資料真的支援的選項；沒有速度或海拔資料就不顯示該按鈕（不拿假資料填）。
+  function setupColorBar() {
+    var pts = track.points || [], avail = { speed: !!C.valueSeries(pts, "speed"), altitude: !!C.valueSeries(pts, "altitude") };
+    var seg = $("colorSeg"), any = false;
+    Array.prototype.forEach.call(seg.querySelectorAll("button"), function (b) {
+      var c = b.dataset.c;
+      if (c) { b.hidden = !avail[c]; if (avail[c]) any = true; }
+      b.onclick = function () { setColor(c); };
+    });
+    $("colorBar").hidden = !any || pts.length < 2;
+  }
+  function setColor(mode) {
+    colorMode = mode;
+    Array.prototype.forEach.call($("colorSeg").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", b.dataset.c === mode ? "true" : "false"); });
+    applyRouteColor(mode);
+  }
+  function applyRouteColor(mode) {
+    var pts = track.points || [], coords = pts.map(function (p) { return [p[0], p[1]]; }), legend = $("colorLegend");
+    var values = mode ? C.valueSeries(pts, mode) : null;
+    if (!mapReady || !map.getSource("route")) return;
+    if (!values) {
+      map.getSource("route").setData({ type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: GT.splitRuns(coords, gapInfo.gapEdge) } });
+      legend.hidden = true;
+      return;
+    }
+    var r = C.colorSegments(coords, values, gapInfo.gapEdge, mode);
+    map.getSource("route").setData({ type: "FeatureCollection", features: r.segments.map(function (s) {
+      return { type: "Feature", properties: { color: s.color }, geometry: { type: "LineString", coordinates: s.coords } };
+    }) });
+    var unit = mode === "speed" ? "km/h" : "m";
+    legend.innerHTML = "<span>" + Math.round(r.lo) + "</span>" +
+      '<i style="background:linear-gradient(90deg,' + r.legend.map(function (l) { return l.color; }).join(",") + ')"></i><span>' + Math.round(r.hi) + " " + unit + "</span>";
+    legend.hidden = false;
+  }
+
+  // ---- 活動亮點 ----
+  function renderHighlights() {
+    if (!highlights.length) return;
+    $("pnlHL").hidden = false;
+    $("hlList").innerHTML = highlights.map(function (h, i) {
+      return '<li><button type="button" class="gt-hl-item" data-i="' + i + '"><span class="ic" aria-hidden="true">' + h.icon + '</span><span class="tx"><b>' + esc(h.label) +
+        "</b><small>" + (h.tSec > 0 ? "活動時間 " + C.fmtClock(h.tSec) : "") + '</small></span><span class="val">' + (h.prefix || "") + esc(String(h.value)) + "<small>" + esc(h.unit) + "</small></span></button></li>";
+    }).join("");
+    Array.prototype.forEach.call($("hlList").querySelectorAll("button"), function (b) {
+      b.onclick = function () { flyToHighlight(highlights[+b.dataset.i]); };
+    });
+  }
+  function flyToHighlight(h) {
+    if (!mapReady) { toast("地圖尚未載入"); return; }
+    stopOrbit();
+    $("hint").textContent = "3D 路線預覽・可拖曳旋轉、傾斜、縮放";
+    if (map.getSource("cursor")) map.getSource("cursor").setData({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [h.lon, h.lat] } });
+    map.easeTo({ center: [h.lon, h.lat], zoom: Math.max(map.getZoom(), 15), pitch: 60, duration: reduceMotion ? 0 : 900 });
+    var hero = $("story"); if (hero && hero.scrollIntoView) hero.scrollIntoView({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
   }
 
   // 滑過剖面圖時在地圖標出對應位置（依活動時間找最近的點）。
@@ -160,6 +224,10 @@
       $("pnlPhotos").hidden = false;
       $("photoNote").textContent = "共 " + photos.length + " 個拍照點，已在上方地圖以黃點標示。網站只保存拍攝位置，照片檔案留在手機。";
     }
+    setupColorBar();
+    highlights = C.highlights((rawTrack || track).points);
+    renderHighlights();
+
     var m = meta[trackId];
     if (m && m.notes) { $("pnlNote").hidden = false; $("noteText").textContent = m.notes; }
 
@@ -167,6 +235,15 @@
     $("aGpx").onclick = function () { GT.saveBlob(trackId + ".gpx", C.gpx(rawTrack || track), "application/gpx+xml"); };
     $("aJson").onclick = function () { GT.saveBlob(trackId + ".json", JSON.stringify(rawTrack || track), "application/json"); };
     $("aShare").onclick = function () { GT.share(GT.url("activity.html", { track: trackId }), title).then(toast); };
+    // 分享圖片：用原始軌跡（不含估算路徑）與目前選的路線顏色；圖片只在本機產生。
+    $("aCard").onclick = function () {
+      var raw = rawTrack || track, mode = C.modeOf(track, meta);
+      var picks = C.trackFields(raw).filter(function (f) { return ["distance", "duration", "avgSpeed", "steps", "ascent"].indexOf(f.key) >= 0; });
+      GTShare.shareCard({
+        points: raw.points, title: title, whenText: C.fmtDate(raw.startTimeMs), modeText: C.modeEmoji(mode) + " " + C.modeName(mode),
+        fields: picks, colorMode: colorMode
+      }, "gps-tracker-" + trackId.slice(0, 8) + ".png").then(function (msg) { if (msg) toast(msg); });
+    };
     $("grid").hidden = false;
   }
 

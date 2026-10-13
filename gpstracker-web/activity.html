@@ -23,9 +23,9 @@
   <link rel="preload" href="vendor/maplibre-gl.js" as="script" />
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
   <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
-  <link href="gt-ui.css?v=abd3e3cc" rel="stylesheet" />
+  <link href="gt-ui.css?v=ac79a042" rel="stylesheet" />
   <script src="common.js?v=46cd05d5"></script>
-  <script src="gt-core.js?v=a62ecf03"></script>
+  <script src="gt-core.js?v=f0d9e20b"></script>
   <script src="gt-metro.js?v=6334f477"></script>
   <script src="gt-data.js?v=8a4c1c06"></script>
   <script>
@@ -37,8 +37,9 @@
   </script>
   <script defer src="vendor/maplibre-gl.js"></script>
   <script defer src="gt-profile.js?v=db85fdec"></script>
-  <script defer src="gt-nav.js?v=81b7d379"></script>
-  <script defer src="activity.js?v=350a07aa"></script>
+  <script defer src="gt-share.js?v=dcd169cb"></script>
+  <script defer src="gt-nav.js?v=0a18e836"></script>
+  <script defer src="activity.js?v=a64d2973"></script>
 </head>
 <body>
   <a class="gt-skip" href="#main">跳到主要內容</a>
@@ -62,6 +63,14 @@
         <div class="gt-story-hero">
           <div id="map" aria-label="3D 路線預覽"></div>
           <div class="gt-story-hint" id="hint">3D 路線預覽・可拖曳旋轉</div>
+          <div class="gt-colorbar" id="colorBar" hidden>
+            <div class="gt-seg" role="group" aria-label="路線顏色" id="colorSeg">
+              <button type="button" data-c="" aria-pressed="true">單色</button>
+              <button type="button" data-c="speed" aria-pressed="false" hidden>速度</button>
+              <button type="button" data-c="altitude" aria-pressed="false" hidden>海拔</button>
+            </div>
+            <div class="gt-legend" id="colorLegend" hidden aria-live="polite"></div>
+          </div>
           <div class="gt-story-cta" id="cta" hidden>
             <a class="btn gt-btn" id="goReplay" href="flythrough.html">▶ 旅程回放</a>
             <a class="btn gt-btn secondary" id="goExplore" href="flythrough.html">自由探索 3D</a>
@@ -79,6 +88,11 @@
       <div class="gt-story-grid" id="grid" hidden>
         <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
           <section class="gt-panel" aria-labelledby="h-stats"><h3 id="h-stats">活動統計</h3><div class="gt-stat-grid" id="stats"></div></section>
+          <section class="gt-panel" id="pnlHL" aria-labelledby="h-hl" hidden>
+            <h3 id="h-hl">活動亮點</h3>
+            <ul class="gt-hl" id="hlList"></ul>
+            <p class="gt-note">依逐點的海拔與速度自動找出；點一下會在上方地圖標出位置。</p>
+          </section>
           <section class="gt-panel" id="pnlGaps" aria-labelledby="h-gaps" hidden>
             <h3 id="h-gaps">GPS 中斷（估算）</h3>
             <div id="gapBody"></div>
@@ -103,6 +117,7 @@
               <button class="btn gt-btn secondary" type="button" id="aGpx">⬇ 下載 GPX</button>
               <button class="btn gt-btn secondary" type="button" id="aJson">⬇ 下載 JSON</button>
               <button class="btn gt-btn secondary" type="button" id="aShare">分享連結</button>
+              <button class="btn gt-btn secondary" type="button" id="aCard">🖼 分享圖片</button>
               <a class="btn gt-btn secondary" id="aEdit" href="records.html">✎ 編輯標題／備註</a>
             </div>
             <p class="gt-note">編輯需要在「紀錄管理」設定 GitHub Token；這裡只顯示、不修改任何資料。</p>

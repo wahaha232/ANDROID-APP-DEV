@@ -129,30 +129,122 @@
     return out;
   }
 
-  // 路線縮圖：把 [lng,lat,...] 轉成 SVG path（等距圓柱投影，經度依緯度縮放，保持比例）。
-  // 這是 2D 縮圖，只用在清單/卡片；不是 3D 功能的替代品。
-  function routePath(points, w, h, padding, maxPts) {
-    var pts = downsample((points || []).filter(function (p) { return p && isFinite(p[0]) && isFinite(p[1]); }), maxPts || 160);
-    if (pts.length < 2) return null;
+  // 路線投影：把 [lng,lat,...] 轉成畫布座標（等距圓柱投影，經度依緯度縮放，保持比例）。
+  // 每個投影點保留原始索引 i（過濾掉無效點、降採樣之前的位置），讓呼叫端能對應回逐點的速度／海拔。
+  function routeProject(points, w, h, padding, maxPts) {
+    var items = [];
+    (points || []).forEach(function (p, i) { if (p && isFinite(p[0]) && isFinite(p[1])) items.push({ p: p, i: i }); });
+    items = downsample(items, maxPts || 160);
+    if (items.length < 2) return null;
     var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, i;
-    for (i = 0; i < pts.length; i++) {
-      if (pts[i][0] < minX) minX = pts[i][0]; if (pts[i][0] > maxX) maxX = pts[i][0];
-      if (pts[i][1] < minY) minY = pts[i][1]; if (pts[i][1] > maxY) maxY = pts[i][1];
+    for (i = 0; i < items.length; i++) {
+      var q = items[i].p;
+      if (q[0] < minX) minX = q[0]; if (q[0] > maxX) maxX = q[0];
+      if (q[1] < minY) minY = q[1]; if (q[1] > maxY) maxY = q[1];
     }
     var k = Math.cos(((minY + maxY) / 2) * Math.PI / 180);
     var spanX = Math.max((maxX - minX) * k, 1e-9), spanY = Math.max(maxY - minY, 1e-9);
     padding = padding == null ? 8 : padding;
     var scale = Math.min((w - 2 * padding) / spanX, (h - 2 * padding) / spanY);
     var offX = (w - spanX * scale) / 2, offY = (h - spanY * scale) / 2;
-    function px(p) { return [offX + (p[0] - minX) * k * scale, h - (offY + (p[1] - minY) * scale)]; }
-    var d = "", first = null, last = null;
-    for (i = 0; i < pts.length; i++) {
-      var q = px(pts[i]);
-      if (!first) first = q;
-      last = q;
-      d += (i === 0 ? "M" : "L") + q[0].toFixed(1) + " " + q[1].toFixed(1);
+    var pts = items.map(function (it) {
+      return { x: offX + (it.p[0] - minX) * k * scale, y: h - (offY + (it.p[1] - minY) * scale), i: it.i };
+    });
+    return { pts: pts, w: w, h: h };
+  }
+
+  // 路線縮圖：把 [lng,lat,...] 轉成 SVG path。這是 2D 縮圖，只用在清單/卡片；不是 3D 功能的替代品。
+  function routePath(points, w, h, padding, maxPts) {
+    var r = routeProject(points, w, h, padding, maxPts);
+    if (!r) return null;
+    var d = "";
+    r.pts.forEach(function (q, i) { d += (i === 0 ? "M" : "L") + q.x.toFixed(1) + " " + q.y.toFixed(1); });
+    var f = r.pts[0], l = r.pts[r.pts.length - 1];
+    return { d: d, start: [f.x, f.y], end: [l.x, l.y], w: w, h: h };
+  }
+
+  // ───── 路線上色（速度／海拔）與活動亮點 ─────
+  var SPEED_TRUST_MAX_KMH = 400; // 超過視為 GPS 異常，不參與上色與亮點（與競賽中心「最高速度」同一門檻）
+  var RAMPS = {
+    speed: ["#38bdf8", "#34d399", "#fbbf24", "#f87171"],
+    altitude: ["#3b82f6", "#22d3ee", "#a3e635", "#fde047", "#fb923c"]
+  };
+  function movingAvg(arr, win) {
+    var half = Math.floor(win / 2), out = new Array(arr.length), i, j, sum, n;
+    for (i = 0; i < arr.length; i++) {
+      sum = 0; n = 0;
+      for (j = Math.max(0, i - half); j <= Math.min(arr.length - 1, i + half); j++) { sum += arr[j]; n++; }
+      out[i] = sum / n;
     }
-    return { d: d, start: first, end: last, w: w, h: h };
+    return out;
+  }
+  // 逐點數值：speed＝km/h（點的第 4 欄是 m/s，異常高速當 0）；altitude＝公尺（沿用 altitudeSeries：0 視為缺值）。
+  // 沒有可用資料回傳 null（呼叫端就不要提供該上色選項，不拿假資料填）。
+  function valueSeries(points, mode) {
+    points = points || [];
+    if (points.length < 2) return null;
+    if (mode === "altitude") return hasAltitude(points) ? movingAvg(altitudeSeries(points), 5) : null;
+    if (mode === "speed") {
+      var v = points.map(function (p) { var k = num(p[3]) * 3.6; return k <= SPEED_TRUST_MAX_KMH ? k : 0; });
+      return v.some(function (x) { return x > 0.5; }) ? movingAvg(v, 5) : null;
+    }
+    return null;
+  }
+  function hexRgb(h) { return [1, 3, 5].map(function (i) { return parseInt(h.slice(i, i + 2), 16); }); }
+  function rampColor(mode, t) {
+    var stops = RAMPS[mode] || RAMPS.speed, x = Math.min(1, Math.max(0, t)) * (stops.length - 1);
+    var i = Math.min(stops.length - 2, Math.floor(x)), f = x - i, a = hexRgb(stops[i]), b = hexRgb(stops[i + 1]);
+    return "#" + [0, 1, 2].map(function (c) { return ("0" + Math.round(a[c] + (b[c] - a[c]) * f).toString(16)).slice(-2); }).join("");
+  }
+  // 色階範圍取第 5～95 百分位，個別尖峰不會把整條路線洗成同一個顏色。
+  function valueRange(values) {
+    var s = values.slice().sort(function (a, b) { return a - b; });
+    var lo = s[Math.floor((s.length - 1) * 0.05)], hi = s[Math.ceil((s.length - 1) * 0.95)];
+    if (!(hi - lo > 1e-6)) { lo = s[0]; hi = s[s.length - 1]; }
+    if (!(hi - lo > 1e-6)) hi = lo + 1;
+    return { lo: lo, hi: hi };
+  }
+  // 把路線切成「同色」的連續線段（最多 buckets 種顏色）。coords 與 values 等長；flags[j] 為真表示邊 j-1→j 是 GPS 中斷的估算段（不上色）。
+  function colorSegments(coords, values, flags, mode, buckets) {
+    buckets = buckets || 16;
+    var r = valueRange(values), segs = [], cur = null, j;
+    for (j = 1; j < coords.length; j++) {
+      if (flags && flags[j]) { cur = null; continue; }
+      var t = Math.min(1, Math.max(0, ((values[j - 1] + values[j]) / 2 - r.lo) / (r.hi - r.lo)));
+      var b = Math.round(t * (buckets - 1));
+      if (cur && cur.bucket === b) cur.coords.push(coords[j]);
+      else { cur = { bucket: b, color: rampColor(mode, b / (buckets - 1)), coords: [coords[j - 1], coords[j]] }; segs.push(cur); }
+    }
+    var legend = [0, 0.25, 0.5, 0.75, 1].map(function (t) { return { value: r.lo + (r.hi - r.lo) * t, color: rampColor(mode, t) }; });
+    return { segments: segs.map(function (x) { return { color: x.color, coords: x.coords }; }), lo: r.lo, hi: r.hi, legend: legend };
+  }
+  // 自動亮點：最高點、最大連續爬升、最快速度。資料不足的項目不列出（不捏造）。idx 是 points 的索引。
+  function highlights(points) {
+    var out = [];
+    points = points || [];
+    if (points.length < 3) return out;
+    function add(key, icon, label, idx, value, unit, extra) {
+      var p = points[idx];
+      out.push(Object.assign({ key: key, icon: icon, label: label, idx: idx, value: value, unit: unit, lon: p[0], lat: p[1], tSec: num(p[4]) }, extra || {}));
+    }
+    var alt = valueSeries(points, "altitude"), spd = valueSeries(points, "speed"), i;
+    if (alt) {
+      var top = 0;
+      for (i = 1; i < alt.length; i++) if (alt[i] > alt[top]) top = i;
+      add("maxAlt", "🏔️", "最高點", top, Math.round(alt[top]), "m");
+      var minIdx = 0, best = 0, bi = 0, bj = 0;
+      for (i = 1; i < alt.length; i++) {
+        if (alt[i] < alt[minIdx]) minIdx = i;
+        if (alt[i] - alt[minIdx] > best) { best = alt[i] - alt[minIdx]; bi = minIdx; bj = i; }
+      }
+      if (best >= 10) add("climb", "⛰️", "最大連續爬升", bj, Math.round(best), "m", { prefix: "+", from: bi });
+    }
+    if (spd) {
+      var fast = 0;
+      for (i = 1; i < spd.length; i++) if (spd[i] > spd[fast]) fast = i;
+      if (spd[fast] >= 3) add("maxSpeed", "⚡", "最快速度", fast, Math.round(spd[fast] * 10) / 10, "km/h");
+    }
+    return out.sort(function (a, b) { return a.idx - b.idx; });
   }
 
   // 只列「實際有資料」的欄位，沒資料的不顯示（不以 0 或假資料填充）。
@@ -229,7 +321,8 @@
     fmtDay: fmtDay, fmtTime: fmtTime, fmtDate: fmtDate, fmtDur: fmtDur, fmtClock: fmtClock, fmtKm: fmtKm, fmtInt: fmtInt,
     kmh: kmh, stepSourceLabel: stepSourceLabel, escapeHtml: escapeHtml,
     activityTitle: activityTitle, filterTracks: filterTracks, sortTracks: sortTracks, groupByMonth: groupByMonth,
-    downsample: downsample, routePath: routePath, trackFields: trackFields, hasAltitude: hasAltitude,
+    downsample: downsample, routeProject: routeProject, routePath: routePath,
+    valueSeries: valueSeries, rampColor: rampColor, valueRange: valueRange, colorSegments: colorSegments, highlights: highlights, RAMPS: RAMPS, trackFields: trackFields, hasAltitude: hasAltitude,
     modeBreakdown: modeBreakdown, gpx: gpx, elapsedAt: elapsedAt
   };
 });

@@ -125,6 +125,30 @@ main:focus { outline: none; }
 .gt-link-card b { font-size: 16px; }
 .gt-link-card span { font-size: 13px; color: var(--muted); }
 
+/* ───── 活動頁：路線顏色、圖例、亮點 ───── */
+.gt-colorbar { position: absolute; left: 16px; top: 16px; z-index: 3; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.gt-colorbar .gt-seg { background: rgba(9, 14, 25, .78); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.gt-legend { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--text); background: rgba(9, 14, 25, .78); border: 1px solid var(--border-strong); }
+.gt-legend i { display: block; width: 110px; height: 8px; border-radius: 4px; }
+.gt-hl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.gt-hl-item { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 12px; text-align: left; font: inherit; color: var(--text); cursor: pointer; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.gt-hl-item:hover { border-color: var(--primary); }
+.gt-hl-item .ic { font-size: 22px; }
+.gt-hl-item .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gt-hl-item .tx small { color: var(--muted); font-size: 12px; }
+.gt-hl-item .val { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.gt-hl-item .val small { font-size: 12px; color: var(--muted); margin-left: 3px; font-weight: 600; }
+
+/* ───── 活動回顧：長條圖、排行 ───── */
+.gt-bars { display: flex; align-items: flex-end; gap: 4px; height: 180px; padding-top: 8px; }
+.gt-bar-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; }
+.gt-bar-v { background: var(--grad-progress); border-radius: 4px 4px 0 0; min-height: 0; }
+.gt-bar-l { text-align: center; font-size: 11px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; }
+.gt-toplist { list-style: decimal inside; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.gt-toplist li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--border); }
+.gt-toplist b { font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .gt-bar-col:nth-child(odd) .gt-bar-l { visibility: hidden; } }
+
 /* ───── 狀態：載入 / 空 / 錯誤 ───── */
 .gt-state { padding: 40px 20px; text-align: center; color: var(--muted); background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius); }
 .gt-state h3 { margin: 0 0 6px; color: var(--text); font-size: 16px; }
@@ -261,6 +285,7 @@ main:focus { outline: none; }
   .gt-tl-go { display: none; }
   .gt-story-shade { padding: 56px 16px 14px; }
   .gt-story-cta { left: 12px; right: 12px; top: 12px; justify-content: flex-start; }
+  .gt-colorbar { left: 12px; top: 64px; }
   .gt-story-hint { display: none; }
 }
 @media (pointer: coarse) {

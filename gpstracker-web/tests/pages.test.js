@@ -10,7 +10,7 @@ const pages = fs.readdirSync(ROOT).filter((f) => f.endsWith(".html"));
 const read = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");
 const APP = "flythrough.html"; // 全螢幕 3D 工作區：不使用一般頁首與 skip link
 
-test("有 12 個頁面可檢查", () => assert.equal(pages.length, 12));
+test("有 13 個頁面可檢查", () => assert.equal(pages.length, 13));
 
 test("每一頁都有回首頁的連結（指向 index.html）", () => {
   for (const p of pages) {
