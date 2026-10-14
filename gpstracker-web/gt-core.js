@@ -247,6 +247,68 @@
     return out.sort(function (a, b) { return a.idx - b.idx; });
   }
 
+  // ───── 時間分析與每公里分段（規則與 App 的 SplitsAnalysis 相同）─────
+  // 相鄰兩點間隔超過 120 秒視為暫停或 GPS 遺失：該段的距離與時間都不計入分段（避免把搭捷運、暫停等整段跳躍算成不可能的速度）；
+  // 所以各分段的距離加總可能略少於整趟距離。移動時間＝間隔 ≤ 30 秒且速度 ≥ 0.6 m/s 的時間總和。
+  var MAX_MOVING_GAP_S = 30, MAX_SPLIT_GAP_S = 120, STOP_SPEED_MPS = 0.6, MIN_PARTIAL_M = 100;
+  function havMeters(a, b) {
+    var R = 6371000, dLat = (b[1] - a[1]) * Math.PI / 180, dLon = (b[0] - a[0]) * Math.PI / 180;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a[1] * Math.PI / 180) * Math.cos(b[1] * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(x)));
+  }
+  function validPt(p) { return p && isFinite(p[0]) && isFinite(p[1]); }
+  function splits(points) {
+    var out = [], cumDist = 0, cumTime = 0, lastB = 0, nextKm = 1, i;
+    function mk(index, dist, sec, partial) {
+      return { index: index, distanceM: dist, seconds: sec, partial: partial, avgKmh: sec > 0 ? (dist / 1000) / (sec / 3600) : 0, paceSec: dist > 0 ? sec / (dist / 1000) : 0 };
+    }
+    points = points || [];
+    for (i = 1; i < points.length; i++) {
+      var a = points[i - 1], b = points[i];
+      if (!validPt(a) || !validPt(b)) continue;
+      var dt = num(b[4]) - num(a[4]);
+      if (!(dt > 0) || dt > MAX_SPLIT_GAP_S) continue;
+      var remD = havMeters(a, b), remT = dt, target = nextKm * 1000;
+      while (remD > 0 && cumDist + remD >= target - 1e-9) {
+        var needD = target - cumDist, usedT = remT * (needD / remD);
+        cumTime += usedT; cumDist = target;
+        out.push(mk(nextKm, 1000, cumTime - lastB, false));
+        lastB = cumTime; remD -= needD; remT -= usedT; nextKm++; target = nextKm * 1000;
+      }
+      cumDist += remD; cumTime += remT;
+    }
+    var rest = cumDist - (nextKm - 1) * 1000;
+    if (rest >= MIN_PARTIAL_M) out.push(mk(nextKm, rest, cumTime - lastB, true));
+    return out;
+  }
+  // 完整公里中最快與最慢；完整公里少於 3 個時不比較（資料太少沒有意義）。
+  function fastestSlowest(list) {
+    var full = (list || []).filter(function (s) { return !s.partial && s.seconds > 0; });
+    if (full.length < 3) return null;
+    var fast = full[0], slow = full[0];
+    full.forEach(function (s) { if (s.seconds < fast.seconds) fast = s; if (s.seconds > slow.seconds) slow = s; });
+    return { fastest: fast, slowest: slow };
+  }
+  function movingSeconds(points) {
+    var sum = 0, i;
+    points = points || [];
+    for (i = 1; i < points.length; i++) {
+      var a = points[i - 1], b = points[i];
+      if (!validPt(a) || !validPt(b)) continue;
+      var dt = num(b[4]) - num(a[4]);
+      if (!(dt > 0) || dt > MAX_MOVING_GAP_S) continue;
+      if (havMeters(a, b) / dt >= STOP_SPEED_MPS) sum += dt;
+    }
+    return sum;
+  }
+  // 經過時間 ＞ 活動時間（扣掉暫停）＞ 移動時間（再扣掉停等）。
+  function timeBreakdown(track, movingSec) {
+    var start = num(track.startTimeMs), end = track.endTimeMs != null ? num(track.endTimeMs) : start;
+    var elapsed = Math.max(0, (end - start) / 1000), active = Math.max(0, num(track.durationMs) / 1000);
+    var moving = Math.min(Math.max(0, movingSec), active);
+    return { elapsedSec: Math.max(elapsed, active), activeSec: active, movingSec: moving, pausedSec: Math.max(0, elapsed - active), stoppedSec: Math.max(0, active - moving) };
+  }
+
   // 只列「實際有資料」的欄位，沒資料的不顯示（不以 0 或假資料填充）。
   function trackFields(t) {
     var f = [];
@@ -322,6 +384,7 @@
     kmh: kmh, stepSourceLabel: stepSourceLabel, escapeHtml: escapeHtml,
     activityTitle: activityTitle, filterTracks: filterTracks, sortTracks: sortTracks, groupByMonth: groupByMonth,
     downsample: downsample, routeProject: routeProject, routePath: routePath,
+    splits: splits, fastestSlowest: fastestSlowest, movingSeconds: movingSeconds, timeBreakdown: timeBreakdown,
     valueSeries: valueSeries, rampColor: rampColor, valueRange: valueRange, colorSegments: colorSegments, highlights: highlights, RAMPS: RAMPS, trackFields: trackFields, hasAltitude: hasAltitude,
     modeBreakdown: modeBreakdown, gpx: gpx, elapsedAt: elapsedAt
   };

@@ -366,4 +366,16 @@
     <string name="privacy_remove">刪除</string>
     <string name="privacy_added">已新增。之後上傳與分享圖片會套用。</string>
     <string name="privacy_no_location">取不到目前位置，請確認已允許定位並開啟定位服務。</string>
+    <!-- 時間分析 / 每公里分段 -->
+    <string name="time_title">時間分析</string>
+    <string name="time_elapsed">經過時間（開始到結束）</string>
+    <string name="time_active">活動時間（扣除暫停）</string>
+    <string name="time_moving">移動時間</string>
+    <string name="time_moving_speed">平均移動速度 %s km/h</string>
+    <string name="time_paused">暫停時間</string>
+    <string name="time_stopped">停等時間（位置沒動但未暫停）</string>
+    <string name="splits_title">每公里分段</string>
+    <string name="splits_km">第 %d 公里</string>
+    <string name="splits_partial">最後 %s 公里</string>
+    <string name="splits_note">⚡ 最快、🐢 最慢（完整公里至少 3 個才比較）。暫停或 GPS 遺失超過 2 分鐘的間隔不計入，所以分段距離加總可能略少於整趟距離。</string>
 </resources>

@@ -145,6 +145,33 @@
     legend.hidden = false;
   }
 
+  // ---- 時間分析與每公里分段（用原始軌跡，不含估算路徑）----
+  function fmtPace(sec) { var t = Math.round(sec); return Math.floor(t / 60) + ":" + ("0" + (t % 60)).slice(-2); }
+  function renderTimeAndSplits() {
+    var raw = rawTrack || track, pts = raw.points || [];
+    var tb = C.timeBreakdown(raw, C.movingSeconds(pts));
+    function dur(sec) { return C.fmtDur(sec * 1000); }
+    if (tb.activeSec > 0) {
+      var li = [["經過時間（開始到結束）", dur(tb.elapsedSec)], ["活動時間（扣除暫停）", dur(tb.activeSec)]];
+      if (tb.movingSec > 0) li.push(["移動時間", dur(tb.movingSec) + "（平均 " + ((raw.distanceMeters / 1000) / (tb.movingSec / 3600)).toFixed(1) + " km/h）"]);
+      if (tb.pausedSec >= 1) li.push(["暫停時間", dur(tb.pausedSec)]);
+      if (tb.movingSec > 0 && tb.stoppedSec >= 1) li.push(["停等時間（位置沒動但未暫停）", dur(tb.stoppedSec)]);
+      $("timeBody").innerHTML = li.map(function (x) { return "<li><span>" + esc(x[0]) + "</span><b>" + esc(x[1]) + "</b></li>"; }).join("");
+      $("pnlTime").hidden = false;
+    }
+    var sp = C.splits(pts);
+    if (!sp.length) return;
+    var ex = C.fastestSlowest(sp), maxKmh = 0;
+    sp.forEach(function (s) { if (s.avgKmh > maxKmh) maxKmh = s.avgKmh; });
+    $("splitsBody").innerHTML = sp.slice(0, 100).map(function (s) {
+      var tag = ex && !s.partial ? (s === ex.fastest ? " ⚡" : s === ex.slowest ? " 🐢" : "") : "";
+      var w = maxKmh > 0 ? Math.max(3, s.avgKmh / maxKmh * 100) : 0;
+      return '<div class="gt-split"><span class="k">' + (s.partial ? "最後 " + (s.distanceM / 1000).toFixed(2) + " km" : "第 " + s.index + " 公里") + tag +
+        '</span><span class="b"><i style="width:' + w.toFixed(1) + '%"></i></span><span class="p">' + fmtPace(s.paceSec) + ' /km</span><span class="v">' + s.avgKmh.toFixed(1) + " km/h</span></div>";
+    }).join("");
+    $("pnlSplits").hidden = false;
+  }
+
   // ---- 活動亮點 ----
   function renderHighlights() {
     if (!highlights.length) return;
@@ -224,6 +251,7 @@
       $("pnlPhotos").hidden = false;
       $("photoNote").textContent = "共 " + photos.length + " 個拍照點，已在上方地圖以黃點標示。網站只保存拍攝位置，照片檔案留在手機。";
     }
+    renderTimeAndSplits();
     setupColorBar();
     highlights = C.highlights((rawTrack || track).points);
     renderHighlights();

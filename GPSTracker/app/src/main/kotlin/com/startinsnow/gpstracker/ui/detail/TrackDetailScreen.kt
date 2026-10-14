@@ -127,6 +127,8 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
     val speedAvailable = remember(analysisPoints) { com.startinsnow.gpstracker.core.analysis.RouteAnalysis.speedSeriesKmh(analysisPoints) != null }
     val altitudeAvailable = remember(analysisPoints) { com.startinsnow.gpstracker.core.analysis.RouteAnalysis.altitudeSeries(analysisPoints) != null }
     val routeHighlights = remember(analysisPoints) { com.startinsnow.gpstracker.core.analysis.RouteAnalysis.highlights(analysisPoints) }
+    val kmSplits = remember(analysisPoints) { com.startinsnow.gpstracker.core.analysis.SplitsAnalysis.splits(analysisPoints) }
+    val movingSec = remember(analysisPoints) { com.startinsnow.gpstracker.core.analysis.SplitsAnalysis.movingSeconds(analysisPoints) }
     var uploadStatusText by remember { mutableStateOf<String?>(null) }
     var stepSyncText by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -384,6 +386,14 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                 stepSyncText?.let { text ->
                     InfoBanner(text = text, color = MaterialTheme.colorScheme.primary)
                 }
+            }
+
+            track?.let { t ->
+                TimeAndSplitsCard(
+                    breakdown = com.startinsnow.gpstracker.core.analysis.SplitsAnalysis.breakdown(t.startTimeMs, t.endTimeMs, t.durationMs, movingSec),
+                    distanceKm = t.distanceMeters / 1000.0,
+                    splits = kmSplits
+                )
             }
 
             PlaybackCard(

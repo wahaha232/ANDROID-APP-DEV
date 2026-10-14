@@ -23,9 +23,9 @@
   <link rel="preload" href="vendor/maplibre-gl.js" as="script" />
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
   <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
-  <link href="gt-ui.css?v=ac79a042" rel="stylesheet" />
+  <link href="gt-ui.css?v=3a3c103e" rel="stylesheet" />
   <script src="common.js?v=46cd05d5"></script>
-  <script src="gt-core.js?v=f8619c6e"></script>
+  <script src="gt-core.js?v=18dc939f"></script>
   <script src="gt-metro.js?v=6334f477"></script>
   <script src="gt-data.js?v=8a4c1c06"></script>
   <script>
@@ -39,7 +39,7 @@
   <script defer src="gt-profile.js?v=db85fdec"></script>
   <script defer src="gt-share.js?v=dcd169cb"></script>
   <script defer src="gt-nav.js?v=0a18e836"></script>
-  <script defer src="activity.js?v=a64d2973"></script>
+  <script defer src="activity.js?v=90524fc1"></script>
 </head>
 <body>
   <a class="gt-skip" href="#main">跳到主要內容</a>
@@ -88,6 +88,15 @@
       <div class="gt-story-grid" id="grid" hidden>
         <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
           <section class="gt-panel" aria-labelledby="h-stats"><h3 id="h-stats">活動統計</h3><div class="gt-stat-grid" id="stats"></div></section>
+          <section class="gt-panel" id="pnlTime" aria-labelledby="h-time" hidden>
+            <h3 id="h-time">時間分析</h3>
+            <ul class="gt-timelist" id="timeBody"></ul>
+          </section>
+          <section class="gt-panel" id="pnlSplits" aria-labelledby="h-splits" hidden>
+            <h3 id="h-splits">每公里分段</h3>
+            <div class="gt-splits" id="splitsBody"></div>
+            <p class="gt-note">⚡ 最快、🐢 最慢（完整公里至少 3 個才比較）。暫停或 GPS 遺失超過 2 分鐘的間隔不計入，所以分段距離加總可能略少於整趟距離。</p>
+          </section>
           <section class="gt-panel" id="pnlHL" aria-labelledby="h-hl" hidden>
             <h3 id="h-hl">活動亮點</h3>
             <ul class="gt-hl" id="hlList"></ul>
