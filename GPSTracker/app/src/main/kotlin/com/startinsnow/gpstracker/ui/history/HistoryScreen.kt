@@ -58,7 +58,8 @@ fun HistoryScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val tracksOrNull by viewModel.tracks.collectAsStateWithLifecycle()
-    val editsRepo = remember { com.startinsnow.gpstracker.data.prefs.TrackEditsRepository(androidx.compose.ui.platform.LocalContext.current) }
+    val appContext = androidx.compose.ui.platform.LocalContext.current
+    val editsRepo = remember { com.startinsnow.gpstracker.data.prefs.TrackEditsRepository(appContext) }
     val edits by editsRepo.edits.collectAsStateWithLifecycle(emptyMap())
     val tracksLoaded = tracksOrNull != null
     val tracks = tracksOrNull ?: emptyList()
