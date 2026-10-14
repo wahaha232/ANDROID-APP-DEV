@@ -28,6 +28,7 @@ import com.startinsnow.gpstracker.location.AdaptiveSamplingPolicy
 import com.startinsnow.gpstracker.location.LocationQualityManager
 import com.startinsnow.gpstracker.location.LocationTracker
 import com.startinsnow.gpstracker.movement.MovementDetector
+import com.startinsnow.gpstracker.movement.ModeConstraint
 import com.startinsnow.gpstracker.movement.MovementSample
 import com.startinsnow.gpstracker.sensor.StepCounterManager
 import com.startinsnow.gpstracker.sync.ResolvedSteps
@@ -68,8 +69,8 @@ class TrackingForegroundService : LifecycleService() {
     /** 這次記錄設定的 GPS 基本請求間隔（省電模式只會在它之上拉長）。 */
     private var baseGpsIntervalMs = LocationTracker.GPS_MIN_TIME_MS
 
-    /** 手動指定的移動方式（記錄前選擇）；null = 自動。 */
-    private var manualMode: MovementMode? = null
+    /** 記錄前選擇的移動方式（可複選）；空集合 = 自動，一種 = 固定，多種 = 偵測結果收斂到這些之中。 */
+    private var allowedModes: Set<MovementMode> = emptySet()
 
     /** 仍在寫入資料庫／上傳的收尾協程數：期間重複的「結束」必須忽略，且 Service 不可提前 stopSelf()。 */
     private var finalizingCount = 0
@@ -146,8 +147,10 @@ class TrackingForegroundService : LifecycleService() {
 
     private fun startRecording(resumeTrackId: String?, manualModeName: String? = null) {
         if (trackId != null || isStarting) return
-        // 使用者在開始前手動指定的移動方式；null 代表「自動」（由移動速度判斷）。
-        manualMode = manualModeName?.let { name -> runCatching { MovementMode.valueOf(name) }.getOrNull() }
+        // 使用者在開始前指定的移動方式（逗號分隔，可複選）；沒有代表「自動」（由移動速度判斷）。
+        allowedModes = manualModeName.orEmpty().split(',')
+            .mapNotNull { name -> runCatching { MovementMode.valueOf(name.trim()) }.getOrNull() }
+            .toSet()
         isStarting = true
         TrackingStateHolder.update { it.copy(isStarting = true) }
 
@@ -356,9 +359,9 @@ class TrackingForegroundService : LifecycleService() {
         // 先處理自動暫停/恢復：若因移動而自動恢復，isPaused 會在這裡被清為 false，
         // 之後才會正確建立新的交通模式區段並記錄這個點。
         handleAutoPause(movementResult.mode)
-        // 手動指定移動方式時，記錄用的模式（區段、點位、畫面）以手動為準；
+        // 指定移動方式時，記錄用的模式（區段、點位、畫面）收斂到使用者選的範圍內（見 ModeConstraint）；
         // 靜止／自動暫停仍用偵測器的結果，避免手動模式下原地不動也一直累積。
-        val recordedMode = manualMode ?: movementResult.mode
+        val recordedMode = ModeConstraint.resolve(allowedModes, movementResult.mode)
 
         // 靜止一陣子後進入省電模式：拉長 GPS 請求間隔、不再寫入雜訊範圍內的低可信度點（見 GpsPowerPolicy）。
         val stationaryMs = stationarySinceElapsedMs?.let { SystemClock.elapsedRealtime() - it } ?: 0L
@@ -760,10 +763,10 @@ class TrackingForegroundService : LifecycleService() {
         /** 高精度 GPS 模式下的 GNSS 更新間隔（比預設的省電模式更頻繁、更耗電）。 */
         const val HIGH_ACCURACY_GPS_INTERVAL_MS = 1_000L
 
-        /** [manualMode] 為 null 代表「自動」（依移動速度判斷移動方式）。 */
-        fun start(context: Context, manualMode: MovementMode? = null) =
+        /** [modes] 為空代表「自動」（依移動速度判斷移動方式）；可複選，例如走路 + 大眾運輸。 */
+        fun start(context: Context, modes: Set<MovementMode> = emptySet()) =
             context.startServiceCompat(ACTION_START, foreground = true) {
-                manualMode?.let { putExtra(EXTRA_MANUAL_MODE, it.name) }
+                if (modes.isNotEmpty()) putExtra(EXTRA_MANUAL_MODE, modes.joinToString(",") { it.name })
             }
         fun startResume(context: Context, trackId: String) =
             context.startServiceCompat(ACTION_START, foreground = true) { putExtra(EXTRA_RESUME_TRACK_ID, trackId) }

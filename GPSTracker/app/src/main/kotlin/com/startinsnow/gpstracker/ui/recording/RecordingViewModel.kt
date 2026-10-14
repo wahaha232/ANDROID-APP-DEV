@@ -52,11 +52,11 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** [manualMode] 為 null 代表「自動」（依移動速度判斷）。 */
-    fun startRecording(manualMode: MovementMode? = null) {
+    /** [modes] 為空代表「自動」（依移動速度判斷）；可複選，例如走路 + 大眾運輸。 */
+    fun startRecording(modes: Set<MovementMode> = emptySet()) {
         startedNewTrackFromThisScreen = true
         waitingToAttach = _pendingPhotos.value.isNotEmpty()
-        TrackingForegroundService.start(app, manualMode)
+        TrackingForegroundService.start(app, modes)
     }
 
     private suspend fun attachPendingPhotos(trackId: String) {

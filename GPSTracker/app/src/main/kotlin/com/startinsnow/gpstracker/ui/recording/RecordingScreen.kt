@@ -113,8 +113,8 @@ fun RecordingScreen(
     var cameraReady by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     var photoPromptStage by rememberSaveable { mutableStateOf(PhotoPromptStage.NONE) }
-    // 準備階段：手動指定的移動方式（null = 自動，由移動速度判斷）；按下「開始記錄」才真正開始。
-    var selectedModeName by rememberSaveable { mutableStateOf<String?>(null) }
+    // 準備階段：指定的移動方式，可複選（空 = 自動，由移動速度判斷）；按下「開始記錄」才真正開始。
+    var selectedModeNames by rememberSaveable { mutableStateOf<Set<String>>(emptySet()) }
     var startPressed by rememberSaveable { mutableStateOf(false) }
     // 沒有定位權限時按「開始記錄」：先要權限，授權完成後自動接著開始（不必再按一次）。
     var startAfterPermission by remember { mutableStateOf(false) }
@@ -219,7 +219,7 @@ fun RecordingScreen(
         startAfterPermission = false
         startPressed = true
         hasRequestedStart = true
-        viewModel.startRecording(selectedModeName?.let { runCatching { MovementMode.valueOf(it) }.getOrNull() })
+        viewModel.startRecording(selectedModeNames.mapNotNull { runCatching { MovementMode.valueOf(it) }.getOrNull() }.toSet())
     }
 
     LaunchedEffect(hasFineLocation, hasCoarseLocation, startAfterPermission) {
@@ -372,7 +372,11 @@ fun RecordingScreen(
                     text = stringResource(R.string.recording_prepare_hint),
                     color = MaterialTheme.colorScheme.primary
                 )
-                ModeSelectorCard(selectedName = selectedModeName, onSelect = { selectedModeName = it })
+                ModeSelectorCard(
+                    selectedNames = selectedModeNames,
+                    onToggle = { name -> selectedModeNames = if (name in selectedModeNames) selectedModeNames - name else selectedModeNames + name },
+                    onSelectAuto = { selectedModeNames = emptySet() }
+                )
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     StatusChip(
@@ -634,7 +638,7 @@ private fun modeLabelRes(mode: MovementMode): Int = when (mode) {
 }
 
 @Composable
-private fun ModeSelectorCard(selectedName: String?, onSelect: (String?) -> Unit) {
+private fun ModeSelectorCard(selectedNames: Set<String>, onToggle: (String) -> Unit, onSelectAuto: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.recording_mode_title), style = MaterialTheme.typography.titleMedium)
@@ -648,14 +652,14 @@ private fun ModeSelectorCard(selectedName: String?, onSelect: (String?) -> Unit)
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(
-                    selected = selectedName == null,
-                    onClick = { onSelect(null) },
+                    selected = selectedNames.isEmpty(),
+                    onClick = onSelectAuto,
                     label = { Text(stringResource(R.string.recording_mode_auto)) }
                 )
                 MANUAL_MODES.forEach { mode ->
                     FilterChip(
-                        selected = selectedName == mode.name,
-                        onClick = { onSelect(mode.name) },
+                        selected = mode.name in selectedNames,
+                        onClick = { onToggle(mode.name) },
                         label = { Text(mode.emoji + " " + stringResource(modeLabelRes(mode))) }
                     )
                 }
