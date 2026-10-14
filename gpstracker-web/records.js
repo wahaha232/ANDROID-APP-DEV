@@ -270,6 +270,16 @@
 
   // ---- 刪除 ----
   async function deleteOne(id, manifest) {
+    // 照片縮圖（若有）：track JSON 的 photos 每筆第 4 欄是相對路徑；縮圖是公開的，刪除紀錄時要一併移除。
+    try {
+      var tf = await ghGet(readBase() + id + ".json");
+      var photos = (tf && JSON.parse(tf.text).photos) || [];
+      for (var pi = 0; pi < photos.length; pi++) {
+        if (typeof photos[pi][3] === "string" && /^photos\/[A-Za-z0-9._\/-]+$/.test(photos[pi][3])) {
+          try { await deleteFile(readBase() + photos[pi][3], "GPS Tracker: delete photo of " + id); } catch (e) { /* 單張失敗不阻擋刪除紀錄 */ }
+        }
+      }
+    } catch (e) { /* 讀不到就略過 */ }
     await deleteFile(readBase() + id + ".json", "GPS Tracker: delete track " + id);
     var i = manifest.tracks.findIndex(function (t) { return t.trackId === id; });
     if (i >= 0) manifest.tracks.splice(i, 1);
@@ -295,6 +305,53 @@
       await load();
     } catch (e) { setNote("刪除失敗：" + e.message, "err"); }
   }
+
+  // ---- 匯入 GPX ----
+  // 把其他 App 匯出的 GPX 轉成本站格式（GTGpx），寫入 repo 並更新 manifest。需要 Token；內容會公開在 GitHub 倉庫。
+  async function importGpx(file) {
+    if (!canWrite()) { setNote("匯入需要寫入權限：請先在上方「GitHub 寫入設定」填入 Token。", "warn"); return; }
+    var text;
+    try { text = await file.text(); } catch (e) { setNote("無法讀取檔案：" + e.message, "err"); return; }
+    var parsed = GTGpx.parse(text), probe = GTGpx.build(parsed, {});
+    if (probe.error) { setNote("匯入失敗：" + GTGpx.ERRORS[probe.error], "err"); return; }
+    var sum = probe.summary;
+    var back = document.createElement("div");
+    back.className = "modal-back"; back.id = "importModal";
+    back.innerHTML = '<div class="modal"><h3>匯入 GPX</h3>' +
+      '<div class="rec-note">' + escapeHtml(file.name) + (sum.name ? "（" + escapeHtml(sum.name) + "）" : "") + "<br>" +
+      escapeHtml(fmtDate(sum.startTimeMs)) + "・" + fmtKm(sum.distanceMeters / 1000) + " km・" + escapeHtml(fmtDur(sum.durationMs)) + "・" + sum.points + " 個點" +
+      (sum.skippedNoTime ? "<br>⚠️ 有 " + sum.skippedNoTime + " 個點沒有時間資訊，已略過" : "") + "</div>" +
+      '<label>移動方式<select id="importMode">' + EDITABLE_MODES.map(function (k) { return '<option value="' + k + '"' + (k === "UNKNOWN" ? " selected" : "") + ">" + modeEmoji(k) + " " + modeName(k) + "</option>"; }).join("") + "</select></label>" +
+      '<div class="rec-note warn" style="margin-top:10px">⚠️ 匯入的軌跡會寫入公開的 GitHub 倉庫，任何人都看得到路線（包含起點與終點）。步數不會匯入。</div>' +
+      '<div class="btn-row"><button class="btn secondary" id="importCancel">取消</button><button class="btn" id="importGo">匯入</button></div></div>';
+    document.body.appendChild(back);
+    $("importCancel").onclick = function () { document.body.removeChild(back); };
+    $("importGo").onclick = async function () {
+      var mode = $("importMode").value;
+      document.body.removeChild(back);
+      setNote("匯入中…", "");
+      try {
+        var built = GTGpx.build(parsed, { mode: mode });
+        var f = await ghGet(readBase() + "manifest.json");
+        var manifest = f ? JSON.parse(f.text) : { tracks: [] };
+        if (!manifest.tracks) manifest.tracks = [];
+        if (GTGpx.isDuplicate(manifest.tracks, built.entry)) { setNote("已經有相同時間與距離的紀錄，沒有重複匯入。", "warn"); return; }
+        await putFile(readBase() + built.track.trackId + ".json", JSON.stringify(built.track), "GPS Tracker: import GPX " + built.track.trackId);
+        manifest.tracks.push(built.entry);
+        manifest.updatedAt = Date.now();
+        await putFile(readBase() + "manifest.json", JSON.stringify(manifest), "GPS Tracker: update manifest after GPX import");
+        if (sum.name) {
+          if (!meta.tracks[built.track.trackId]) meta.tracks[built.track.trackId] = {};
+          meta.tracks[built.track.trackId].title = sum.name;
+          await putFile(readBase() + "meta.json", JSON.stringify({ tracks: meta.tracks }, null, 2), "GPS Tracker: title for imported " + built.track.trackId);
+        }
+        setNote("已匯入 1 筆紀錄（GitHub Pages 約 1 分鐘後生效）。", "ok");
+        await load();
+      } catch (e) { setNote("匯入失敗：" + e.message, "err"); }
+    };
+  }
+  $("importGpx").addEventListener("click", function () { $("gpxFile").value = ""; $("gpxFile").click(); });
+  $("gpxFile").addEventListener("change", function () { var f = this.files && this.files[0]; if (f) importGpx(f); });
 
   // ---- 事件 ----
   function selectedIds() { return Object.keys(selected).filter(function (k) { return selected[k]; }); }
