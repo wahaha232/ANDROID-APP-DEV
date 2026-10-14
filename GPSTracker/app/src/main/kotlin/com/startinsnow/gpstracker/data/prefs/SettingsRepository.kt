@@ -37,7 +37,9 @@ data class AppSettings(
     val webBranch: String = "main",
     val webDataPath: String = "gpstracker-web/data",
     val githubToken: String = "",
-    val webWifiOnly: Boolean = true
+    val webWifiOnly: Boolean = true,
+    /** 上傳照片縮圖到（公開的）網頁儀表板。預設關閉：照片會公開在 GitHub 倉庫。 */
+    val webUploadPhotos: Boolean = false
 ) {
     // 刻意覆寫：data class 預設的 toString() 會把 GitHub Token 印出來（log、除錯輸出、例外訊息都可能帶到）。
     override fun toString(): String =
@@ -68,6 +70,7 @@ class SettingsRepository(private val context: Context) {
         val WEB_DATA_PATH = stringPreferencesKey("web_data_path")
         val GITHUB_TOKEN = stringPreferencesKey("github_token")
         val WEB_WIFI_ONLY = booleanPreferencesKey("web_wifi_only")
+        val WEB_UPLOAD_PHOTOS = booleanPreferencesKey("web_upload_photos")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -87,7 +90,8 @@ class SettingsRepository(private val context: Context) {
             webBranch = prefs[Keys.WEB_BRANCH] ?: "main",
             webDataPath = prefs[Keys.WEB_DATA_PATH] ?: "gpstracker-web/data",
             githubToken = SecretCipher.decrypt(prefs[Keys.GITHUB_TOKEN] ?: ""),
-            webWifiOnly = prefs[Keys.WEB_WIFI_ONLY] ?: true
+            webWifiOnly = prefs[Keys.WEB_WIFI_ONLY] ?: true,
+            webUploadPhotos = prefs[Keys.WEB_UPLOAD_PHOTOS] ?: false
         )
     }.flowOn(Dispatchers.IO) // 解密要呼叫 Keystore，不放在主執行緒做
 
@@ -119,4 +123,5 @@ class SettingsRepository(private val context: Context) {
         }
     }
     suspend fun setWebWifiOnly(enabled: Boolean) = context.dataStore.edit { it[Keys.WEB_WIFI_ONLY] = enabled }
+    suspend fun setWebUploadPhotos(enabled: Boolean) = context.dataStore.edit { it[Keys.WEB_UPLOAD_PHOTOS] = enabled }
 }

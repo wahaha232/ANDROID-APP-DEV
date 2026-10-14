@@ -468,7 +468,8 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                         }
                         uploadStatusText = context.getString(R.string.detail_028)
                         val payload = withContext(Dispatchers.IO) {
-                            WebDashboardUploader.buildPayload(data, app.settingsRepository.settings.first().privacyZones)
+                            val st = app.settingsRepository.settings.first()
+                            WebDashboardUploader.buildPayload(data, st.privacyZones, st.webUploadPhotos)
                         }
                         val webResult = WebDashboardUploader().uploadTrack(
                             token = currentSettings.githubToken,

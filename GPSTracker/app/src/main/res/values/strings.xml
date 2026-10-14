@@ -378,4 +378,7 @@
     <string name="splits_km">第 %d 公里</string>
     <string name="splits_partial">最後 %s 公里</string>
     <string name="splits_note">⚡ 最快、🐢 最慢（完整公里至少 3 個才比較）。暫停或 GPS 遺失超過 2 分鐘的間隔不計入，所以分段距離加總可能略少於整趟距離。</string>
+    <!-- 照片縮圖上傳 -->
+    <string name="web_photos_title">上傳照片縮圖到網頁（公開）</string>
+    <string name="web_photos_hint">預設關閉。開啟後，之後上傳的紀錄會附上拍照點的縮圖（長邊 960 px、已移除位置等 EXIF 資訊），網站回放經過拍照點時會顯示。網頁是公開的，任何人都看得到這些照片；隱私區域內的照片不會上傳。已上傳的舊紀錄不會補傳。</string>
 </resources>

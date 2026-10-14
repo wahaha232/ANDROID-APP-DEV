@@ -25,7 +25,10 @@ class WebDashboardUploader(
     private val client: OkHttpClient = SharedClient.instance
 ) {
 
-    data class Payload(val trackJson: String, val manifestEntry: JSONObject)
+    /** 要上傳的照片縮圖：path 相對於資料夾（photos/<trackId>/<photoId>.jpg）。 */
+    class PhotoFile(val path: String, val bytes: ByteArray)
+
+    data class Payload(val trackJson: String, val manifestEntry: JSONObject, val photoFiles: List<PhotoFile> = emptyList())
 
     suspend fun uploadTrack(
         token: String,
@@ -37,6 +40,12 @@ class WebDashboardUploader(
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val dir = dataPath.trim('/')
+            // 照片縮圖先上傳（軌跡檔參照它們）；縮圖不會改變，已存在就略過。
+            payload.photoFiles.forEach { pf ->
+                if (getContent(token, repo, branch, "$dir/${pf.path}") == null) {
+                    putBytes(token, repo, branch, "$dir/${pf.path}", pf.bytes, "GPS Tracker: add photo thumbnail for $trackId")
+                }
+            }
             putContent(token, repo, branch, "$dir/$trackId.json", payload.trackJson, "GPS Tracker: add track $trackId")
 
             val manifestPath = "$dir/manifest.json"
@@ -124,13 +133,16 @@ class WebDashboardUploader(
         }
     }
 
-    private fun putContent(token: String, repo: String, branch: String, path: String, content: String, message: String, sha: String? = null) {
+    private fun putContent(token: String, repo: String, branch: String, path: String, content: String, message: String, sha: String? = null) =
+        putBytes(token, repo, branch, path, content.toByteArray(Charsets.UTF_8), message, sha)
+
+    private fun putBytes(token: String, repo: String, branch: String, path: String, bytes: ByteArray, message: String, sha: String? = null) {
         // 未提供 sha 時先查既有檔案：GitHub Contents API 對「路徑已存在但未帶 sha」的更新會回 422，
         // 造成同一筆紀錄重複上傳或失敗重試時無法寫入。補上 sha 讓上傳具冪等性。
         val effectiveSha = sha ?: getContent(token, repo, branch, path)?.sha
         val body = JSONObject().apply {
             put("message", message)
-            put("content", Base64.encodeToString(content.toByteArray(Charsets.UTF_8), Base64.NO_WRAP))
+            put("content", Base64.encodeToString(bytes, Base64.NO_WRAP))
             put("branch", branch)
             if (effectiveSha != null) put("sha", effectiveSha)
         }.toString()
@@ -172,7 +184,8 @@ class WebDashboardUploader(
         /** 把一筆紀錄轉成精簡 JSON（陣列格式以縮小體積）。 */
         fun buildPayload(
             data: ExportTrackData,
-            privacyZones: List<com.startinsnow.gpstracker.core.privacy.PrivacyZone> = emptyList()
+            privacyZones: List<com.startinsnow.gpstracker.core.privacy.PrivacyZone> = emptyList(),
+            uploadPhotos: Boolean = false
         ): Payload {
             val track = data.track
             val startMs = track.startTimeMs
@@ -196,16 +209,24 @@ class WebDashboardUploader(
             }
 
             val photos = JSONArray()
+            val photoFiles = mutableListOf<PhotoFile>()
             data.photos.forEach { ph ->
                 if (ph.latitude != null && ph.longitude != null &&
                     !com.startinsnow.gpstracker.core.privacy.PrivacyZones.isInside(ph.latitude, ph.longitude, privacyZones)
                 ) {
-                    photos.put(
-                        JSONArray()
-                            .put(round(ph.longitude, 6))
-                            .put(round(ph.latitude, 6))
-                            .put(((ph.timestampMs - startMs) / 1000.0).toInt())
-                    )
+                    val entry = JSONArray()
+                        .put(round(ph.longitude, 6))
+                        .put(round(ph.latitude, 6))
+                        .put(((ph.timestampMs - startMs) / 1000.0).toInt())
+                    // 使用者開啟「上傳照片縮圖」時，附上縮圖路徑（第 4 欄）；縮圖已去除 EXIF，且不在隱私區域內（上面已篩掉）。
+                    if (uploadPhotos && photoFiles.size < com.startinsnow.gpstracker.export.PhotoThumbnails.MAX_PHOTOS_PER_TRACK) {
+                        com.startinsnow.gpstracker.export.PhotoThumbnails.makeJpeg(ph.filePath)?.let { jpeg ->
+                            val rel = com.startinsnow.gpstracker.export.PhotoThumbnails.relativePath(track.trackId, ph.photoId)
+                            photoFiles.add(PhotoFile(rel, jpeg))
+                            entry.put(rel)
+                        }
+                    }
+                    photos.put(entry)
                 }
             }
 
@@ -256,7 +277,7 @@ class WebDashboardUploader(
                 put("photoCount", track.photoCount)
                 put("file", "${track.trackId}.json")
             }
-            return Payload(json.toString(), entry)
+            return Payload(json.toString(), entry, photoFiles)
         }
 
         private fun <T> downsample(list: List<T>, max: Int): List<T> {

@@ -489,6 +489,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     checked = settings.webUploadEnabled
                 ) { viewModel.setWebUpload(it) }
                 SectionDivider()
+                SwitchRow(
+                    title = context.getString(R.string.web_photos_title),
+                    subtitle = context.getString(R.string.web_photos_hint),
+                    checked = settings.webUploadPhotos
+                ) { viewModel.setWebUploadPhotos(it) }
+                SectionDivider()
                 SettingsTextField(context.getString(R.string.settings_051), settings.webRepo) { viewModel.setWebRepo(it) }
                 SettingsTextField(context.getString(R.string.settings_052), settings.webBranch) { viewModel.setWebBranch(it) }
                 SettingsTextField(context.getString(R.string.settings_053), settings.webDataPath) { viewModel.setWebDataPath(it) }

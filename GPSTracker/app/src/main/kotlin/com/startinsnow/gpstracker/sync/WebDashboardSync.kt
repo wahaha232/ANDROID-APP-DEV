@@ -65,7 +65,7 @@ object WebDashboardSync {
             branch = settings.webBranch,
             dataPath = settings.webDataPath,
             trackId = trackId,
-            payload = WebDashboardUploader.buildPayload(data, settings.privacyZones)
+            payload = WebDashboardUploader.buildPayload(data, settings.privacyZones, settings.webUploadPhotos)
         ).getOrThrow()
         app.trackRepository.setWebUploadedAt(trackId, System.currentTimeMillis())
         Outcome.UPLOADED
