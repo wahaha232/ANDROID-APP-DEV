@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const G = require("../gt-core.js");
 
-// 合成路線：點格式 [lon, lat, alt, speed(m/s), elapsedSec]
+// 合成路線：點格式 [lon, lat, alt, speed(km/h), elapsedSec]（與 App 上傳檔一致：第 4 欄就是 km/h）
 function line(n, f) {
   const pts = [];
   for (let i = 0; i < n; i++) pts.push([121.5 + i * 0.0005, 25.0 + i * 0.0002, ...f(i), i * 5]);
@@ -14,8 +14,8 @@ function line(n, f) {
 }
 const flatSlow = line(60, () => [0, 1.2]); // 沒有海拔(0 視為缺值)、慢速
 
-test("valueSeries：速度以 km/h 回傳；異常高速不參與；沒資料回傳 null（不捏造）", () => {
-  const pts = line(40, (i) => [10 + i, i === 20 ? 500 : 5]); // 5 m/s = 18 km/h；第 20 點 500 m/s 是 GPS 異常
+test("valueSeries：速度直接用檔案的 km/h（不再乘 3.6）；異常高速不參與；沒資料回傳 null（不捏造）", () => {
+  const pts = line(40, (i) => [10 + i, i === 20 ? 1800 : 18]); // 18 km/h；第 20 點 1800 km/h 是 GPS 異常
   const v = G.valueSeries(pts, "speed");
   assert.equal(v.length, 40);
   assert.ok(Math.abs(v[5] - 18) < 1e-9);

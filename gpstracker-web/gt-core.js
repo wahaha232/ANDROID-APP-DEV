@@ -178,14 +178,14 @@
     }
     return out;
   }
-  // 逐點數值：speed＝km/h（點的第 4 欄是 m/s，異常高速當 0）；altitude＝公尺（沿用 altitudeSeries：0 視為缺值）。
+  // 逐點數值：speed＝km/h（上傳檔每個點的第 4 欄本來就是 km/h，不再換算；異常高速當 0）；altitude＝公尺（沿用 altitudeSeries：0 視為缺值）。
   // 沒有可用資料回傳 null（呼叫端就不要提供該上色選項，不拿假資料填）。
   function valueSeries(points, mode) {
     points = points || [];
     if (points.length < 2) return null;
     if (mode === "altitude") return hasAltitude(points) ? movingAvg(altitudeSeries(points), 5) : null;
     if (mode === "speed") {
-      var v = points.map(function (p) { var k = num(p[3]) * 3.6; return k <= SPEED_TRUST_MAX_KMH ? k : 0; });
+      var v = points.map(function (p) { var k = num(p[3]); return k <= SPEED_TRUST_MAX_KMH ? k : 0; });
       return v.some(function (x) { return x > 0.5; }) ? movingAvg(v, 5) : null;
     }
     return null;
