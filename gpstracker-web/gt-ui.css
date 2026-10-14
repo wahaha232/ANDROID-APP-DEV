@@ -151,6 +151,12 @@ main:focus { outline: none; }
 .gt-split .v { text-align: right; color: var(--muted); }
 @media (max-width: 560px) { .gt-split { grid-template-columns: 84px 1fr 62px 68px; font-size: 12px; } }
 
+/* ───── 活動頁：照片縮圖相簿 ───── */
+.gt-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.gt-photos:empty { display: none; }
+.gt-photo { padding: 0; border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; cursor: pointer; background: var(--surface-2); aspect-ratio: 1; min-height: 44px; }
+.gt-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
 /* ───── 活動回顧：長條圖、排行 ───── */
 .gt-bars { display: flex; align-items: flex-end; gap: 4px; height: 180px; padding-top: 8px; }
 .gt-bar-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; }

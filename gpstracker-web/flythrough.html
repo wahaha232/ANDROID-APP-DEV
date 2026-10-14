@@ -23,11 +23,11 @@
   <link rel="preload" href="vendor/maplibre-gl.js" as="script" />
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
   <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
-  <link href="gt-ui.css?v=3a3c103e" rel="stylesheet" />
-  <link href="workspace.css?v=046330ac" rel="stylesheet" />
+  <link href="gt-ui.css?v=fd719c15" rel="stylesheet" />
+  <link href="workspace.css?v=02e01132" rel="stylesheet" />
   <!-- 小型同源腳本不 defer：軌跡 JSON 在頁面一解析就開始下載，與 1 MB 的 MapLibre 並行（沿用原本的載入策略）。 -->
   <script src="common.js?v=46cd05d5"></script>
-  <script src="gt-core.js?v=18dc939f"></script>
+  <script src="gt-core.js?v=b8c7e0a4"></script>
   <script src="gt-metro.js?v=6334f477"></script>
   <script src="gt-data.js?v=8a4c1c06"></script>
   <script>
@@ -38,7 +38,7 @@
   </script>
   <script defer src="vendor/maplibre-gl.js"></script>
   <script defer src="gt-profile.js?v=db85fdec"></script>
-  <script defer src="workspace.js?v=d66f51a9"></script>
+  <script defer src="workspace.js?v=f403a498"></script>
 </head>
 <body class="ws" data-mode="replay">
 <div class="ws-app" id="app">
@@ -68,6 +68,8 @@
       <div class="row hud-gap" id="hud-gap" hidden>GPS 中斷・估算路徑</div>
     </div>
 
+    <div class="ws-photo" id="photoPop" hidden aria-live="polite"><img id="photoImg" alt="" /><div id="photoCap"></div></div>
+
     <div class="ws-hint" id="exploreHint">拖曳旋轉・滾輪／雙指縮放・按住右鍵或雙指上下拖曳傾斜</div>
 
     <div class="ws-controls" id="controls" hidden>
@@ -78,6 +80,7 @@
       <div class="ws-row">
         <button type="button" class="ws-play" id="play">▶ 播放</button>
         <button type="button" class="ws-chipbtn" id="restart">↺ 重播</button>
+        <button type="button" class="ws-chipbtn" id="recBtn" aria-pressed="false" title="把回放的地圖畫面錄成影片">🎬 錄影</button>
         <div class="ws-chips" id="spdchips" role="group" aria-label="播放速度"></div>
         <div class="ws-cams" role="group" aria-label="鏡頭">
           <button type="button" class="ws-chipbtn" id="camFollow" aria-pressed="true">跟隨</button>

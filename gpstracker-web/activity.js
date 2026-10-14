@@ -78,7 +78,7 @@
         new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(GT.mid(g.kind === "metro" ? g.coords : [g.from, g.to])).addTo(map);
       });
       map.addSource("photos", { type: "geojson", data: { type: "FeatureCollection", features: (track.photos || []).map(function (p) {
-        return { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [p[0], p[1]] } };
+        return { type: "Feature", properties: { url: (C.isPhotoPath(p[3])) ? GT.cfg.dataBase + p[3] : "" }, geometry: { type: "Point", coordinates: [p[0], p[1]] } };
       }) } });
       map.addLayer({ id: "photos-dot", type: "circle", source: "photos", paint: { "circle-radius": 6, "circle-color": "#FFB300", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
       map.addSource("cursor", { type: "geojson", data: GPST.emptyFC() });
@@ -88,6 +88,14 @@
         el.setAttribute("role", "img"); el.setAttribute("aria-label", label);
         new maplibregl.Marker({ element: el }).setLngLat(at).addTo(map);
       }
+      map.on("click", "photos-dot", function (e) {
+        var f = e.features && e.features[0];
+        if (!f || !f.properties.url) return;
+        new maplibregl.Popup({ maxWidth: "260px" }).setLngLat(f.geometry.coordinates)
+          .setHTML('<a href="' + esc(f.properties.url) + '" target="_blank" rel="noopener"><img src="' + esc(f.properties.url) + '" alt="拍照點" style="width:240px;border-radius:8px;display:block" /></a>').addTo(map);
+      });
+      map.on("mouseenter", "photos-dot", function () { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "photos-dot", function () { map.getCanvas().style.cursor = ""; });
       map.addSource("hl", { type: "geojson", data: { type: "FeatureCollection", features: highlights.map(function (h) {
         return { type: "Feature", properties: { key: h.key }, geometry: { type: "Point", coordinates: [h.lon, h.lat] } };
       }) } });
@@ -143,6 +151,12 @@
     legend.innerHTML = "<span>" + Math.round(r.lo) + "</span>" +
       '<i style="background:linear-gradient(90deg,' + r.legend.map(function (l) { return l.color; }).join(",") + ')"></i><span>' + Math.round(r.hi) + " " + unit + "</span>";
     legend.hidden = false;
+  }
+
+  // 縮圖：track.photos 每筆 [lon, lat, sec, 路徑]，第 4 欄只有在 App 開啟「上傳照片縮圖」時才有。
+  function photoThumbs(photos) {
+    return photos.filter(function (p) { return C.isPhotoPath(p[3]); })
+      .map(function (p) { return { lon: p[0], lat: p[1], url: GT.cfg.dataBase + p[3] }; });
   }
 
   // ---- 時間分析與每公里分段（用原始軌跡，不含估算路徑）----
@@ -249,7 +263,22 @@
     var photos = track.photos || [];
     if (photos.length) {
       $("pnlPhotos").hidden = false;
-      $("photoNote").textContent = "共 " + photos.length + " 個拍照點，已在上方地圖以黃點標示。網站只保存拍攝位置，照片檔案留在手機。";
+      var thumbs = photoThumbs(photos);
+      if (thumbs.length) {
+        $("photoGrid").innerHTML = thumbs.map(function (t, i) {
+          return '<button type="button" class="gt-photo" data-i="' + i + '" aria-label="第 ' + (i + 1) + ' 張照片"><img loading="lazy" src="' + esc(t.url) + '" alt="" /></button>';
+        }).join("");
+        Array.prototype.forEach.call($("photoGrid").querySelectorAll("button"), function (b) {
+          b.onclick = function () {
+            var t = thumbs[+b.dataset.i];
+            if (mapReady) { stopOrbit(); map.easeTo({ center: [t.lon, t.lat], zoom: Math.max(map.getZoom(), 15), pitch: 55, duration: reduceMotion ? 0 : 800 }); }
+            window.open(t.url, "_blank", "noopener");
+          };
+        });
+        $("photoNote").textContent = "共 " + photos.length + " 個拍照點，其中 " + thumbs.length + " 張有縮圖（上方地圖的黃點可點開）。縮圖是低解析度、已移除位置等 EXIF 資訊的版本；原圖留在手機。";
+      } else {
+        $("photoNote").textContent = "共 " + photos.length + " 個拍照點，已在上方地圖以黃點標示。網站只保存拍攝位置，照片檔案留在手機。";
+      }
     }
     renderTimeAndSplits();
     setupColorBar();

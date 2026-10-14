@@ -300,6 +300,59 @@
     if (initialMode === "replay" && coords.length > 1 && !reduceMotion && !params.get("pause")) play();
   }
 
+  // ===== 照片：回放經過拍照點時跳出縮圖（只有上傳了縮圖的照片；沒有就只顯示黃點）=====
+  var photoMarks = [], photoNext = 0, lastProgress = 0, photoTimer = 0;
+  function buildPhotoMarks(t) { photoMarks = C.photoMarks(t.points, t.photos, cumFrac); photoNext = 0; lastProgress = 0; }
+  function showPhoto(p) {
+    var box = $("photoPop");
+    $("photoImg").src = GT.cfg.dataBase + p.path; $("photoCap").textContent = "📷 照片 " + p.n;
+    box.hidden = false;
+    clearTimeout(photoTimer); photoTimer = setTimeout(function () { box.hidden = true; }, 4000);
+  }
+  function checkPhotos() {
+    if (!photoMarks.length) return;
+    var r = C.photoStep(photoMarks, photoNext, lastProgress, progress, mode === "replay");
+    lastProgress = progress; photoNext = r.next;
+    if (r.reset) $("photoPop").hidden = true;
+    r.show.forEach(showPhoto);
+  }
+
+  // ===== 錄影：把回放的地圖畫面錄成影片（只含地圖，不含數據面板）=====
+  var recorder = null, recChunks = [], recMime = "";
+  function pickMime() {
+    var c = ["video/mp4;codecs=avc1.42E01E", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+    for (var i = 0; i < c.length; i++) if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c[i])) return c[i];
+    return "";
+  }
+  function recUi(on) { var b = $("recBtn"); b.textContent = on ? "⏹ 停止錄影" : "🎬 錄影"; b.setAttribute("aria-pressed", on ? "true" : "false"); }
+  function startRecording() {
+    var cv = map && map.getCanvas && map.getCanvas();
+    if (!window.MediaRecorder || !cv || !cv.captureStream) { toast("這個瀏覽器不支援錄影（建議用電腦版 Chrome 或 Edge）"); return; }
+    var mime = pickMime();
+    if (!mime) { toast("這個瀏覽器沒有可用的影片格式"); return; }
+    setMode("replay"); progress = 0; applyFrame(true);
+    try { recorder = new MediaRecorder(cv.captureStream(30), { mimeType: mime, videoBitsPerSecond: 6000000 }); }
+    catch (e) { recorder = null; toast("無法開始錄影：" + e.message); return; }
+    recChunks = []; recMime = mime;
+    recorder.ondataavailable = function (e) { if (e.data && e.data.size) recChunks.push(e.data); };
+    recorder.onstop = finishRecording;
+    recorder.start(1000);
+    recUi(true); toast("錄影中：回放播完會自動存檔");
+    play();
+  }
+  function stopRecording() { if (recorder && recorder.state !== "inactive") recorder.stop(); }
+  function finishRecording() {
+    var type = recMime.split(";")[0], blob = new Blob(recChunks, { type: type }), ext = type === "video/mp4" ? "mp4" : "webm";
+    recorder = null; recChunks = []; recUi(false);
+    if (!blob.size) { toast("沒有錄到畫面"); return; }
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "gps-tracker-" + (trackId || "replay").slice(0, 8) + "." + ext;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+    toast("已儲存影片（約 " + (Math.round(blob.size / 104857.6) / 10) + " MB）");
+  }
+  $("recBtn").addEventListener("click", function () { if (recorder) stopRecording(); else startRecording(); });
+
   // ===== 播放 =====
   function updateTravel(p, force) {
     var now = performance.now();
@@ -335,6 +388,7 @@
     var cur = mode === "explore" ? null : progress;
     if (profAlt) profAlt.setCursor(cur);
     if (profSpd) profSpd.setCursor(cur);
+    checkPhotos();
   }
 
   function tick(ts) {
@@ -344,7 +398,7 @@
     progress = Math.min(1, progress + dt * 0.035 * speed);
     applyFrame(false);
     if (progress < 1) rafId = requestAnimationFrame(tick);
-    else { playing = false; rafId = 0; updatePlayBtn(); applyFrame(true); }
+    else { playing = false; rafId = 0; updatePlayBtn(); applyFrame(true); if (recorder) setTimeout(stopRecording, 900); }
   }
   function play() {
     if (coords.length < 2) return;
@@ -490,6 +544,7 @@
       });
     }).then(function () {
       prepareTrack(track);
+      buildPhotoMarks(track);
       buildDispGap();
       if (coords.length < 2) {
         showStatus('<div>這筆活動沒有足夠的路線資料，無法顯示 3D 路線。</div><a class="btn gt-btn" href="' + GT.activityUrl(trackId) + '">回活動故事</a>', true);

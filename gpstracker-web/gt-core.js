@@ -309,6 +309,33 @@
     return { elapsedSec: Math.max(elapsed, active), activeSec: active, movingSec: moving, pausedSec: Math.max(0, elapsed - active), stoppedSec: Math.max(0, active - moving) };
   }
 
+  // ───── 照片縮圖（App 使用者選擇上傳時，track.photos 每筆 [lon, lat, sec, 路徑]；沒有第 4 欄就只有拍照位置）─────
+  var PHOTO_PATH_RE = /^(?!.*\.\.)(?!.*\/\/)photos\/[A-Za-z0-9._\/-]+$/; // 不允許 .. 與 //（避免路徑穿越）
+  function isPhotoPath(s) { return typeof s === "string" && PHOTO_PATH_RE.test(s); }
+  // 拍照點在路線上的進度（0~1，依拍照時間對應到軌跡點）。只列有縮圖的照片，依進度排序；n 是該照片在 photos 裡的序號（從 1 起）。
+  function photoMarks(points, photos, cumFrac) {
+    var out = [];
+    points = points || [];
+    (photos || []).forEach(function (p, i) {
+      if (!points.length || !isPhotoPath(p[3])) return;
+      var sec = num(p[2]), lo = 0, hi = points.length - 1;
+      while (lo < hi) { var mid = (lo + hi) >> 1; if (num(points[mid][4]) < sec) lo = mid + 1; else hi = mid; }
+      out.push({ frac: (cumFrac && cumFrac[lo]) || 0, path: p[3], n: i + 1, lon: p[0], lat: p[1] });
+    });
+    return out.sort(function (a, b) { return a.frac - b.frac; });
+  }
+  // 回放進度從 prev 走到 cur 時要顯示哪些照片。正常播放（小步前進）才彈出；拖曳／重播／倒退（大幅變動）
+  // 只把指標移到目前位置、不連續彈出，並要求收起正在顯示的照片（reset）。回傳 { show, next, reset }。
+  function photoStep(marks, next, prev, cur, replayOn) {
+    function after(f) { var i = 0; while (i < marks.length && marks[i].frac <= f) i++; return i; }
+    var jump = cur < prev || cur - prev > 0.03;
+    if (jump) return { show: [], next: after(cur), reset: true };
+    if (!replayOn) return { show: [], next: after(cur), reset: false };
+    var show = [];
+    while (next < marks.length && marks[next].frac <= cur) { show.push(marks[next]); next++; }
+    return { show: show, next: next, reset: false };
+  }
+
   // 只列「實際有資料」的欄位，沒資料的不顯示（不以 0 或假資料填充）。
   function trackFields(t) {
     var f = [];
@@ -384,6 +411,7 @@
     kmh: kmh, stepSourceLabel: stepSourceLabel, escapeHtml: escapeHtml,
     activityTitle: activityTitle, filterTracks: filterTracks, sortTracks: sortTracks, groupByMonth: groupByMonth,
     downsample: downsample, routeProject: routeProject, routePath: routePath,
+    isPhotoPath: isPhotoPath, photoMarks: photoMarks, photoStep: photoStep,
     splits: splits, fastestSlowest: fastestSlowest, movingSeconds: movingSeconds, timeBreakdown: timeBreakdown,
     valueSeries: valueSeries, rampColor: rampColor, valueRange: valueRange, colorSegments: colorSegments, highlights: highlights, RAMPS: RAMPS, trackFields: trackFields, hasAltitude: hasAltitude,
     modeBreakdown: modeBreakdown, gpx: gpx, elapsedAt: elapsedAt

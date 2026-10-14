@@ -275,7 +275,7 @@
       var tf = await ghGet(readBase() + id + ".json");
       var photos = (tf && JSON.parse(tf.text).photos) || [];
       for (var pi = 0; pi < photos.length; pi++) {
-        if (typeof photos[pi][3] === "string" && /^photos\/[A-Za-z0-9._\/-]+$/.test(photos[pi][3])) {
+        if (GTCore.isPhotoPath(photos[pi][3])) {
           try { await deleteFile(readBase() + photos[pi][3], "GPS Tracker: delete photo of " + id); } catch (e) { /* 單張失敗不阻擋刪除紀錄 */ }
         }
       }
