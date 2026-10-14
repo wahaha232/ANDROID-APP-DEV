@@ -68,6 +68,7 @@ object WebDashboardSync {
             payload = WebDashboardUploader.buildPayload(data, settings.privacyZones, settings.webUploadPhotos)
         ).getOrThrow()
         app.trackRepository.setWebUploadedAt(trackId, System.currentTimeMillis())
+        runCatching { TrackEditsSync.flush(app, trackId) } // 這筆若有尚未同步的編輯（上傳前就改過），現在一併送出
         Outcome.UPLOADED
     }
 

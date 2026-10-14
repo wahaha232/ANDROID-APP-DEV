@@ -117,6 +117,10 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
     val outages by viewModel.outages.collectAsStateWithLifecycle()
 
     var mapController by remember { mutableStateOf<GpsMapController?>(null) }
+    // 紀錄編輯（標題／備註／移動方式）：存檔後自動同步到記錄網頁。
+    val editsRepo = remember { com.startinsnow.gpstracker.data.prefs.TrackEditsRepository(context) }
+    val allEdits by editsRepo.edits.collectAsStateWithLifecycle(emptyMap())
+    var editStatus by remember { mutableStateOf<String?>(null) }
     // 路線顏色（單色／速度／海拔）與自動亮點：只用「可信」點，與地圖上的路線同一份資料。
     var colorMode by remember { mutableStateOf(com.startinsnow.gpstracker.core.analysis.ColorMode.NONE) }
     val analysisPoints = remember(points) {
@@ -285,6 +289,35 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                     else context.getString(R.string.route_legend_altitude, Math.round(lo).toInt(), Math.round(hi).toInt())
                 }
             }
+            track?.let { t ->
+                EditTrackCard(
+                    edit = allEdits[trackId],
+                    appMode = t.dominantMode,
+                    statusText = editStatus,
+                    onSave = { title, notes, mode ->
+                        scope.launch {
+                            editsRepo.save(trackId, title, notes, mode)
+                            editStatus = context.getString(R.string.edit_saved_local)
+                            val r = com.startinsnow.gpstracker.sync.TrackEditsSync.flush(app, trackId)
+                            editStatus = r.fold(
+                                onSuccess = { o ->
+                                    context.getString(
+                                        when (o) {
+                                            com.startinsnow.gpstracker.sync.TrackEditsSync.Outcome.UPLOADED -> R.string.edit_synced
+                                            com.startinsnow.gpstracker.sync.TrackEditsSync.Outcome.NOT_CONFIGURED -> R.string.edit_not_configured
+                                            com.startinsnow.gpstracker.sync.TrackEditsSync.Outcome.WIFI_ONLY -> R.string.edit_wifi_only
+                                            com.startinsnow.gpstracker.sync.TrackEditsSync.Outcome.NOT_ON_WEB -> R.string.edit_not_on_web
+                                            else -> R.string.edit_saved_local
+                                        }
+                                    )
+                                },
+                                onFailure = { context.getString(R.string.edit_sync_failed, it.message ?: it::class.java.simpleName) }
+                            )
+                        }
+                    }
+                )
+            }
+
             RouteExtras(
                 colorMode = colorMode,
                 speedAvailable = speedAvailable,

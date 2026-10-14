@@ -112,6 +112,29 @@ class WebDashboardUploader(
         runCatching { putContent(token, repo, branch, path, content, message) }
     }
 
+    /** 把一筆編輯合併進網頁的 meta.json（只動這一筆，其他筆原封不動）；遇到寫入衝突（409／422）重讀再合併重試。 */
+    suspend fun updateMeta(
+        token: String, repo: String, branch: String, dataPath: String, trackId: String,
+        edit: com.startinsnow.gpstracker.core.edits.TrackEdit?
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val path = dataPath.trim('/') + "/meta.json"
+            var attempt = 0
+            while (true) {
+                try {
+                    val existing = getContent(token, repo, branch, path)
+                    val merged = com.startinsnow.gpstracker.core.edits.MetaMerge.apply(existing?.content, trackId, edit)
+                    putContent(token, repo, branch, path, merged, "GPS Tracker: update notes for $trackId", existing?.sha)
+                    break
+                } catch (e: GitHubApiException) {
+                    attempt++
+                    if ((e.code == 409 || e.code == 422) && attempt < MAX_MANIFEST_ATTEMPTS) continue
+                    throw e
+                }
+            }
+        }
+    }
+
     private data class ContentFile(val content: String, val sha: String?)
 
     private fun getContent(token: String, repo: String, branch: String, path: String): ContentFile? {

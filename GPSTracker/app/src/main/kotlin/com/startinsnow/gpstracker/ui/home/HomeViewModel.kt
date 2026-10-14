@@ -58,6 +58,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val deletedOnWeb: StateFlow<List<com.startinsnow.gpstracker.data.db.TrackEntity>> = _deletedOnWeb
     private var lastDeletedCheckMs = 0L
 
+    init {
+        // 先前儲存的編輯若因離線等原因還沒同步到記錄網頁，開啟 App 時重試。
+        viewModelScope.launch { com.startinsnow.gpstracker.sync.TrackEditsSync.flushAllDirty(app) }
+    }
+
     /** 回到首頁時檢查網站上是否有紀錄被刪除（節流：10 分鐘內不重複查）。只提示，不自動刪除。 */
     fun checkDeletedOnWeb(force: Boolean = false) {
         val now = System.currentTimeMillis()

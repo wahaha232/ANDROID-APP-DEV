@@ -381,4 +381,23 @@
     <!-- 照片縮圖上傳 -->
     <string name="web_photos_title">上傳照片縮圖到網頁（公開）</string>
     <string name="web_photos_hint">預設關閉。開啟後，之後上傳的紀錄會附上拍照點的縮圖（長邊 960 px、已移除位置等 EXIF 資訊），網站回放經過拍照點時會顯示。網頁是公開的，任何人都看得到這些照片；隱私區域內的照片不會上傳。已上傳的舊紀錄不會補傳。</string>
+    <!-- 紀錄編輯（標題／備註／移動方式） -->
+    <string name="edit_title">標題與備註</string>
+    <string name="edit_button">✎ 編輯標題／備註／移動方式</string>
+    <string name="edit_empty">還沒有標題或備註。編輯後會自動同步到記錄網頁。</string>
+    <string name="edit_mode_override">移動方式：%s</string>
+    <string name="edit_pending">尚未同步到記錄網頁</string>
+    <string name="edit_dialog_title">編輯紀錄</string>
+    <string name="edit_field_title">標題</string>
+    <string name="edit_field_notes">備註</string>
+    <string name="edit_field_mode">移動方式</string>
+    <string name="edit_mode_keep">維持 App 判斷（%s）</string>
+    <string name="edit_dialog_hint">只影響顯示與搜尋，原始 GPS 紀錄與統計不會被修改。儲存後會自動上傳到記錄網頁。</string>
+    <string name="edit_save">儲存</string>
+    <string name="edit_saved_local">已儲存在手機。</string>
+    <string name="edit_synced">已儲存，並同步到記錄網頁（約 1 分鐘後生效）。</string>
+    <string name="edit_not_configured">已儲存在手機。尚未設定網頁上傳（設定 → 網頁儀表板的 GitHub Token），設定後會同步。</string>
+    <string name="edit_wifi_only">已儲存在手機。目前不是 Wi-Fi，連上 Wi-Fi 後開啟 App 會自動同步。</string>
+    <string name="edit_not_on_web">已儲存在手機。這筆紀錄還沒上傳到網站，上傳後會一併同步。</string>
+    <string name="edit_sync_failed">已儲存在手機，但同步失敗：%s。稍後開啟 App 會自動重試。</string>
 </resources>

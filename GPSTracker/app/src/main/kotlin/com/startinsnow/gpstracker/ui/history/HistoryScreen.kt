@@ -58,6 +58,8 @@ fun HistoryScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val tracksOrNull by viewModel.tracks.collectAsStateWithLifecycle()
+    val editsRepo = remember { com.startinsnow.gpstracker.data.prefs.TrackEditsRepository(androidx.compose.ui.platform.LocalContext.current) }
+    val edits by editsRepo.edits.collectAsStateWithLifecycle(emptyMap())
     val tracksLoaded = tracksOrNull != null
     val tracks = tracksOrNull ?: emptyList()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
@@ -114,7 +116,7 @@ fun HistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(tracks, key = { it.trackId }) { track ->
-                        TrackCard(track = track, dateFormat = dateFormat, onClick = { onOpenTrack(track.trackId) })
+                        TrackCard(track = track, edit = edits[track.trackId], dateFormat = dateFormat, onClick = { onOpenTrack(track.trackId) })
                     }
                 }
             }
@@ -123,8 +125,10 @@ fun HistoryScreen(
 }
 
 @Composable
-private fun TrackCard(track: TrackEntity, dateFormat: SimpleDateFormat, onClick: () -> Unit) {
+private fun TrackCard(track: TrackEntity, edit: com.startinsnow.gpstracker.core.edits.TrackEdit?, dateFormat: SimpleDateFormat, onClick: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    // 使用者在 App／網站改過的移動方式優先顯示（原始判斷仍保留在資料裡）。
+    val shownMode = edit?.mode?.let { m -> runCatching { com.startinsnow.gpstracker.core.model.MovementMode.valueOf(m) }.getOrNull() } ?: track.dominantMode
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -144,7 +148,7 @@ private fun TrackCard(track: TrackEntity, dateFormat: SimpleDateFormat, onClick:
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(track.dominantMode.emoji, fontSize = 20.sp)
+                        Text(shownMode.emoji, fontSize = 20.sp)
                     }
                     Spacer(Modifier.width(10.dp))
                     Column {
@@ -153,7 +157,10 @@ private fun TrackCard(track: TrackEntity, dateFormat: SimpleDateFormat, onClick:
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Text(track.dominantMode.name, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            edit?.title?.takeIf { it.isNotBlank() } ?: shownMode.name,
+                            style = MaterialTheme.typography.titleSmall
+                        )
                     }
                 }
                 UploadBadge(track.uploadStatus)

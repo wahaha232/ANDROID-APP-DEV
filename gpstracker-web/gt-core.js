@@ -9,18 +9,18 @@
 
   var MODE_EMOJI = {
     WALKING: "🚶", RUNNING: "🏃", BICYCLE: "🚲", CYCLING: "🚲", VEHICLE: "🚗", DRIVING: "🚗",
-    CAR: "🚗", MOTORCYCLE: "🏍️", TRAIN: "🚆", BUS: "🚌", BOAT: "⛵", STATIONARY: "🧍", UNKNOWN: "❓"
+    CAR: "🚗", MOTORCYCLE: "🏍️", TRAIN: "🚆", BUS: "🚌", BOAT: "⛵", STATIONARY: "🧍", PUBLIC_TRANSPORT: "🚌", AIRPLANE: "✈️", UNKNOWN: "❓"
   };
   var MODE_NAME = {
     WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", VEHICLE: "車輛", DRIVING: "開車",
-    CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車／捷運", BUS: "公車", BOAT: "船", STATIONARY: "靜止", UNKNOWN: "未知"
+    CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車／捷運", BUS: "公車", BOAT: "船", STATIONARY: "靜止", PUBLIC_TRANSPORT: "大眾運輸", AIRPLANE: "飛機", UNKNOWN: "未知"
   };
   var STEP_SOURCE = { ZEPP_LIFE: "Zepp Life", GOOGLE_FIT: "Google Fit", SENSOR: "手機感測器", SENSOR_FALLBACK: "手機感測器・待補同步" };
 
   var MODE_COLOR = {
     WALKING: "#34d399", RUNNING: "#fbbf24", BICYCLE: "#22d3ee", CYCLING: "#22d3ee", MOTORCYCLE: "#fb923c",
     VEHICLE: "#a78bfa", DRIVING: "#a78bfa", CAR: "#a78bfa", TRAIN: "#60a5fa", BUS: "#f472b6", BOAT: "#38bdf8",
-    STATIONARY: "#64748b", UNKNOWN: "#475569"
+    STATIONARY: "#64748b", PUBLIC_TRANSPORT: "#f472b6", AIRPLANE: "#e879f9", UNKNOWN: "#475569"
   };
 
   // 海拔序列：0 視為缺值（與既有回放頁 HUD 一致），缺值用前一個有效值補，避免剖面圖出現掉到 0 的尖刺。
