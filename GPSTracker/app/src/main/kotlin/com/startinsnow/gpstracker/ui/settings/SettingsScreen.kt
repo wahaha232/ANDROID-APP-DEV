@@ -416,6 +416,48 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 }
             }
 
+            SettingsSection(title = context.getString(R.string.privacy_title)) {
+                var radius by remember { mutableStateOf(com.startinsnow.gpstracker.core.privacy.PrivacyZones.DEFAULT_RADIUS) }
+                var privacyMessage by remember { mutableStateOf<String?>(null) }
+                Text(
+                    stringResource(R.string.privacy_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                settings.privacyZones.forEachIndexed { i, z ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("📍 %.4f, %.4f・%d m".format(z.latitude, z.longitude, z.radiusMeters), style = MaterialTheme.typography.bodyMedium)
+                        androidx.compose.material3.TextButton(onClick = { viewModel.removePrivacyZone(i) }) { Text(stringResource(R.string.privacy_remove)) }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(100, 200, 500, 1000).forEach { r ->
+                        FilterChip(selected = radius == r, onClick = { radius = r }, label = { Text("$r m") })
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        viewModel.addPrivacyZoneHere(radius) { ok ->
+                            privacyMessage = context.getString(if (ok) R.string.privacy_added else R.string.privacy_no_location)
+                        }
+                    },
+                    enabled = settings.privacyZones.size < com.startinsnow.gpstracker.core.privacy.PrivacyZones.MAX_ZONES,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                ) { Text(stringResource(R.string.privacy_add_here)) }
+                privacyMessage?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                }
+            }
+
             SettingsSection(title = context.getString(R.string.diag_title)) {
                 var crashCount by remember { mutableStateOf(com.startinsnow.gpstracker.diagnostics.CrashLogger.count(context)) }
                 Text(

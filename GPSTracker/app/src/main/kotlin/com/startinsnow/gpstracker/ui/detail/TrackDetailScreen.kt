@@ -292,13 +292,16 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                 onColorMode = { colorMode = it },
                 onHighlight = { h -> mapController?.flyTo(h.latitude, h.longitude, 15.0, 55.0, 0.0) },
                 onShare = {
+                    scope.launch {
                     track?.let { t ->
+                        val zones = app.settingsRepository.settings.first().privacyZones
+                        val sharePoints = com.startinsnow.gpstracker.core.privacy.PrivacyZones.trimEnds(analysisPoints, zones, { it.latitude }, { it.longitude })
                         val df = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.getDefault())
                         val bmp = com.startinsnow.gpstracker.ui.share.ShareCardRenderer.render(
                             context = context,
                             title = df.format(java.util.Date(t.startTimeMs)) + " " + t.dominantMode.emoji,
                             subtitle = "%.2f km".format(t.distanceMeters / 1000.0),
-                            points = analysisPoints,
+                            points = sharePoints,
                             colorMode = colorMode,
                             stats = listOf(
                                 com.startinsnow.gpstracker.ui.share.ShareStat("%.2f".format(t.distanceMeters / 1000.0), "km", context.getString(R.string.share_stat_distance)),
@@ -310,6 +313,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                         com.startinsnow.gpstracker.ui.share.ShareUtils.shareBitmap(
                             context, bmp, "gps-tracker-" + t.trackId.take(8) + ".png", context.getString(R.string.share_card_chooser)
                         )
+                    }
                     }
                 }
             )
@@ -453,7 +457,9 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                             return@launch
                         }
                         uploadStatusText = context.getString(R.string.detail_028)
-                        val payload = withContext(Dispatchers.IO) { WebDashboardUploader.buildPayload(data) }
+                        val payload = withContext(Dispatchers.IO) {
+                            WebDashboardUploader.buildPayload(data, app.settingsRepository.settings.first().privacyZones)
+                        }
                         val webResult = WebDashboardUploader().uploadTrack(
                             token = currentSettings.githubToken,
                             repo = currentSettings.webRepo,

@@ -170,13 +170,18 @@ class WebDashboardUploader(
         }
 
         /** 把一筆紀錄轉成精簡 JSON（陣列格式以縮小體積）。 */
-        fun buildPayload(data: ExportTrackData): Payload {
+        fun buildPayload(
+            data: ExportTrackData,
+            privacyZones: List<com.startinsnow.gpstracker.core.privacy.PrivacyZone> = emptyList()
+        ): Payload {
             val track = data.track
             val startMs = track.startTimeMs
             val trusted = data.points
                 .filter { it.reliability == "TRUSTED" }
                 .sortedBy { it.timestampMs }
-            val sampled = downsample(trusted, MAX_POINTS)
+            // 隱私區域：網頁儀表板是公開的，開頭與結尾落在區域內的點不上傳（本機資料與本機匯出仍是完整的）。
+            val visible = com.startinsnow.gpstracker.core.privacy.PrivacyZones.trimEnds(trusted, privacyZones, { it.latitude }, { it.longitude })
+            val sampled = downsample(visible, MAX_POINTS)
 
             val points = JSONArray()
             sampled.forEach { p ->
@@ -192,7 +197,9 @@ class WebDashboardUploader(
 
             val photos = JSONArray()
             data.photos.forEach { ph ->
-                if (ph.latitude != null && ph.longitude != null) {
+                if (ph.latitude != null && ph.longitude != null &&
+                    !com.startinsnow.gpstracker.core.privacy.PrivacyZones.isInside(ph.latitude, ph.longitude, privacyZones)
+                ) {
                     photos.put(
                         JSONArray()
                             .put(round(ph.longitude, 6))

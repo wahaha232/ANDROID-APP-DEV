@@ -359,4 +359,11 @@
     <string name="share_stat_duration">活動時間</string>
     <string name="share_stat_speed">平均速度</string>
     <string name="share_stat_ascent">總爬升</string>
+    <!-- 隱私區域 -->
+    <string name="privacy_title">隱私區域</string>
+    <string name="privacy_hint">網頁儀表板是公開的。設定「家」或其他不想公開的地點後，之後上傳到網頁、以及「分享圖片」時，會自動移除軌跡開頭與結尾落在區域內的部分。本機資料與本機匯出仍是完整的；已經上傳過的舊紀錄不會被改動。在要保護的地點按「以目前位置新增」，最多 5 個。</string>
+    <string name="privacy_add_here">以目前位置新增隱私區域</string>
+    <string name="privacy_remove">刪除</string>
+    <string name="privacy_added">已新增。之後上傳與分享圖片會套用。</string>
+    <string name="privacy_no_location">取不到目前位置，請確認已允許定位並開啟定位服務。</string>
 </resources>

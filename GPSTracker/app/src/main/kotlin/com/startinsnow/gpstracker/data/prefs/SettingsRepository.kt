@@ -23,6 +23,8 @@ data class AppSettings(
     val autoPauseEnabled: Boolean = true,
     /** 位置靜止多久後自動暫停（秒；介面以 時／分／秒 呈現），見 [AutoPauseDelay]。 */
     val autoPauseSeconds: Int = AutoPauseDelay.DEFAULT_SECONDS,
+    /** 隱私區域：上傳到網頁與分享圖片時，會移除軌跡開頭／結尾落在區域內的點（見 PrivacyZones）。 */
+    val privacyZones: List<com.startinsnow.gpstracker.core.privacy.PrivacyZone> = emptyList(),
     val stepSource: StepSource = StepSource.GOOGLE_FIT,
     val driveSyncEnabled: Boolean = false,
     val wifiOnlySync: Boolean = true,
@@ -53,6 +55,7 @@ class SettingsRepository(private val context: Context) {
         val GPS_MODE = stringPreferencesKey("gps_mode")
         val AUTO_PAUSE = booleanPreferencesKey("auto_pause_enabled")
         val AUTO_PAUSE_SECONDS = intPreferencesKey("auto_pause_seconds")
+        val PRIVACY_ZONES = stringPreferencesKey("privacy_zones")
         val STEP_SOURCE = stringPreferencesKey("step_source")
         val DRIVE_SYNC = booleanPreferencesKey("drive_sync_enabled")
         val WIFI_ONLY = booleanPreferencesKey("wifi_only_sync")
@@ -72,6 +75,7 @@ class SettingsRepository(private val context: Context) {
             gpsMode = runCatching { GpsMode.valueOf(prefs[Keys.GPS_MODE] ?: GpsMode.ADAPTIVE.name) }.getOrDefault(GpsMode.ADAPTIVE),
             autoPauseEnabled = prefs[Keys.AUTO_PAUSE] ?: true,
             autoPauseSeconds = AutoPauseDelay.clamp(prefs[Keys.AUTO_PAUSE_SECONDS] ?: AutoPauseDelay.DEFAULT_SECONDS),
+            privacyZones = com.startinsnow.gpstracker.core.privacy.PrivacyZones.fromJson(prefs[Keys.PRIVACY_ZONES]),
             stepSource = runCatching { StepSource.valueOf(prefs[Keys.STEP_SOURCE] ?: StepSource.GOOGLE_FIT.name) }.getOrDefault(StepSource.GOOGLE_FIT),
             driveSyncEnabled = prefs[Keys.DRIVE_SYNC] ?: false,
             wifiOnlySync = prefs[Keys.WIFI_ONLY] ?: true,
@@ -90,6 +94,8 @@ class SettingsRepository(private val context: Context) {
     suspend fun setGpsMode(mode: GpsMode) = context.dataStore.edit { it[Keys.GPS_MODE] = mode.name }
     suspend fun setAutoPauseEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.AUTO_PAUSE] = enabled }
     suspend fun setAutoPauseSeconds(seconds: Int) = context.dataStore.edit { it[Keys.AUTO_PAUSE_SECONDS] = AutoPauseDelay.clamp(seconds) }
+    suspend fun setPrivacyZones(zones: List<com.startinsnow.gpstracker.core.privacy.PrivacyZone>) =
+        context.dataStore.edit { it[Keys.PRIVACY_ZONES] = com.startinsnow.gpstracker.core.privacy.PrivacyZones.toJson(zones) }
     suspend fun setStepSource(source: StepSource) = context.dataStore.edit { it[Keys.STEP_SOURCE] = source.name }
     suspend fun setDriveSyncEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.DRIVE_SYNC] = enabled }
     suspend fun setWifiOnlySync(enabled: Boolean) = context.dataStore.edit { it[Keys.WIFI_ONLY] = enabled }
