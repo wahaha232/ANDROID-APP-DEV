@@ -11,6 +11,10 @@ on:
       - 'GPSTracker/**'
   workflow_dispatch:
 
+# 發布 Release 需要寫入權限（只有 push 到 main 且有固定簽章金鑰時才會發布）。
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -59,11 +63,44 @@ jobs:
       - name: Lint
         run: gradle lintDebug --no-daemon --console=plain
 
+      # 固定 debug 簽章：金鑰存在 Secret GPST_DEBUG_KEYSTORE_BASE64（沒有就退回隨機簽章並警告）。
+      - name: Prepare fixed debug signing key
+        id: signing
+        env:
+          KS_B64: ${{ secrets.GPST_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/gpst-debug.keystore"
+            echo "GPST_DEBUG_KEYSTORE_PATH=$RUNNER_TEMP/gpst-debug.keystore" >> "$GITHUB_ENV"
+            echo "fixed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "fixed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::GPST_DEBUG_KEYSTORE_BASE64 is not set: the APK is signed with a random debug key and cannot update-install over earlier builds."
+          fi
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --console=plain
+
+      - name: Show APK signing certificate
+        run: |
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | grep -i "SHA-256" || true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: gpstracker-debug-apk
           path: GPSTracker/app/build/outputs/apk/debug/app-debug.apk
+
+      # 固定簽章時，把最新的 APK 放到 Release「gpstracker-latest」（網址固定、下載不用登入、可直接覆蓋安裝）。
+      - name: Publish latest APK to a GitHub Release
+        if: steps.signing.outputs.fixed == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="1.0.$(git rev-list --count HEAD)"
+          cp app/build/outputs/apk/debug/app-debug.apk gpstracker-latest.apk
+          gh release delete gpstracker-latest --cleanup-tag --yes || true
+          gh release create gpstracker-latest gpstracker-latest.apk --target "$GITHUB_SHA" \
+            --title "GPS Tracker $VER（最新 debug 版）" \
+            --notes "由雲端自動建置（commit ${GITHUB_SHA::7}）。簽章與先前本機建置的 debug 版相同，可直接覆蓋安裝；套件名稱 com.startinsnow.gpstracker.debug。"
