@@ -23,16 +23,16 @@
 
   var MODE_EMOJI = {
     WALKING: "🚶", RUNNING: "🏃", BICYCLE: "🚲", CYCLING: "🚲", VEHICLE: "🚗", DRIVING: "🚗",
-    CAR: "🚗", MOTORCYCLE: "🏍️", TRAIN: "🚆", BUS: "🚌", BOAT: "⛵", STATIONARY: "🧍", UNKNOWN: "❓"
+    CAR: "🚗", MOTORCYCLE: "🏍️", TRAIN: "🚆", BUS: "🚌", BOAT: "⛵", STATIONARY: "🧍", PUBLIC_TRANSPORT: "🚌", AIRPLANE: "✈️", UNKNOWN: "❓"
   };
   var MODE_NAME = {
     WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", VEHICLE: "車輛", DRIVING: "開車",
-    CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車", BUS: "公車", BOAT: "船", STATIONARY: "靜止", UNKNOWN: "未知"
+    CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車", BUS: "公車", BOAT: "船", STATIONARY: "靜止", PUBLIC_TRANSPORT: "大眾運輸", AIRPLANE: "飛機", UNKNOWN: "未知"
   };
   var MODE_GROUP = {
     WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", MOTORCYCLE: "機車",
     VEHICLE: "汽車", DRIVING: "汽車", CAR: "汽車", TRAIN: "大眾運輸", BUS: "大眾運輸",
-    BOAT: "船", STATIONARY: "其他/未知", UNKNOWN: "未知"
+    BOAT: "船", STATIONARY: "其他/未知", PUBLIC_TRANSPORT: "大眾運輸", AIRPLANE: "飛機", UNKNOWN: "未知"
   };
 
   var MILESTONES = [

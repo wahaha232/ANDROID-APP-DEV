@@ -91,6 +91,21 @@
     var r = await fetch(apiContents(path), { method: "PUT", headers: headers(), body: JSON.stringify(body) });
     if (!r.ok) throw new Error("PUT " + path + " -> " + r.status + " " + (await r.text()).slice(0, 160));
   }
+  // 讀-改-寫 JSON：每次嘗試都重讀遠端最新內容再套用 mutate，遇到寫入衝突（409／422，例如 App 或另一個分頁同時更新）
+  // 就等一下重來（最多 3 次）。不能用舊內容硬覆蓋，否則會蓋掉別人剛寫入的變更。
+  async function updateJsonFile(path, defaultVal, mutate, message, pretty) {
+    for (var attempt = 0; ; attempt++) {
+      var existing = await ghGet(path);
+      var data = existing ? JSON.parse(existing.text) : JSON.parse(JSON.stringify(defaultVal));
+      var out = (await mutate(data)) || data;
+      var body = { message: message, content: strToB64(pretty ? JSON.stringify(out, null, 2) : JSON.stringify(out)), branch: cfg.branch };
+      if (existing) body.sha = existing.sha;
+      var r = await fetch(apiContents(path), { method: "PUT", headers: headers(), body: JSON.stringify(body) });
+      if (r.ok) return out;
+      if ((r.status === 409 || r.status === 422) && attempt < 2) { await new Promise(function (res) { setTimeout(res, 500 * (attempt + 1)); }); continue; }
+      throw new Error("PUT " + path + " -> " + r.status + " " + (await r.text()).slice(0, 160));
+    }
+  }
   async function deleteFile(path, message) {
     var existing = await ghGet(path);
     if (!existing) return false;
@@ -256,11 +271,15 @@
     var notes = $("editNotes").value.trim();
     setNote("儲存中…", "");
     try {
-      if (!meta.tracks[id]) meta.tracks[id] = {};
-      meta.tracks[id].title = title; meta.tracks[id].notes = notes;
       var modeSel = $("editMode").value;
-      if (modeSel) meta.tracks[id].mode = modeSel; else delete meta.tracks[id].mode;   // 空白＝回到 App 判斷的值
-      await putFile(readBase() + "meta.json", JSON.stringify({ tracks: meta.tracks }, null, 2), "GPS Tracker: update notes for " + id);
+      var saved = await updateJsonFile(readBase() + "meta.json", { tracks: {} }, function (m) {
+        if (!m.tracks) m.tracks = {};
+        if (!m.tracks[id]) m.tracks[id] = {};
+        m.tracks[id].title = title; m.tracks[id].notes = notes;
+        if (modeSel) m.tracks[id].mode = modeSel; else delete m.tracks[id].mode;   // 空白＝回到 App 判斷的值
+        return m;
+      }, "GPS Tracker: update notes for " + id, true);
+      meta.tracks = saved.tracks || {};   // 以遠端合併後的內容為準（可能包含 App 剛同步的編輯）
       var back = $("editModal"); if (back) document.body.removeChild(back);
       editingId = null;
       setNote("已儲存備註（GitHub Pages 約 1 分鐘後生效）。", "ok");
@@ -293,14 +312,21 @@
       var f = await ghGet(readBase() + "manifest.json");
       var manifest = f ? JSON.parse(f.text) : { tracks: [] };
       if (!manifest.tracks) manifest.tracks = [];
-      var failed = 0;
+      var failed = 0, okIds = [];
       for (var k = 0; k < ids.length; k++) {
         setNote("刪除中… " + (k + 1) + " / " + ids.length, "");
-        try { await deleteOne(ids[k], manifest); selected[ids[k]] = false; } catch (e) { failed++; }
+        try { await deleteOne(ids[k], manifest); selected[ids[k]] = false; okIds.push(ids[k]); } catch (e) { failed++; }
       }
-      manifest.updatedAt = Date.now();
-      await putFile(readBase() + "manifest.json", JSON.stringify(manifest), "GPS Tracker: update manifest after delete");
-      await putFile(readBase() + "meta.json", JSON.stringify({ tracks: meta.tracks }, null, 2), "GPS Tracker: prune notes after delete");
+      await updateJsonFile(readBase() + "manifest.json", { tracks: [] }, function (m) {
+        m.tracks = (m.tracks || []).filter(function (t) { return okIds.indexOf(t.trackId) < 0; });
+        m.updatedAt = Date.now();
+        return m;
+      }, "GPS Tracker: update manifest after delete", false);
+      var prunedMeta = await updateJsonFile(readBase() + "meta.json", { tracks: {} }, function (m) {
+        okIds.forEach(function (id) { if (m.tracks) delete m.tracks[id]; });
+        return m;
+      }, "GPS Tracker: prune notes after delete", true);
+      meta.tracks = prunedMeta.tracks || {};
       setNote("已刪除 " + (ids.length - failed) + " 筆" + (failed ? "，失敗 " + failed + " 筆" : "") + "（GitHub Pages 約 1 分鐘後生效）。", failed ? "warn" : "ok");
       await load();
     } catch (e) { setNote("刪除失敗：" + e.message, "err"); }
@@ -337,13 +363,20 @@
         if (!manifest.tracks) manifest.tracks = [];
         if (GTGpx.isDuplicate(manifest.tracks, built.entry)) { setNote("已經有相同時間與距離的紀錄，沒有重複匯入。", "warn"); return; }
         await putFile(readBase() + built.track.trackId + ".json", JSON.stringify(built.track), "GPS Tracker: import GPX " + built.track.trackId);
-        manifest.tracks.push(built.entry);
-        manifest.updatedAt = Date.now();
-        await putFile(readBase() + "manifest.json", JSON.stringify(manifest), "GPS Tracker: update manifest after GPX import");
+        await updateJsonFile(readBase() + "manifest.json", { tracks: [] }, function (m) {
+          if (!m.tracks) m.tracks = [];
+          if (!m.tracks.some(function (t) { return t.trackId === built.entry.trackId; })) m.tracks.push(built.entry);
+          m.updatedAt = Date.now();
+          return m;
+        }, "GPS Tracker: update manifest after GPX import", false);
         if (sum.name) {
-          if (!meta.tracks[built.track.trackId]) meta.tracks[built.track.trackId] = {};
-          meta.tracks[built.track.trackId].title = sum.name;
-          await putFile(readBase() + "meta.json", JSON.stringify({ tracks: meta.tracks }, null, 2), "GPS Tracker: title for imported " + built.track.trackId);
+          var withTitle = await updateJsonFile(readBase() + "meta.json", { tracks: {} }, function (m) {
+            if (!m.tracks) m.tracks = {};
+            if (!m.tracks[built.track.trackId]) m.tracks[built.track.trackId] = {};
+            m.tracks[built.track.trackId].title = sum.name;
+            return m;
+          }, "GPS Tracker: title for imported " + built.track.trackId, true);
+          meta.tracks = withTitle.tracks || {};
         }
         setNote("已匯入 1 筆紀錄（GitHub Pages 約 1 分鐘後生效）。", "ok");
         await load();
