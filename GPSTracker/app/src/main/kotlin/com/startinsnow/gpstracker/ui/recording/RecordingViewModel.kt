@@ -113,7 +113,9 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
                 Unit
             }
         }
+        // 記錄中還沒收到第一個點時 lastLocation 是 null，退而求其次用系統最後已知位置，避免照片沒有座標。
         val sample = lastLocation.value
+            ?: runCatching { LocationTracker(app).getLastKnownBestLocation() }.getOrNull()
         return runCatching {
             val file = photoManager.capturePhoto(trackId, type, sample)
             app.trackRepository.addPhoto(

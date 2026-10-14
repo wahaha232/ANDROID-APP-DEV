@@ -4,6 +4,7 @@ import com.startinsnow.gpstracker.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.startinsnow.gpstracker.GpsTrackerApplication
+import com.startinsnow.gpstracker.core.geo.PhotoLocationResolver
 import com.startinsnow.gpstracker.data.db.PhotoEntity
 import com.startinsnow.gpstracker.data.db.GpsOutageEntity
 import com.startinsnow.gpstracker.data.db.TrackEntity
@@ -50,7 +51,11 @@ class TrackDetailViewModel(
     val points: StateFlow<List<TrackPointEntity>> = app.trackRepository.observePoints(trackId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val photos: StateFlow<List<PhotoEntity>> = app.trackRepository.observePhotos(trackId)
+    // 拍照當下沒有定位的照片，依拍照時間借用軌跡上最近的點，地圖與播放才標得出來。
+    val photos: StateFlow<List<PhotoEntity>> = combine(
+        app.trackRepository.observePhotos(trackId),
+        app.trackRepository.observePoints(trackId)
+    ) { phs, pts -> PhotoLocationResolver.fill(phs, pts) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** GPS 中斷區間（給地圖畫出 Signal Lost 標記用）。 */
