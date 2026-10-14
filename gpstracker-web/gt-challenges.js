@@ -159,8 +159,8 @@
   }
 
   // ───── 進度卡片 HTML（首頁與探索挑戰中心共用，視覺一致）─────
-  function bar(pct, over) {
-    return '<div class="gt-bar' + (over ? " over" : "") + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + barWidth(pct).toFixed(1) + '"><i style="width:' + barWidth(pct).toFixed(2) + '%"></i></div>';
+  function bar(pct, over, label) {
+    return '<div class="gt-bar' + (over ? " over" : "") + '" role="progressbar" aria-label="' + esc(label || "挑戰完成進度") + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + barWidth(pct).toFixed(1) + '"><i style="width:' + barWidth(pct).toFixed(2) + '%"></i></div>';
   }
   function line(l, r) { return '<div class="gt-ch-line"><span>' + l + "</span><b>" + r + "</b></div>"; }
   function chip(text, tone) { return '<span class="gt-chip ' + (tone || "muted") + '">' + esc(text) + "</span>"; }
@@ -180,7 +180,7 @@
       body += line("目前累積", fmtKm(p.current) + " km");
       if (p.rep) {
         var r = p.rep;
-        body += '<div class="gt-ch-line"><span>' + (r.done ? "最高目標" : "目前目標") + "：<b>" + esc(r.name) + "</b>（" + fmtKm(r.target) + " km）</span><b>" + fmtPct(r.pct) + "</b></div>" + bar(r.pct, r.done);
+        body += '<div class="gt-ch-line"><span>' + (r.done ? "最高目標" : "目前目標") + "：<b>" + esc(r.name) + "</b>（" + fmtKm(r.target) + " km）</span><b>" + fmtPct(r.pct) + "</b></div>" + bar(r.pct, r.done, r.name + " 完成進度");
         body += line(r.done ? "已全部達成" : "剩餘", r.done ? (r.overshoot > 0 ? "超標 +" + fmtKm(r.overshoot) + " km" : "—") : fmtKm(r.remaining) + " km");
       } else {
         body += '<div class="gt-ch-line"><span>尚無目標資料</span></div>';

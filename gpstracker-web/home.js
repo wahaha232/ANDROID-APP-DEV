@@ -132,6 +132,7 @@
     $("challenges").innerHTML = '<div class="gt-skel" style="height:220px"></div>';
     $("dataStatus").textContent = "載入中…"; $("dataStatus").className = "gt-status";
     var main = Promise.all([GT.loadManifest(), GT.loadMeta()]);
+    var dailyP = loadDaily();
     // Voyager 參考資料：失敗時保留最後一次有效值（loadVoyager 不會 reject，也不會把數值歸零）。
     var voy = GTCH.loadVoyager(function (n) { return GT.fetchJson(n, true); });
 
@@ -139,17 +140,26 @@
       var m = r[0], tracks = m.tracks, meta = r[1];
       var totals = GTCH.computeTotals(tracks), valid = SOLAR_CORE.validTracks(tracks);
       $("summary").textContent = totals.validCount + " 筆活動 · 累積 " + GTCH.fmtKm(totals.totalKm) + " km";
-      renderStats(totals, valid, m.updatedAt, null);
-      if (!tracks.length) { renderEmpty(); return; }
-      renderHero(tracks[0], meta);
-      renderTimeline(tracks, meta);
-      loadDaily().then(function (d) { if (d) renderStats(totals, valid, m.updatedAt, d); });
+      // 統計卡只畫一次，避免「先 7 張、後 8 張」造成版面跳動；steps.json 最多等 300 ms，太慢才事後補畫。
+      var TIMEOUT = {};
+      return Promise.race([dailyP, new Promise(function (res) { setTimeout(function () { res(TIMEOUT); }, 300); })]).then(function (d) {
+        renderStats(totals, valid, m.updatedAt, d === TIMEOUT ? null : d);
+        if (!tracks.length) { renderEmpty(); return; }
+        // 精選卡優先顯示最新一筆「有效」活動（0 公尺誤觸、GPS 異常漂移的紀錄不要放在最顯眼處）。
+        renderHero(valid[0] || tracks[0], meta);
+        renderTimeline(tracks, meta);
+        if (d === TIMEOUT) dailyP.then(function (late) { if (late) renderStats(totals, valid, m.updatedAt, late); });
+      });
     }, function (e) { renderError(e.message); });
 
-    Promise.all([main, voy]).then(function (r) {
+    return Promise.all([main, voy]).then(function (r) {
       renderChallenges(r[0][0].tracks, r[0][0].updatedAt, r[1]);
     }, function () { /* manifest 失敗：renderError 已顯示 */ });
   }
 
+  $("refresh").addEventListener("click", function () {
+    var b = $("refresh"); b.disabled = true; b.textContent = "更新中…";
+    Promise.resolve(load()).then(function () { b.disabled = false; b.textContent = "🔄 重新整理"; });
+  });
   load();
 })();
