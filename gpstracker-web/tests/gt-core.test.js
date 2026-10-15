@@ -79,6 +79,31 @@ test("依月份分組", () => {
   assert.deepEqual(G.groupByMonth([]), []);
 });
 
+test("路線縮圖底圖：圖磚覆蓋整個畫布、數量有上限、路線點落在對應圖磚內", () => {
+  const pts = [];
+  for (let i = 0; i <= 60; i++) pts.push([121.52 + i * 0.002, 25.03 + Math.sin(i / 9) * 0.008, 0]);
+  const W = 320, H = 180;
+  const r = G.routePath(pts, W, H, 10);
+  assert.ok(r.tiles.length >= 1 && r.tiles.length <= 20, "圖磚數量：" + r.tiles.length);
+  const z = r.tiles[0].z;
+  assert.ok(r.tiles.every((t) => t.z === z && t.pw > 0 && t.ph > 0), "同一縮放層級、尺寸為正");
+  // 覆蓋：畫布四個角都落在某張圖磚內
+  for (const [x, y] of [[0, 0], [W, 0], [0, H], [W, H], [W / 2, H / 2]]) {
+    assert.ok(r.tiles.some((t) => x >= t.px - 0.01 && x <= t.px + t.pw + 0.01 && y >= t.py - 0.01 && y <= t.py + t.ph + 0.01), "未覆蓋：" + x + "," + y);
+  }
+  // 對位：起點的畫布座標，要落在「依經緯度算出的那張圖磚」的矩形內
+  const n = 2 ** z, lon = pts[0][0], lat = pts[0][1];
+  const tx = Math.floor((lon + 180) / 360 * n);
+  const ty = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+  const t = r.tiles.find((q) => q.x === tx && q.y === ty);
+  assert.ok(t, "找不到起點所在的圖磚");
+  assert.ok(r.start[0] >= t.px - 0.5 && r.start[0] <= t.px + t.pw + 0.5 && r.start[1] >= t.py - 0.5 && r.start[1] <= t.py + t.ph + 0.5, "起點未落在其圖磚內");
+  // 範圍很大的路線也不會要求過多圖磚
+  const big = G.routePath([[100, 10], [140, 40]], W, H, 10);
+  assert.ok(big.tiles.length <= 20);
+  assert.deepEqual(G.routeTiles(null, W, H), []);
+});
+
 test("路線縮圖：點數不足回傳 null；範圍在畫布內；保持比例", () => {
   assert.equal(G.routePath([], 100, 60), null);
   assert.equal(G.routePath([[121, 25, 0]], 100, 60), null);

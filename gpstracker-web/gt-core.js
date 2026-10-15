@@ -150,7 +150,49 @@
     var pts = items.map(function (it) {
       return { x: offX + (it.p[0] - minX) * k * scale, y: h - (offY + (it.p[1] - minY) * scale), i: it.i };
     });
-    return { pts: pts, w: w, h: h };
+    // tf：經緯度 → 畫布座標的線性換算，底圖圖磚要用同一組參數才對得準路線。
+    return { pts: pts, w: w, h: h, tf: { minX: minX, minY: minY, k: k, scale: scale, offX: offX, offY: offY } };
+  }
+
+  // 路線縮圖底圖：算出覆蓋整個畫布的 Web Mercator 圖磚，並換算每張圖磚在畫布上的位置與大小。
+  // 每張圖磚各自用四個角換算（不是整片等比縮放），所以小範圍內投影差異不會累積。
+  var MAX_TILES = 20;
+  function lonToTileX(lon, z) { return (lon + 180) / 360 * Math.pow(2, z); }
+  function latToTileY(lat, z) {
+    var r = lat * Math.PI / 180;
+    return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z);
+  }
+  function tileXToLon(x, z) { return x / Math.pow(2, z) * 360 - 180; }
+  function tileYToLat(y, z) { var n = Math.PI - 2 * Math.PI * y / Math.pow(2, z); return Math.atan(Math.sinh(n)) * 180 / Math.PI; }
+
+  function routeTiles(tf, w, h) {
+    if (!tf || !(tf.scale > 0)) return [];
+    var pxPerLon = tf.k * tf.scale;
+    var lonW = tf.minX - tf.offX / pxPerLon, lonE = tf.minX + (w - tf.offX) / pxPerLon;
+    var latN = tf.minY + (h - tf.offY) / tf.scale, latS = tf.minY - tf.offY / tf.scale;
+    latN = Math.min(latN, 85); latS = Math.max(latS, -85);
+    // 圖磚在畫布上約 200 單位寬時，原生 256px 圖磚剛好夠清楚（高 DPI 螢幕顯示也不糊）。
+    var z = Math.min(17, Math.max(2, Math.ceil(Math.log(360 * pxPerLon / 200) / Math.LN2)));
+    var x0, x1, y0, y1;
+    for (;;) {
+      x0 = Math.floor(lonToTileX(lonW, z)); x1 = Math.floor(lonToTileX(lonE, z));
+      y0 = Math.floor(latToTileY(latN, z)); y1 = Math.floor(latToTileY(latS, z));
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) <= MAX_TILES || z <= 2) break;
+      z--;
+    }
+    var n = Math.pow(2, z), tiles = [];
+    for (var ty = y0; ty <= y1; ty++) {
+      for (var tx = x0; tx <= x1; tx++) {
+        if (ty < 0 || ty >= n) continue;
+        var wx = ((tx % n) + n) % n;
+        var px0 = tf.offX + (tileXToLon(tx, z) - tf.minX) * pxPerLon;
+        var px1 = tf.offX + (tileXToLon(tx + 1, z) - tf.minX) * pxPerLon;
+        var py0 = h - (tf.offY + (tileYToLat(ty, z) - tf.minY) * tf.scale);
+        var py1 = h - (tf.offY + (tileYToLat(ty + 1, z) - tf.minY) * tf.scale);
+        tiles.push({ z: z, x: wx, y: ty, px: px0, py: py0, pw: px1 - px0, ph: py1 - py0 });
+      }
+    }
+    return tiles;
   }
 
   // 路線縮圖：把 [lng,lat,...] 轉成 SVG path。這是 2D 縮圖，只用在清單/卡片；不是 3D 功能的替代品。
@@ -160,7 +202,7 @@
     var d = "";
     r.pts.forEach(function (q, i) { d += (i === 0 ? "M" : "L") + q.x.toFixed(1) + " " + q.y.toFixed(1); });
     var f = r.pts[0], l = r.pts[r.pts.length - 1];
-    return { d: d, start: [f.x, f.y], end: [l.x, l.y], w: w, h: h };
+    return { d: d, start: [f.x, f.y], end: [l.x, l.y], w: w, h: h, tiles: routeTiles(r.tf, w, h) };
   }
 
   // ───── 路線上色（速度／海拔）與活動亮點 ─────
@@ -410,7 +452,7 @@
     fmtDay: fmtDay, fmtTime: fmtTime, fmtDate: fmtDate, fmtDur: fmtDur, fmtClock: fmtClock, fmtKm: fmtKm, fmtInt: fmtInt,
     kmh: kmh, stepSourceLabel: stepSourceLabel, escapeHtml: escapeHtml,
     activityTitle: activityTitle, filterTracks: filterTracks, sortTracks: sortTracks, groupByMonth: groupByMonth,
-    downsample: downsample, routeProject: routeProject, routePath: routePath,
+    downsample: downsample, routeProject: routeProject, routePath: routePath, routeTiles: routeTiles,
     isPhotoPath: isPhotoPath, photoMarks: photoMarks, photoStep: photoStep,
     splits: splits, fastestSlowest: fastestSlowest, movingSeconds: movingSeconds, timeBreakdown: timeBreakdown,
     valueSeries: valueSeries, rampColor: rampColor, valueRange: valueRange, colorSegments: colorSegments, highlights: highlights, RAMPS: RAMPS, trackFields: trackFields, hasAltitude: hasAltitude,

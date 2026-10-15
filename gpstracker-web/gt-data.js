@@ -131,10 +131,20 @@
   }
 
   // 縮圖 SVG（cls 決定粗細/顏色，樣式在 gt-ui.css）。
-  function routeSvg(p, cls, dotR) {
+  // withMap 為 true 時，路線後面鋪衛星圖磚（與詳情頁同一個免費圖源）；圖磚載入失敗就只剩原本的深色底。
+  function routeSvg(p, cls, dotR, withMap) {
     if (!p) return "";
-    var r = dotR || 4;
-    return '<svg class="' + cls + '" viewBox="0 0 ' + p.w + " " + p.h + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">' +
+    var r = dotR || 4, bg = "";
+    if (withMap && p.tiles && p.tiles.length) {
+      bg = '<g class="map-bg">' + p.tiles.map(function (t) {
+        var url = BASE_TILES.replace("{z}", t.z).replace("{y}", t.y).replace("{x}", t.x);
+        // 多留 0.5 單位的重疊，避免圖磚接縫出現細線。
+        return '<image href="' + url + '" x="' + t.px.toFixed(2) + '" y="' + t.py.toFixed(2) + '" width="' + (t.pw + 0.5).toFixed(2) + '" height="' + (t.ph + 0.5).toFixed(2) + '" preserveAspectRatio="none"/>';
+      }).join("") + '<rect class="map-shade" x="0" y="0" width="' + p.w + '" height="' + p.h + '"/></g>';
+      cls += " has-map";
+    }
+    return '<svg class="' + cls + '" viewBox="0 0 ' + p.w + " " + p.h + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">' + bg +
+      (bg ? '<path class="casing" d="' + p.d + '"/>' : "") +
       '<path class="line" d="' + p.d + '"/>' +
       '<circle class="dot-s" cx="' + p.start[0].toFixed(1) + '" cy="' + p.start[1].toFixed(1) + '" r="' + r + '"/>' +
       '<circle class="dot-e" cx="' + p.end[0].toFixed(1) + '" cy="' + p.end[1].toFixed(1) + '" r="' + r + '"/></svg>';

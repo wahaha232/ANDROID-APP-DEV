@@ -112,6 +112,13 @@ main:focus { outline: none; }
 .gt-tl-go { color: var(--accent); font-size: 18px; }
 .gt-mini .line { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .gt-mini .dot-s { fill: var(--green); }
+/* 有衛星底圖時：略為壓暗讓路線更突出，並給路線與圓點加深色描邊。 */
+.has-map .map-shade { fill: rgba(6, 12, 24, .22); }
+.has-map .casing { fill: none; stroke: rgba(0, 0, 0, .55); stroke-width: 6.5; stroke-linecap: round; stroke-linejoin: round; }
+.gt-route-svg.has-map .casing { stroke-width: 7.5; }
+.has-map .dot-s, .has-map .dot-e { stroke: #fff; stroke-width: 1.5; }
+.gt-mini.has-map .line { stroke: #ffd400; }
+.gt-route-svg.has-map .line { stroke: #ffd400; filter: none; }
 .gt-mini .dot-e { fill: #ff7a45; }
 
 /* ───── 快速入口 ───── */

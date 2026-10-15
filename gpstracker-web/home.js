@@ -43,7 +43,7 @@
     GT.thumb(e.trackId, 480, 320).then(function (r) {
       var box = $("heroRoute");
       if (!box) return;
-      if (r && r.path) box.innerHTML = GT.routeSvg(r.path, "gt-route-svg", 6) + '<div class="gt-route-cap">路線預覽・綠點起點／橘點終點</div>';
+      if (r && r.path) box.innerHTML = GT.routeSvg(r.path, "gt-route-svg", 6, true) + '<div class="gt-route-cap">路線預覽・綠點起點／橘點終點</div>';
       else box.innerHTML = '<div class="gt-route-cap" style="position:static">沒有可顯示的路線資料</div>';
     });
   }

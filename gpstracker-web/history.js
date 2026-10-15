@@ -76,7 +76,7 @@
       GT.lazy(card, function () {
         GT.thumb(card.dataset.id, 320, 180).then(function (r) {
           var ph = holder.querySelector(".gt-nothumb");
-          if (r && r.path) { if (ph) ph.remove(); holder.insertAdjacentHTML("beforeend", GT.routeSvg(r.path, "gt-mini", 4)); }
+          if (r && r.path) { if (ph) ph.remove(); holder.insertAdjacentHTML("beforeend", GT.routeSvg(r.path, "gt-mini", 4, true)); }
           else if (ph) ph.textContent = "沒有路線資料";
         });
       });
