@@ -113,6 +113,7 @@
     <string name="detail_036">取消</string>
     <string name="detail_037">軌跡回放</string>
     <string name="detail_038">回放進度</string>
+    <string name="detail_gap_note">有 %1$d 段 GPS 中斷（搭捷運，例如 %2$s → %3$s），地圖上的虛線是沿捷運路線估算的路徑，僅供參考；距離與均速仍用原始 GPS 資料計算。</string>
     <string name="detail_039">暫停</string>
     <string name="detail_040">播放</string>
     <string name="detail_041">停止回放</string>

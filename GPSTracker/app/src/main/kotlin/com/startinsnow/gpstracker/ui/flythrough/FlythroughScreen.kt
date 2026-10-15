@@ -78,6 +78,9 @@ import com.startinsnow.gpstracker.service.FlyoverRecordingService
 import com.startinsnow.gpstracker.ui.detail.TrackDetailViewModel
 import com.startinsnow.gpstracker.ui.share.ShareUtils
 import org.json.JSONArray
+import com.startinsnow.gpstracker.core.metro.MetroGapEstimator
+import com.startinsnow.gpstracker.core.metro.RoutePt
+import com.startinsnow.gpstracker.data.metro.MetroNetworkProvider
 import com.startinsnow.gpstracker.export.PhotoThumbnails
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -152,17 +155,19 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
     // 把 GPS 軌跡（GeoJSON）＋每點的 HUD 資料（速度/高度）餵進 WebView。
     LaunchedEffect(points, mapReady) {
         if (!mapReady) return@LaunchedEffect
-        val trusted = points.filter { it.reliability == "TRUSTED" }.sortedBy { it.timestampMs }
+        val trusted = MetroNetworkProvider.trustedSorted(points)
         if (trusted.size < 2) return@LaunchedEffect
+        // GPS 中斷（搭捷運）：把沿捷運路線估算的點插進去，飛越才會沿著路線走，而不是直線穿過去。
+        val gaps = MetroNetworkProvider.estimateGaps(context, points)
+        val route = MetroGapEstimator.insertEstimated(
+            trusted.map { RoutePt(it.latitude, it.longitude, it.timestampMs, (it.speedMps?.toDouble() ?: 0.0) * 3.6, it.altitudeMeters ?: 0.0) },
+            gaps
+        )
         val coordsArray = JSONArray()
         val hudArray = JSONArray()
-        trusted.forEach { point ->
-            coordsArray.put(JSONArray().put(point.longitude).put(point.latitude))
-            hudArray.put(
-                JSONArray()
-                    .put((point.speedMps?.toDouble() ?: 0.0) * 3.6)
-                    .put(point.altitudeMeters ?: 0.0)
-            )
+        route.forEach { point ->
+            coordsArray.put(JSONArray().put(point.lon).put(point.lat))
+            hudArray.put(JSONArray().put(point.speedKmh).put(point.altitudeM))
         }
         val geometry = JSONObject().put("type", "LineString").put("coordinates", coordsArray)
         val feature = JSONObject()

@@ -117,6 +117,11 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
     val outages by viewModel.outages.collectAsStateWithLifecycle()
 
     var mapController by remember { mutableStateOf<GpsMapController?>(null) }
+    // GPS 中斷（搭捷運）：沿捷運路線估算的路徑，只用於顯示（距離、均速等統計仍用原始資料）。
+    var gapEstimates by remember { mutableStateOf<List<com.startinsnow.gpstracker.core.metro.MetroGapEstimate>>(emptyList()) }
+    LaunchedEffect(points) {
+        gapEstimates = com.startinsnow.gpstracker.data.metro.MetroNetworkProvider.estimateGaps(context, points)
+    }
     // 紀錄編輯（標題／備註／移動方式）：存檔後自動同步到記錄網頁。
     val editsRepo = remember { com.startinsnow.gpstracker.data.prefs.TrackEditsRepository(context) }
     val allEdits by editsRepo.edits.collectAsStateWithLifecycle(emptyMap())
@@ -236,6 +241,11 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
         controller.fitBounds(coords)
     }
 
+    LaunchedEffect(gapEstimates, mapController) {
+        val controller = mapController ?: return@LaunchedEffect
+        controller.setGapSegments(gapEstimates.map { est -> est.coords to (est.lines.firstOrNull()?.color ?: "#888888") })
+    }
+
     LaunchedEffect(playback.frame, mapController) {
         val frame = playback.frame ?: return@LaunchedEffect
         mapController?.setPlaybackMarker(frame.latitude, frame.longitude)
@@ -269,6 +279,19 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                     .clip(MaterialTheme.shapes.large)
             ) {
                 GpsMapView(modifier = Modifier.fillMaxSize()) { controller -> mapController = controller }
+            }
+
+            if (gapEstimates.isNotEmpty()) {
+                Text(
+                    stringResource(
+                        R.string.detail_gap_note,
+                        gapEstimates.size,
+                        gapEstimates.first().fromName,
+                        gapEstimates.first().toName
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             FilledTonalButton(

@@ -54,6 +54,21 @@ class GpsMapController {
         style?.getSourceAs<GeoJsonSource>(sourceId)?.setGeoJson(pointsGeoJson(points))
     }
 
+    /** GPS 中斷（搭捷運）的估算路徑：每段一條線，color 為路線色（#rrggbb）；畫成虛線，與實際 GPS 路線區隔。 */
+    fun setGapSegments(segments: List<Pair<List<Pair<Double, Double>>, String>>) {
+        val features = JSONArray()
+        segments.forEach { (coords, color) ->
+            val arr = JSONArray()
+            coords.forEach { (lat, lon) -> arr.put(JSONArray().put(lon).put(lat)) }
+            features.put(
+                JSONObject().put("type", "Feature")
+                    .put("geometry", JSONObject().put("type", "LineString").put("coordinates", arr))
+                    .put("properties", JSONObject().put("color", color))
+            )
+        }
+        style?.getSourceAs<GeoJsonSource>(SOURCE_GAP)?.setGeoJson(JSONObject().put("type", "FeatureCollection").put("features", features).toString())
+    }
+
     fun setPlaybackMarker(lat: Double, lon: Double) {
         style?.getSourceAs<GeoJsonSource>(SOURCE_PLAYBACK)?.setGeoJson(pointsGeoJson(listOf(lat to lon)))
     }
@@ -100,6 +115,7 @@ class GpsMapController {
         const val SOURCE_END = "end-source"
         const val SOURCE_PHOTO = "photo-source"
         const val SOURCE_OUTAGE = "outage-source"
+        const val SOURCE_GAP = "gap-source"
         const val SOURCE_PLAYBACK = "playback-source"
 
         private fun lineStringGeoJson(coordinates: List<Pair<Double, Double>>): String {
@@ -200,6 +216,7 @@ fun GpsMapView(
                         style.addSource(GeoJsonSource(GpsMapController.SOURCE_END))
                         style.addSource(GeoJsonSource(GpsMapController.SOURCE_PHOTO))
                         style.addSource(GeoJsonSource(GpsMapController.SOURCE_OUTAGE))
+                        style.addSource(GeoJsonSource(GpsMapController.SOURCE_GAP))
                         style.addSource(GeoJsonSource(GpsMapController.SOURCE_PLAYBACK))
 
                         style.addLayer(
@@ -213,6 +230,28 @@ fun GpsMapView(
                                     )
                                 ),
                                 PropertyFactory.lineWidth(4f)
+                            )
+                        )
+                        // 估算的捷運路徑：深色描邊 + 路線色虛線，畫在實際路線之上。
+                        style.addLayer(
+                            LineLayer("gap-casing-layer", GpsMapController.SOURCE_GAP).withProperties(
+                                PropertyFactory.lineColor("#04121F"),
+                                PropertyFactory.lineWidth(7f),
+                                PropertyFactory.lineOpacity(0.55f)
+                            )
+                        )
+                        style.addLayer(
+                            LineLayer("gap-layer", GpsMapController.SOURCE_GAP).withProperties(
+                                PropertyFactory.lineColor(
+                                    org.maplibre.android.style.expressions.Expression.toColor(
+                                        org.maplibre.android.style.expressions.Expression.coalesce(
+                                            org.maplibre.android.style.expressions.Expression.get("color"),
+                                            org.maplibre.android.style.expressions.Expression.literal("#888888")
+                                        )
+                                    )
+                                ),
+                                PropertyFactory.lineWidth(4f),
+                                PropertyFactory.lineDasharray(arrayOf(1.4f, 1.2f))
                             )
                         )
                         style.addLayer(
