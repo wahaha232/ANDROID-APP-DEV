@@ -263,13 +263,49 @@
     return el;
   }
 
+  // 起點／終點：帶文字標籤的圖釘（與 App 的 3D 飛越同樣式）。
+  function pinEl(label, color) {
+    var wrap = document.createElement("div");
+    wrap.className = "ws-pin-wrap"; wrap.setAttribute("role", "img"); wrap.setAttribute("aria-label", label);
+    var l = document.createElement("div"); l.className = "ws-pin-label"; l.textContent = label;
+    var pin = document.createElement("div"); pin.className = "ws-pin"; pin.style.setProperty("--c", color);
+    pin.appendChild(document.createElement("i"));
+    wrap.appendChild(l); wrap.appendChild(pin);
+    return wrap;
+  }
+
+  // 有上傳縮圖的拍照點：地圖上顯示圓形照片泡泡，回放經過時放大一下（與右上角彈出的照片同步）。
+  var bubbles = {};
+  function addPhotoBubbles() {
+    photoMarks.forEach(function (m) {
+      var el = document.createElement("div");
+      el.className = "ws-bubble";
+      var img = document.createElement("img");
+      img.alt = "照片 " + m.n; img.loading = "lazy"; img.src = GT.cfg.dataBase + m.path;
+      el.appendChild(img);
+      new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([m.lon, m.lat]).addTo(map);
+      bubbles[m.n] = { el: el, timer: 0 };
+    });
+  }
+  function popBubble(n) {
+    var b = bubbles[n]; if (!b) return;
+    b.el.classList.add("pop"); b.el.style.zIndex = 5;
+    clearTimeout(b.timer);
+    b.timer = setTimeout(function () { b.el.classList.remove("pop"); b.el.style.zIndex = ""; }, 4000);
+  }
+  function unpopBubbles() {
+    Object.keys(bubbles).forEach(function (n) { clearTimeout(bubbles[n].timer); bubbles[n].el.classList.remove("pop"); bubbles[n].el.style.zIndex = ""; });
+  }
+
   function onMapLoad() {
     GT.collapseAttribution(map);
     map.setTerrain({ source: "dem", exaggeration: 1.3 });
     map.addSource("planned", { type: "geojson", data: emptyLine() });
-    map.addLayer({ id: "planned-line", type: "line", source: "planned", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 4, "line-opacity": 0.35, "line-dasharray": [2, 2] } });
+    // 整條路線先以較淡的黃色畫出（底下加深色描邊讓線在衛星圖上更清楚），走過的部分再疊上亮黃色。
+    map.addLayer({ id: "planned-casing", type: "line", source: "planned", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#000000", "line-width": 9, "line-opacity": 0.35, "line-blur": 1.5 } });
+    map.addLayer({ id: "planned-line", type: "line", source: "planned", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#FFD400", "line-width": 5, "line-opacity": 0.5 } });
     map.addSource("traveled", { type: "geojson", data: emptyLine() });
-    map.addLayer({ id: "traveled-line", type: "line", source: "traveled", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#00E676", "line-width": 6 } });
+    map.addLayer({ id: "traveled-line", type: "line", source: "traveled", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#FFD400", "line-width": 6.5 } });
     // GPS 中斷段（估算）：虛線，顏色＝捷運路線色（沒有對應路線＝灰）。畫在實線之上、照片點之下。
     map.addSource("gaps", { type: "geojson", data: GT.gapFeatures(gapInfo.gaps) });
     map.addLayer({ id: "gaps-casing", type: "line", source: "gaps", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#04121f", "line-width": 9, "line-opacity": 0.55 } });
@@ -288,8 +324,9 @@
     map.getSource("photos").setData({ type: "FeatureCollection", features: (track.photos || []).map(function (p) {
       return { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [p[0], p[1]] } };
     }) });
-    new maplibregl.Marker({ element: markerEl("s", "起", "起點"), anchor: "center" }).setLngLat(coords[0]).addTo(map);
-    new maplibregl.Marker({ element: markerEl("e", "終", "終點"), anchor: "center" }).setLngLat(coords[coords.length - 1]).addTo(map);
+    new maplibregl.Marker({ element: pinEl("起點", "#00C853"), anchor: "bottom" }).setLngLat(coords[0]).addTo(map);
+    new maplibregl.Marker({ element: pinEl("終點", "#FF3D00"), anchor: "bottom" }).setLngLat(coords[coords.length - 1]).addTo(map);
+    addPhotoBubbles();
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
     map.addControl(new ViewControl(), "top-right");
 
@@ -307,13 +344,14 @@
     var box = $("photoPop");
     $("photoImg").src = GT.cfg.dataBase + p.path; $("photoCap").textContent = "📷 照片 " + p.n;
     box.hidden = false;
+    popBubble(p.n);
     clearTimeout(photoTimer); photoTimer = setTimeout(function () { box.hidden = true; }, 4000);
   }
   function checkPhotos() {
     if (!photoMarks.length) return;
     var r = C.photoStep(photoMarks, photoNext, lastProgress, progress, mode === "replay");
     lastProgress = progress; photoNext = r.next;
-    if (r.reset) $("photoPop").hidden = true;
+    if (r.reset) { $("photoPop").hidden = true; unpopBubbles(); }
     r.show.forEach(showPhoto);
   }
 

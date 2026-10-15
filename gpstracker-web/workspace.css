@@ -132,3 +132,14 @@ body:not([data-mode="data"]) .data-only { display: none; }
 .ws-photo div { margin-top: 6px; font-size: 12.5px; color: var(--text); text-align: center; }
 @keyframes ws-photo-in { from { opacity: 0; transform: translateY(-8px) scale(.97); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .ws-photo { animation: none; } }
+/* 起點／終點圖釘與照片泡泡（樣式與 App 的 3D 飛越一致） */
+.ws-pin-wrap { display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.ws-pin-label { background: #fff; color: #222; font-weight: 700; font-size: 12px; line-height: 1; padding: 4px 9px; border-radius: 5px; margin-bottom: 5px; box-shadow: 0 2px 6px rgba(0, 0, 0, .45); white-space: nowrap; }
+.ws-pin { width: 30px; height: 40px; position: relative; filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .5)); }
+.ws-pin i { position: absolute; left: 0; top: 2px; width: 24px; height: 24px; background: var(--c, #FFD400); border: 3px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); transform-origin: 50% 50%; }
+.ws-pin i::after { content: ""; position: absolute; left: 5px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+.ws-bubble { width: 54px; height: 54px; border-radius: 50%; border: 3px solid #fff; overflow: hidden; background: #333; box-shadow: 0 3px 10px rgba(0, 0, 0, .55); transition: width .35s, height .35s, border-width .35s; pointer-events: none; }
+.ws-bubble img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ws-bubble.pop { width: 120px; height: 120px; border-width: 4px; }
+@media (prefers-reduced-motion: reduce) { .ws-bubble { transition: none; } }
+
