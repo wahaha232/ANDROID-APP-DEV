@@ -42,6 +42,64 @@ test("路線：同一站、不存在的站 → null", () => {
   assert.equal(M.route(g, 999999, byName("頂埔").id), null);
 });
 
+// 舊版（不計轉乘）的單純最短距離，作為懲罰＝0 時的對照。
+function plainShortest(from, to) {
+  const dist = { [from]: 0 }, done = {};
+  for (;;) {
+    let u = null;
+    for (const id in dist) if (!done[id] && (u == null || dist[id] < dist[u])) u = id;
+    if (u == null) return null;
+    if (String(u) === String(to)) return dist[u];
+    done[u] = true;
+    for (const h of g.adj[u]) { const nd = dist[u] + h.m; if (dist[h.to] == null || nd < dist[h.to]) dist[h.to] = nd; }
+  }
+}
+// 由 hops 數換線次數（起點第一段不算）。
+const countChanges = (r) => r.hops.reduce((n, h, i) => n + (i > 0 && metro.edges[h.edge].l !== metro.edges[r.hops[i - 1].edge].l ? 1 : 0), 0);
+
+test("轉乘懲罰＝0：距離與舊版最短路徑一致", () => {
+  const ids = metro.stations.map((s) => s.id).filter((_, i) => i % 6 === 0);
+  for (const a of ids) for (const b of ids) {
+    if (a === b) continue;
+    const r = M.route(g, a, b, { transferPenaltyM: 0 }), ref = plainShortest(a, b);
+    assert.equal(r == null, ref == null);
+    if (r) assert.ok(Math.abs(r.lengthM - ref) < 1e-6, `${a}→${b}: ${r.lengthM} vs ${ref}`);
+  }
+  const r = M.route(g, byName("新埔").id, byName("頂埔").id, { transferPenaltyM: 0 });
+  assert.deepEqual(r.lines, ["BL"]);
+});
+
+test("轉乘懲罰：忠孝復興 → 台電大樓 改走轉乘較少的路線，距離回報實際公尺", () => {
+  const a = byName("忠孝復興").id, b = byName("台電大樓").id;
+  const z = M.route(g, a, b, { transferPenaltyM: 0 }), p = M.route(g, a, b);
+  assert.equal(M.DEFAULTS.transferPenaltyM, 600);
+  assert.ok(p.transfers < z.transfers, `${p.transfers} vs ${z.transfers}`);
+  assert.ok(p.lengthM >= z.lengthM && p.lengthM - z.lengthM < 600, `${p.lengthM} vs ${z.lengthM}`);
+  const sum = p.hops.reduce((s, h) => s + metro.edges[h.edge].m, 0);
+  assert.ok(Math.abs(p.lengthM - sum) < 1e-6, "lengthM 不含懲罰");
+  assert.deepEqual(M.route(g, a, b, { transferPenaltyM: 600 }).stations, p.stations);
+});
+
+test("轉乘懲罰：起點第一段不算轉乘（從轉乘站出發、只搭一條線）", () => {
+  const huge = { transferPenaltyM: 1e9 };
+  const r1 = M.route(g, byName("忠孝復興").id, byName("大安").id, huge);
+  assert.equal(r1.transfers, 0);
+  assert.equal(r1.lines.length, 1);
+  const r2 = M.route(g, byName("新埔").id, byName("頂埔").id, huge);
+  assert.equal(r2.transfers, 0);
+  assert.ok(r2.lengthM > 8500 && r2.lengthM < 10500, "length " + r2.lengthM);
+});
+
+test("轉乘懲罰：transfers 等於路徑上的換線次數", () => {
+  assert.ok(M.route(g, byName("淡水").id, byName("頂埔").id).transfers >= 1);
+  const ids = metro.stations.map((s) => s.id).filter((_, i) => i % 9 === 0);
+  for (const pen of [0, 600]) for (const a of ids) for (const b of ids) {
+    if (a === b) continue;
+    const r = M.route(g, a, b, { transferPenaltyM: pen });
+    if (r) assert.equal(r.transfers, countChanges(r), `${a}→${b} pen=${pen}`);
+  }
+});
+
 test("主要捷運線互相連通（不會有孤立的路網）", () => {
   const main = metro.stations.filter((s) => ["台北車站", "淡水", "南港展覽館", "松山", "動物園", "南勢角", "頂埔", "象山", "新店"].includes(s.n));
   assert.ok(main.length >= 8);
