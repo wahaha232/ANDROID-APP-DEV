@@ -1,0 +1,14 @@
+{
+  "tracks": {
+    "fx-bike": {
+      "title": "測試用單車",
+      "notes": "假資料",
+      "mode": "BICYCLE"
+    },
+    "fx-walk": {
+      "title": "",
+      "notes": "",
+      "mode": "RUNNING"
+    }
+  }
+}

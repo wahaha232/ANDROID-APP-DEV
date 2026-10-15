@@ -1,0 +1,39 @@
+name: GPS Tracker Web Tests
+
+# 只跑網站的 node --test；不建置 APK、不發布 Release。
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'gpstracker-web/**'
+      - '.github/workflows/gpstracker-web-test.yml'
+  pull_request:
+    paths:
+      - 'gpstracker-web/**'
+      - '.github/workflows/gpstracker-web-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: gpstracker-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run web tests
+        run: >-
+          node --test
+          tests/pages.test.js tests/challenges.test.js tests/gt-core.test.js tests/gt-metro.test.js
+          tests/route-features.test.js tests/recap.test.js tests/splits.test.js tests/gpx.test.js tests/photos.test.js

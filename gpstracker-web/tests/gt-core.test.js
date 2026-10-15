@@ -4,14 +4,16 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const G = require("../gt-core.js");
+const FX = require("./fixtures");
 
 const T0 = new Date(2026, 9, 11, 14, 8).getTime(); // 本地時間 2026/10/11 14:08
+const FX_PTS = FX.track("fx-walk").points.slice(0, 2); // 共用 fixture 的前兩點（假資料）
 
 function track(over) {
   return Object.assign({
     trackId: "t1", startTimeMs: T0, durationMs: 2613552, distanceMeters: 14211.09, avgSpeedMps: 3.975, maxSpeedMps: 10,
     stepCount: 1521, stepSource: "GOOGLE_FIT", dominantMode: "BICYCLE", totalAscentMeters: 145.4, totalDescentMeters: 104.1,
-    gpsPointCount: 1082, photoCount: 3, maxAltitudeMeters: 57.2, points: [[121.45, 25.05, 21.8, 0, 0], [121.46, 25.06, 30, 3, 60]]
+    gpsPointCount: 1082, photoCount: 3, maxAltitudeMeters: 57.2, points: FX_PTS
   }, over || {});
 }
 
@@ -167,11 +169,11 @@ test("移動方式占比（segments 為 [模式, 起秒, 迄秒]）", () => {
 });
 
 test("GPX：點數、座標順序、時間與跳脫", () => {
-  const t = track({ points: [[121.45, 25.05, 21.8, 0, 0], [121.46, 25.06, 30, 3, 60]] });
+  const t = track({ points: FX_PTS });
   const x = G.gpx(t);
   assert.equal((x.match(/<trkpt /g) || []).length, 2);
-  assert.ok(x.includes('lat="25.05" lon="121.45"'));
-  assert.ok(x.includes(new Date(T0 + 60000).toISOString()));
+  assert.ok(x.includes(`lat="${FX_PTS[0][1]}" lon="${FX_PTS[0][0]}"`));
+  assert.ok(x.includes(new Date(T0 + FX_PTS[1][4] * 1000).toISOString()));
   assert.ok(x.startsWith('<?xml version="1.0"'));
   assert.equal(G.escapeHtml('<a href="x">&\''), "&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
 });
@@ -200,4 +202,20 @@ test("實際資料檔：線上 manifest 與軌跡檔可被新介面的函式處�
     const spanSec = (t.endTimeMs - t.startTimeMs) / 1000;
     for (const s of t.segments || []) assert.ok(s[2] <= spanSec + 2, "segments 結束秒超出整趟長度");
   }
+});
+
+test("共用 fixture：manifest、meta 與軌跡檔可被新介面的函式處理", () => {
+  const man = FX.manifest(), meta = FX.meta().tracks;
+  assert.deepEqual(man.tracks.map(e => e.trackId), ["fx-bike", "fx-walk"]);
+  for (const e of man.tracks) {
+    const t = FX.track(e.trackId);
+    assert.equal(t.trackId, e.trackId);
+    assert.equal(t.gpsPointCount, t.points.length);
+    assert.ok(G.routePath(t.points, 100, 60));
+    assert.ok(G.trackFields(t).length > 0);
+    assert.ok(Math.abs(G.splits(t.points).reduce((a, s) => a + s.distanceM, 0) - t.distanceMeters) < 1, "分段總距離 ≈ 整趟距離");
+  }
+  assert.equal(G.activityTitle(man.tracks[0], meta), "測試用單車");
+  assert.equal(G.modeOf(man.tracks[1], meta), "RUNNING", "meta.mode 覆寫 App 判斷");
+  assert.equal(G.filterTracks(man.tracks, { q: "假資料", meta }).length, 1);
 });

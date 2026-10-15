@@ -1,0 +1,34 @@
+{
+ "updatedAt": 1790172800000,
+ "tracks": [
+  {
+   "trackId": "fx-bike",
+   "startTimeMs": 1790086400000,
+   "distanceMeters": 3000.2,
+   "durationMs": 600000,
+   "avgSpeedMps": 5.0,
+   "maxSpeedMps": 5.0,
+   "stepCount": 0,
+   "dominantMode": "BICYCLE",
+   "totalAscentMeters": 30.0,
+   "totalDescentMeters": 30.0,
+   "photoCount": 0,
+   "file": "fx-bike.json"
+  },
+  {
+   "trackId": "fx-walk",
+   "startTimeMs": 1790000000000,
+   "distanceMeters": 840.21,
+   "durationMs": 600000,
+   "avgSpeedMps": 1.4,
+   "maxSpeedMps": 1.4,
+   "stepCount": 1100,
+   "dominantMode": "WALKING",
+   "totalAscentMeters": 16.0,
+   "totalDescentMeters": 16.0,
+   "photoCount": 0,
+   "file": "fx-walk.json",
+   "stepSource": "SENSOR"
+  }
+ ]
+}
