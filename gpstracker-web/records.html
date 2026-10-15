@@ -57,6 +57,7 @@
         <label>資料夾路徑<input id="cfgData" placeholder="gpstracker-web/data" /></label>
         <label>GitHub Token（fine-grained PAT，Contents: Read and write）<input id="cfgToken" type="password" autocomplete="off" placeholder="github_pat_..." /></label>
       </div>
+      <label style="display:block;margin-top:8px"><input type="checkbox" id="cfgTokenSession" /> 只在此分頁記住 Token（sessionStorage，關閉分頁即清除；未勾選則長期存在此瀏覽器的 localStorage）</label>
       <div class="btn-row">
         <button class="btn" id="saveCfg">儲存設定</button>
         <button class="btn secondary" id="clearCfg">清除 Token</button>
@@ -88,6 +89,6 @@
   </main>
 
   <script defer src="gt-gpx.js?v=f92801bb"></script>
-  <script defer src="records.js?v=627fe7d7"></script>
+  <script defer src="records.js?v=965ac035"></script>
 </body>
 </html>

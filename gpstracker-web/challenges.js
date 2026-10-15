@@ -189,7 +189,7 @@
       { ic: "📸", name: "百張收藏", desc: "累積拍攝 " + p.totalHundred + " 張照片", m: { cur: core.totalPhotos, target: p.totalHundred } },
       { ic: "🏔️", name: "制高點", desc: "單次活動最高海拔 ≥ 500 m（需軌跡資料）", m: { cur: (explore && explore.maxAlt) || 0, target: 500 }, pending: !explore },
       { ic: "🧭", name: "跨區域旅程", desc: "單次軌跡經緯跨度 ≥ " + T.explore.crossRegionDeg + "°", m: { cur: (explore && explore.maxSpan) || 0, target: T.explore.crossRegionDeg }, pending: !explore },
-      { ic: "🎨", name: "軌跡藝術家", desc: "在軌跡藝術頁匯出一次作品", m: { cur: artExported() ? 1 : 0, target: 1 } }
+      { ic: "🎨", name: "軌跡藝術家（本機瀏覽器紀錄）", desc: "在軌跡藝術頁匯出一次作品", m: { cur: artExported() ? 1 : 0, target: 1 } }
     ];
   }
 

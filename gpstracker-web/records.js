@@ -1,6 +1,6 @@
 // 紀錄管理：瀏覽所有已上傳紀錄，支援下載、編輯備註（overlay meta.json）、刪除。
 // 讀取：無 Token 時走同源相對路徑；有 Token 時走 GitHub API（較即時）。
-// 寫入（編輯/刪除）：需要 GitHub Token（存於 localStorage），使用 GitHub Contents API。
+// 寫入（編輯/刪除）：需要 GitHub Token（預設存於 localStorage；可勾選只存 sessionStorage，關閉分頁即清除），使用 GitHub Contents API。
 (function () {
   "use strict";
 
@@ -32,11 +32,13 @@
   // ---- 設定 ----
   function loadCfg() {
     function g(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
+    var st = ""; try { st = sessionStorage.getItem(LS.token) || ""; } catch (e) {}
     return {
       repo: g(LS.repo, DEFAULTS.repo),
       branch: g(LS.branch, DEFAULTS.branch),
       data: g(LS.data, DEFAULTS.data),
-      token: g(LS.token, "")
+      token: st || g(LS.token, ""),
+      tokenSession: !!st
     };
   }
   function saveCfg() {
@@ -44,18 +46,28 @@
       repo: $("cfgRepo").value.trim() || DEFAULTS.repo,
       branch: $("cfgBranch").value.trim() || DEFAULTS.branch,
       data: $("cfgData").value.trim() || DEFAULTS.data,
-      token: $("cfgToken").value.trim()
+      token: $("cfgToken").value.trim(),
+      tokenSession: $("cfgTokenSession").checked
     };
     try {
       localStorage.setItem(LS.repo, cfg.repo); localStorage.setItem(LS.branch, cfg.branch);
-      localStorage.setItem(LS.data, cfg.data); localStorage.setItem(LS.token, cfg.token);
+      localStorage.setItem(LS.data, cfg.data);
     } catch (e) {}
+    // 只在此分頁記住：存 sessionStorage 並清掉 localStorage 內的 Token；否則維持原本存 localStorage。
+    if (cfg.tokenSession) {
+      try { sessionStorage.setItem(LS.token, cfg.token); } catch (e) {}
+      try { localStorage.removeItem(LS.token); } catch (e) {}
+    } else {
+      try { localStorage.setItem(LS.token, cfg.token); } catch (e) {}
+      try { sessionStorage.removeItem(LS.token); } catch (e) {}
+    }
     applyCfgToForm();
     render();
   }
   function applyCfgToForm() {
     $("cfgRepo").value = cfg.repo; $("cfgBranch").value = cfg.branch; $("cfgData").value = cfg.data; $("cfgToken").value = cfg.token;
-    $("cfgState").textContent = cfg.token ? "✅ 已設定 Token（可編輯/刪除）" : "（未設定 Token，僅能瀏覽/下載）";
+    $("cfgTokenSession").checked = !!cfg.tokenSession;
+    $("cfgState").textContent = cfg.token ? ("✅ 已設定 Token（可編輯/刪除）" + (cfg.tokenSession ? "・僅此分頁" : "")) : "（未設定 Token，僅能瀏覽/下載）";
   }
   function canWrite() { return !!cfg.token; }
 
@@ -417,7 +429,7 @@
   $("deleteSel").addEventListener("click", function () { deleteRecords(selectedIds()); });
   $("refresh").addEventListener("click", load);
   $("saveCfg").addEventListener("click", saveCfg);
-  $("clearCfg").addEventListener("click", function () { try { localStorage.removeItem(LS.token); } catch (e) {} cfg.token = ""; applyCfgToForm(); render(); setNote("已清除 Token。", "ok"); });
+  $("clearCfg").addEventListener("click", function () { try { localStorage.removeItem(LS.token); } catch (e) {} try { sessionStorage.removeItem(LS.token); } catch (e) {} cfg.token = ""; applyCfgToForm(); render(); setNote("已清除 Token。", "ok"); });
 
   applyCfgToForm();
   load();
