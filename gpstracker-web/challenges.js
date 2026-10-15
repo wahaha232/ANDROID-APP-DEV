@@ -21,20 +21,6 @@
     steps: { dailyGoal: 8000 }          // 每日步數目標（步數統計分頁的達標線）
   };
 
-  var MODE_EMOJI = {
-    WALKING: "🚶", RUNNING: "🏃", BICYCLE: "🚲", CYCLING: "🚲", VEHICLE: "🚗", DRIVING: "🚗",
-    CAR: "🚗", MOTORCYCLE: "🏍️", TRAIN: "🚆", BUS: "🚌", BOAT: "⛵", STATIONARY: "🧍", PUBLIC_TRANSPORT: "🚌", AIRPLANE: "✈️", UNKNOWN: "❓"
-  };
-  var MODE_NAME = {
-    WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", VEHICLE: "車輛", DRIVING: "開車",
-    CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車", BUS: "公車", BOAT: "船", STATIONARY: "靜止", PUBLIC_TRANSPORT: "大眾運輸", AIRPLANE: "飛機", UNKNOWN: "未知"
-  };
-  var MODE_GROUP = {
-    WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", MOTORCYCLE: "機車",
-    VEHICLE: "汽車", DRIVING: "汽車", CAR: "汽車", TRAIN: "大眾運輸", BUS: "大眾運輸",
-    BOAT: "船", STATIONARY: "其他/未知", PUBLIC_TRANSPORT: "大眾運輸", AIRPLANE: "飛機", UNKNOWN: "未知"
-  };
-
   var MILESTONES = [
     { name: "🛰️ ISS 軌道高度", km: 400 },
     { name: "🏃 馬拉松", km: 42.195 },
@@ -75,18 +61,13 @@
   function pad(n) { return (n < 10 ? "0" : "") + n; }
   function fmtKm(v) { return v.toLocaleString("zh-Hant", { maximumFractionDigits: 2 }); }
   function fmtInt(v) { return Math.round(v).toLocaleString("zh-Hant"); }
-  function fmtDate(ms) {
-    var d = new Date(ms);
-    return d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
-  }
-  function fmtDay(ms) { var d = new Date(ms); return d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate()); }
+  var fmtDate = GTCore.fmtDate, fmtDay = GTCore.fmtDay;
   function fmtDur(ms) {
     var s = Math.floor((ms || 0) / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
     return h > 0 ? (h + "h " + m + "m") : (m + "m");
   }
-  function modeEmoji(m) { return MODE_EMOJI[m] || "❓"; }
-  function modeName(m) { return MODE_NAME[m] || m || "未知"; }
-  function modeGroup(m) { return MODE_GROUP[m] || "其他/未知"; }
+  // 模式表統一由 GTCore 提供（競賽中心沿用 TRAIN「火車」短名稱與自己的分組）。
+  var modeEmoji = GTCore.modeEmoji, modeName = GTCore.modeNameShort, modeGroup = GTCore.modeGroup;
 
   // ===== 日期（本地時區） =====
   function startOfWeek(ms) { var d = new Date(ms); var w = (d.getDay() + 6) % 7; d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - w); return d.getTime(); }

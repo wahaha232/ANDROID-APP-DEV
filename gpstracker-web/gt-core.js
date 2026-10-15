@@ -15,6 +15,13 @@
     WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", VEHICLE: "車輛", DRIVING: "開車",
     CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車／捷運", BUS: "公車", BOAT: "船", STATIONARY: "靜止", PUBLIC_TRANSPORT: "大眾運輸", AIRPLANE: "飛機", UNKNOWN: "未知"
   };
+  // 競賽中心（challenges.js）沿用的分組與短名稱：TRAIN 顯示「火車」而非「火車／捷運」。
+  var MODE_GROUP = {
+    WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", MOTORCYCLE: "機車",
+    VEHICLE: "汽車", DRIVING: "汽車", CAR: "汽車", TRAIN: "大眾運輸", BUS: "大眾運輸",
+    BOAT: "船", STATIONARY: "其他/未知", PUBLIC_TRANSPORT: "大眾運輸", AIRPLANE: "飛機", UNKNOWN: "未知"
+  };
+  var MODE_NAME_SHORT = { TRAIN: "火車" };
   var STEP_SOURCE = { ZEPP_LIFE: "Zepp Life", GOOGLE_FIT: "Google Fit", SENSOR: "手機感測器", SENSOR_FALLBACK: "手機感測器・待補同步" };
 
   var MODE_COLOR = {
@@ -52,6 +59,8 @@
 
   function modeEmoji(m) { return MODE_EMOJI[m] || "❓"; }
   function modeName(m) { return MODE_NAME[m] || m || "未知"; }
+  function modeNameShort(m) { return MODE_NAME_SHORT[m] || modeName(m); }
+  function modeGroup(m) { return MODE_GROUP[m] || "其他/未知"; }
   function pad(n) { return (n < 10 ? "0" : "") + n; }
   function num(v) { return typeof v === "number" && isFinite(v) ? v : 0; }
 
@@ -448,6 +457,7 @@
 
   return {
     MODE_EMOJI: MODE_EMOJI, MODE_NAME: MODE_NAME, MODE_COLOR: MODE_COLOR, altitudeSeries: altitudeSeries,
+    MODE_GROUP: MODE_GROUP, MODE_NAME_SHORT: MODE_NAME_SHORT, modeNameShort: modeNameShort, modeGroup: modeGroup,
     modeEmoji: modeEmoji, modeName: modeName, modeOf: modeOf, modeOverridden: modeOverridden, pad: pad,
     fmtDay: fmtDay, fmtTime: fmtTime, fmtDate: fmtDate, fmtDur: fmtDur, fmtClock: fmtClock, fmtKm: fmtKm, fmtInt: fmtInt,
     kmh: kmh, stepSourceLabel: stepSourceLabel, escapeHtml: escapeHtml,

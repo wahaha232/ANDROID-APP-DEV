@@ -8,9 +8,6 @@
   var LS = { repo: "gpst_gh_repo", branch: "gpst_gh_branch", data: "gpst_gh_data", token: "gpst_gh_token" };
   var DEFAULTS = { repo: "wahaha232/ANDROID-APP-DEV", branch: "main", data: "gpstracker-web/data", token: "" };
 
-  var MODE_EMOJI = { WALKING: "🚶", RUNNING: "🏃", BICYCLE: "🚲", CYCLING: "🚲", VEHICLE: "🚗", DRIVING: "🚗", CAR: "🚗", MOTORCYCLE: "🏍️", TRAIN: "🚆", BUS: "🚌", BOAT: "⛵", STATIONARY: "🧍", PUBLIC_TRANSPORT: "🚌", AIRPLANE: "✈️", UNKNOWN: "❓" };
-  var MODE_NAME = { WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", VEHICLE: "車輛", DRIVING: "開車", CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車／捷運", BUS: "公車", BOAT: "船", STATIONARY: "靜止", PUBLIC_TRANSPORT: "大眾運輸", AIRPLANE: "飛機", UNKNOWN: "未知" };
-
   var cfg = loadCfg();
   var tracks = [];
   var meta = { tracks: {} };
@@ -19,12 +16,11 @@
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return (n < 10 ? "0" : "") + n; }
-  function fmtDate(ms) { var d = new Date(ms); return d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  var fmtDate = GTCore.fmtDate;
   function fmtDur(ms) { var s = Math.floor((ms || 0) / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return (h > 0 ? h + "h " : "") + m + "m"; }
   function kmOf(t) { return (t.distanceMeters || 0) / 1000; }
   function fmtKm(v) { return v.toLocaleString("zh-Hant", { maximumFractionDigits: 3 }); }
-  function modeEmoji(m) { return MODE_EMOJI[m] || "❓"; }
-  function modeName(m) { return MODE_NAME[m] || m || "未知"; }
+  var modeEmoji = GTCore.modeEmoji, modeName = GTCore.modeName;
   // 使用者可編輯的移動方式（存在 meta.json 的 mode；沒有就用 App 判斷的 dominantMode）。
   var EDITABLE_MODES = ["WALKING", "RUNNING", "BICYCLE", "MOTORCYCLE", "CAR", "PUBLIC_TRANSPORT", "BUS", "TRAIN", "AIRPLANE", "BOAT", "UNKNOWN"];
   function effMode(t) { var m = meta.tracks[t.trackId]; return (m && m.mode) || t.dominantMode; }

@@ -219,3 +219,24 @@ test("共用 fixture：manifest、meta 與軌跡檔可被新介面的函式處�
   assert.equal(G.modeOf(man.tracks[1], meta), "RUNNING", "meta.mode 覆寫 App 判斷");
   assert.equal(G.filterTracks(man.tracks, { q: "假資料", meta }).length, 1);
 });
+
+test("IMP-05：各頁模式 emoji／名稱／分組改由 GTCore 提供，顯示結果不變", () => {
+  const modes = ["WALKING", "RUNNING", "BICYCLE", "CYCLING", "VEHICLE", "DRIVING", "CAR", "MOTORCYCLE", "TRAIN", "BUS", "BOAT", "STATIONARY", "PUBLIC_TRANSPORT", "AIRPLANE", "UNKNOWN", "XYZ", undefined];
+  const name = { WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", VEHICLE: "車輛", DRIVING: "開車", CAR: "開車", MOTORCYCLE: "機車", TRAIN: "火車／捷運", BUS: "公車", BOAT: "船", STATIONARY: "靜止", PUBLIC_TRANSPORT: "大眾運輸", AIRPLANE: "飛機", UNKNOWN: "未知" };
+  const group = { WALKING: "步行", RUNNING: "跑步", BICYCLE: "單車", CYCLING: "單車", MOTORCYCLE: "機車", VEHICLE: "汽車", DRIVING: "汽車", CAR: "汽車", TRAIN: "大眾運輸", BUS: "大眾運輸", BOAT: "船", STATIONARY: "其他/未知", PUBLIC_TRANSPORT: "大眾運輸", AIRPLANE: "飛機", UNKNOWN: "未知" };
+  for (const m of modes) {
+    assert.equal(G.modeName(m), name[m] || m || "未知");
+    assert.equal(G.modeNameShort(m), m === "TRAIN" ? "火車" : (name[m] || m || "未知"));
+    assert.equal(G.modeGroup(m), group[m] || "其他/未知");
+  }
+  for (const f of ["challenges.js", "records.js"]) {
+    const src = fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+    assert.ok(!/var MODE_(EMOJI|NAME|GROUP)\b/.test(src), f + " 不應再自帶模式表");
+    assert.ok(/GTCore\.modeEmoji/.test(src), f + " 應改用 GTCore");
+  }
+  for (const h of ["challenges.html", "records.html"]) {
+    const html = fs.readFileSync(path.join(__dirname, "..", h), "utf8");
+    const i = html.indexOf("gt-core.js"), j = html.indexOf('src="' + h.replace(".html", ".js") + "?");
+    assert.ok(i >= 0 && i < j, h + " 須先載入 gt-core.js");
+  }
+});
