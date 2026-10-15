@@ -7,6 +7,8 @@ import android.util.Base64
 import com.startinsnow.gpstracker.export.ExportTrackData
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -38,7 +40,7 @@ class WebDashboardUploader(
         trackId: String,
         payload: Payload
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        writeLock.withLock { runCatching {
             val dir = dataPath.trim('/')
             // 照片縮圖先上傳（軌跡檔參照它們）；縮圖不會改變，已存在就略過。
             payload.photoFiles.forEach { pf ->
@@ -70,11 +72,11 @@ class WebDashboardUploader(
                     break
                 } catch (e: GitHubApiException) {
                     attempt++
-                    if ((e.code == 409 || e.code == 422) && attempt < MAX_MANIFEST_ATTEMPTS) continue
+                    if (isWriteConflict(e) && attempt < MAX_MANIFEST_ATTEMPTS) { backoff(attempt); continue }
                     throw e
                 }
             }
-        }
+        } }
     }
 
     /**
@@ -109,7 +111,7 @@ class WebDashboardUploader(
         content: String,
         message: String
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching { putContent(token, repo, branch, path, content, message) }
+        writeLock.withLock { runCatching { putContent(token, repo, branch, path, content, message) } }
     }
 
     /** 把一筆編輯合併進網頁的 meta.json（只動這一筆，其他筆原封不動）；遇到寫入衝突（409／422）重讀再合併重試。 */
@@ -117,7 +119,7 @@ class WebDashboardUploader(
         token: String, repo: String, branch: String, dataPath: String, trackId: String,
         edit: com.startinsnow.gpstracker.core.edits.TrackEdit?
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        writeLock.withLock { runCatching {
             val path = dataPath.trim('/') + "/meta.json"
             var attempt = 0
             while (true) {
@@ -128,11 +130,11 @@ class WebDashboardUploader(
                     break
                 } catch (e: GitHubApiException) {
                     attempt++
-                    if ((e.code == 409 || e.code == 422) && attempt < MAX_MANIFEST_ATTEMPTS) continue
+                    if (isWriteConflict(e) && attempt < MAX_MANIFEST_ATTEMPTS) { backoff(attempt); continue }
                     throw e
                 }
             }
-        }
+        } }
     }
 
     private data class ContentFile(val content: String, val sha: String?)
@@ -160,6 +162,23 @@ class WebDashboardUploader(
         putBytes(token, repo, branch, path, content.toByteArray(Charsets.UTF_8), message, sha)
 
     private fun putBytes(token: String, repo: String, branch: String, path: String, bytes: ByteArray, message: String, sha: String? = null) {
+        // 呼叫端已帶 sha（讀-改-寫）時，衝突要由呼叫端重讀再合併，這裡不能自己重試。
+        // 沒帶 sha 的單純覆寫則可以直接重試：GitHub 的 409 "is at X but expected Y" 是分支最新 commit
+        // 在寫入瞬間被別的寫入推進了（兩個同步同時跑、自動同步 workflow 剛好提交），重試時重新查 sha 即可。
+        if (sha != null) return putBytesOnce(token, repo, branch, path, bytes, message, sha)
+        var attempt = 0
+        while (true) {
+            try {
+                return putBytesOnce(token, repo, branch, path, bytes, message, null)
+            } catch (e: GitHubApiException) {
+                attempt++
+                if (!isWriteConflict(e) || attempt >= MAX_WRITE_ATTEMPTS) throw e
+                backoff(attempt)
+            }
+        }
+    }
+
+    private fun putBytesOnce(token: String, repo: String, branch: String, path: String, bytes: ByteArray, message: String, sha: String?) {
         // 未提供 sha 時先查既有檔案：GitHub Contents API 對「路徑已存在但未帶 sha」的更新會回 422，
         // 造成同一筆紀錄重複上傳或失敗重試時無法寫入。補上 sha 讓上傳具冪等性。
         val effectiveSha = sha ?: getContent(token, repo, branch, path)?.sha
@@ -183,9 +202,20 @@ class WebDashboardUploader(
 
     class GitHubApiException(val code: Int, val body: String) : Exception("GitHub API error $code: ${body.take(200)}")
 
+    private fun isWriteConflict(e: GitHubApiException) = e.code == 409 || e.code == 422
+
+    /** 衝突後稍等再重試（遞增並加亂數），避免兩邊同時重試又撞在一起。 */
+    private fun backoff(attempt: Int) {
+        Thread.sleep(500L * attempt + (0..400).random())
+    }
+
     companion object {
         private const val MAX_POINTS = 20000
-        private const val MAX_MANIFEST_ATTEMPTS = 3
+
+        /** 同一個 App 內所有寫入 GitHub 的動作排隊執行，避免自己的兩個同步互相造成分支衝突。 */
+        private val writeLock = Mutex()
+        private const val MAX_MANIFEST_ATTEMPTS = 5
+        private const val MAX_WRITE_ATTEMPTS = 5
 
         private object SharedClient {
             val instance: OkHttpClient by lazy {
