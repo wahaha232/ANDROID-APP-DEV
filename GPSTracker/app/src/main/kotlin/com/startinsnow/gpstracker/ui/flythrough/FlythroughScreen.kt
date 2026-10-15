@@ -78,6 +78,9 @@ import com.startinsnow.gpstracker.service.FlyoverRecordingService
 import com.startinsnow.gpstracker.ui.detail.TrackDetailViewModel
 import com.startinsnow.gpstracker.ui.share.ShareUtils
 import org.json.JSONArray
+import com.startinsnow.gpstracker.export.PhotoThumbnails
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 private val SPEED_OPTIONS = listOf(1.0, 2.0, 4.0, 8.0, 16.0)
@@ -95,6 +98,10 @@ private val TIKTOK_PACKAGES = listOf(
  * 圖磚與地形使用 0 元、免金鑰的來源（Esri 衛星 + AWS Terrarium DEM）。
  * 相機沿 GPS 軌跡飛行，可錄成 MP4 並透過系統分享面板分享到社群。
  */
+/** 飛越畫面照片泡泡用的縮圖：顯示尺寸最大約 120dp，所以 240px 就夠清楚，又不會讓傳進 WebView 的字串太大。 */
+private const val BUBBLE_EDGE_PX = 240
+private const val BUBBLE_QUALITY = 75
+
 @SuppressLint("JavascriptInterface", "SetJavaScriptEnabled")
 @Composable
 fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
@@ -105,6 +112,7 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
     )
 
     val points by viewModel.points.collectAsStateWithLifecycle()
+    val photos by viewModel.photos.collectAsStateWithLifecycle()
     val track by viewModel.track.collectAsStateWithLifecycle()
     val isRecording by FlyoverRecorderState.isRecording.collectAsStateWithLifecycle()
     val lastFile by FlyoverRecorderState.lastFile.collectAsStateWithLifecycle()
@@ -162,6 +170,28 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
             .put("properties", JSONObject())
             .put("geometry", geometry)
         js("setRoute(${JSONObject.quote(feature.toString())}, ${JSONObject.quote(hudArray.toString())})")
+    }
+
+    // 起點／終點圖釘與照片泡泡：照片縮成小圖（data URL）帶進地圖；沒有座標的照片已由 ViewModel 依時間補上位置。
+    LaunchedEffect(points, photos, mapReady) {
+        if (!mapReady) return@LaunchedEffect
+        if (points.count { it.reliability == "TRUSTED" } < 2) return@LaunchedEffect
+        val photoArray = withContext(Dispatchers.IO) {
+            JSONArray().also { arr ->
+                photos.filter { it.latitude != null && it.longitude != null }
+                    .take(PhotoThumbnails.MAX_PHOTOS_PER_TRACK)
+                    .forEach { ph ->
+                        val jpeg = PhotoThumbnails.makeJpeg(ph.filePath, maxEdge = BUBBLE_EDGE_PX, quality = BUBBLE_QUALITY) ?: return@forEach
+                        arr.put(
+                            JSONObject()
+                                .put("lon", ph.longitude)
+                                .put("lat", ph.latitude)
+                                .put("url", "data:image/jpeg;base64," + Base64.encodeToString(jpeg, Base64.NO_WRAP))
+                        )
+                    }
+            }
+        }
+        js("setMarkers(${JSONObject.quote(photoArray.toString())})")
     }
 
     // 分享快照。

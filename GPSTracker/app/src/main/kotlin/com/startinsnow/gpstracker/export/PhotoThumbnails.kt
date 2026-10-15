@@ -51,21 +51,21 @@ object PhotoThumbnails {
         else -> 0
     }
 
-    /** 產生縮圖 JPEG；檔案不存在、無法解碼或任何錯誤都回傳 null（呼叫端就不上傳這張）。 */
-    fun makeJpeg(filePath: String): ByteArray? = runCatching {
+    /** 產生縮圖 JPEG（預設給網頁上傳；3D 飛越的小圓形照片用較小的 [maxEdge]）；檔案不存在、無法解碼或任何錯誤都回傳 null（呼叫端就不上傳這張）。 */
+    fun makeJpeg(filePath: String, maxEdge: Int = MAX_EDGE, quality: Int = QUALITY): ByteArray? = runCatching {
         val file = File(filePath)
         if (!file.isFile) return null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(filePath, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight) }
+        val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, maxEdge) }
         var bmp: Bitmap = BitmapFactory.decodeFile(filePath, opts) ?: return null
-        val (tw, th) = targetSize(bmp.width, bmp.height)
+        val (tw, th) = targetSize(bmp.width, bmp.height, maxEdge)
         if (tw != bmp.width || th != bmp.height) bmp = Bitmap.createScaledBitmap(bmp, tw, th, true)
         val rotation = rotationDegrees(ExifInterface(filePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL))
         if (rotation != 0) bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, Matrix().apply { postRotate(rotation.toFloat()) }, true)
         ByteArrayOutputStream().use { out ->
-            bmp.compress(Bitmap.CompressFormat.JPEG, QUALITY, out)
+            bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)
             out.toByteArray()
         }
     }.getOrNull()

@@ -21,6 +21,25 @@
     #hud .unit { font-size: 12px; opacity: 0.75; margin-left: 3px; }
     #hud .row { font-size: 13px; margin-top: 4px; opacity: 0.95; }
     #hud .label { opacity: 0.6; }
+    /* 路線上的圖釘（起點／終點）與照片泡泡，樣式仿 Relive 的 3D 飛越。 */
+    .pin-wrap { display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+    .pin-label {
+      background: #fff; color: #222; font: 700 12px/1 -apple-system, Roboto, "Noto Sans TC", sans-serif;
+      padding: 4px 9px; border-radius: 5px; margin-bottom: 5px; box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+      white-space: nowrap;
+    }
+    .pin { width: 30px; height: 40px; position: relative; filter: drop-shadow(0 3px 3px rgba(0,0,0,0.5)); }
+    .pin i {
+      position: absolute; left: 0; top: 2px; width: 24px; height: 24px; background: var(--c, #FFD400);
+      border: 3px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); transform-origin: 50% 50%;
+    }
+    .pin i::after { content: ""; position: absolute; left: 5px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+    .photo-bubble {
+      width: 54px; height: 54px; border-radius: 50%; border: 3px solid #fff; overflow: hidden; background: #333;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.55); transition: width .35s, height .35s, border-width .35s; pointer-events: none;
+    }
+    .photo-bubble img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .photo-bubble.pop { width: 120px; height: 120px; border-width: 4px; }
   </style>
 </head>
 <body>
@@ -101,21 +120,27 @@
     if (!routeAdded && coords.length > 0) {
       routeAdded = true;
       map.addSource("planned", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } } });
+      // 整條路線一開始就以較淡的黃色畫出，走過的部分再疊上亮黃色；底下加一條深色描邊讓線在衛星圖上更清楚。
+      map.addLayer({
+        id: "planned-casing", type: "line", source: "planned",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#000000", "line-width": 9, "line-opacity": 0.35, "line-blur": 1.5 }
+      });
       map.addLayer({
         id: "planned-line", type: "line", source: "planned",
         layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#ffffff", "line-width": 4, "line-opacity": 0.35, "line-dasharray": [2, 2] }
+        paint: { "line-color": "#FFD400", "line-width": 5, "line-opacity": 0.5 }
       });
       map.addSource("traveled", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } } });
       map.addLayer({
         id: "traveled-line", type: "line", source: "traveled",
         layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#00E676", "line-width": 6, "line-opacity": 0.98 }
+        paint: { "line-color": "#FFD400", "line-width": 6.5, "line-opacity": 1 }
       });
       map.addSource("marker", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: "marker-dot", type: "circle", source: "marker",
-        paint: { "circle-radius": 9, "circle-color": "#FF3D00", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 }
+        paint: { "circle-radius": 9, "circle-color": "#FF3D00", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3, "circle-pitch-alignment": "map" }
       });
     } else if (routeAdded) {
       map.getSource("planned").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
@@ -123,6 +148,74 @@
     progress = 0;
     fitView();
     applyFrame(true);
+  }
+
+  // ---- 起點／終點圖釘與照片泡泡 ----
+  var domMarkers = [];
+  var photoItems = [];   // { el, frac }
+
+  function clearMarkers() {
+    domMarkers.forEach(function (m) { m.remove(); });
+    domMarkers = [];
+    photoItems = [];
+  }
+
+  function makePin(label, color) {
+    var wrap = document.createElement("div");
+    wrap.className = "pin-wrap";
+    var l = document.createElement("div");
+    l.className = "pin-label";
+    l.textContent = label;
+    var pin = document.createElement("div");
+    pin.className = "pin";
+    pin.style.setProperty("--c", color);
+    pin.appendChild(document.createElement("i"));
+    wrap.appendChild(l);
+    wrap.appendChild(pin);
+    return wrap;
+  }
+
+  function nearestFrac(lon, lat) {
+    var best = 0, bestD = Infinity;
+    for (var i = 0; i < coords.length; i++) {
+      var dx = (coords[i][0] - lon) * Math.cos(lat * Math.PI / 180.0), dy = coords[i][1] - lat;
+      var d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return total > 0 ? cum[best] / total : 0;
+  }
+
+  // photosJsonStr: [{lon, lat, url}]（url 為小尺寸縮圖的 data URL）。需在 setRoute 之後呼叫。
+  function setMarkers(photosJsonStr) {
+    clearMarkers();
+    if (coords.length < 2) return;
+    var first = coords[0], last = coords[coords.length - 1];
+    domMarkers.push(new maplibregl.Marker({ element: makePin("起點", "#00C853"), anchor: "bottom" }).setLngLat(first).addTo(map));
+    domMarkers.push(new maplibregl.Marker({ element: makePin("終點", "#FF3D00"), anchor: "bottom" }).setLngLat(last).addTo(map));
+    var photos = photosJsonStr ? JSON.parse(photosJsonStr) : [];
+    photos.forEach(function (ph) {
+      var el = document.createElement("div");
+      el.className = "photo-bubble";
+      var img = document.createElement("img");
+      img.src = ph.url;
+      el.appendChild(img);
+      domMarkers.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([ph.lon, ph.lat]).addTo(map));
+      photoItems.push({ el: el, frac: nearestFrac(ph.lon, ph.lat), popped: false });
+    });
+    updatePhotoPop();
+  }
+
+  // 飛越經過某張照片時，把它的泡泡放大一下（前 2%～後 5% 的路程）。
+  function updatePhotoPop() {
+    for (var i = 0; i < photoItems.length; i++) {
+      var it = photoItems[i];
+      var on = progress >= it.frac - 0.02 && progress <= it.frac + 0.05;
+      if (on !== it.popped) {
+        it.popped = on;
+        it.el.classList.toggle("pop", on);
+        it.el.style.zIndex = on ? 5 : 0;
+      }
+    }
   }
 
   function fitView() {
@@ -190,6 +283,7 @@
     map.jumpTo({ center: p.pos, bearing: p.bearing, pitch: 60, zoom: 15.2 });
     updateTraveled(p, force);
     updateHud(p);
+    updatePhotoPop();
   }
 
   function tick(ts) {
