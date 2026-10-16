@@ -13,6 +13,8 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.camera.core.ZoomState
+import androidx.camera.extensions.ExtensionMode
+import androidx.camera.extensions.ExtensionsManager
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
@@ -48,6 +50,31 @@ class TrackPhotoManager(private val context: Context) {
     private var zoomObserver: Observer<ZoomState>? = null
 
     private val _zoom = MutableStateFlow(CameraZoom())
+
+    /** 夜景設定：預設「自動」（支援時，畫面太暗才自動切成夜景）；使用者可以在拍照畫面關掉。 */
+    private val prefs = context.getSharedPreferences("camera_prefs", Context.MODE_PRIVATE)
+    private val _nightAuto = MutableStateFlow(prefs.getBoolean(KEY_NIGHT_AUTO, true))
+    val nightAuto: StateFlow<Boolean> = _nightAuto.asStateFlow()
+
+    /** 這支手機的相機是否開放夜景（自動／夜景擴充）給第三方 App；綁定相機後才會知道。 */
+    private val _nightAvailable = MutableStateFlow(false)
+    val nightAvailable: StateFlow<Boolean> = _nightAvailable.asStateFlow()
+
+    /** 目前實際使用的擴充：AUTO／NIGHT，或 null（一般拍照）。 */
+    private val _activeExtension = MutableStateFlow<String?>(null)
+    val activeExtension: StateFlow<String?> = _activeExtension.asStateFlow()
+
+    private var boundOwner: LifecycleOwner? = null
+    private var boundPreview: PreviewView? = null
+
+    /** 切換夜景自動並用新設定重新綁定相機。 */
+    fun setNightAuto(enabled: Boolean, onResult: (Result<Unit>) -> Unit = {}) {
+        _nightAuto.value = enabled
+        prefs.edit().putBoolean(KEY_NIGHT_AUTO, enabled).apply()
+        val owner = boundOwner
+        val view = boundPreview
+        if (owner != null && view != null) bindCamera(owner, view, onResult)
+    }
 
     /** 變焦狀態流；綁定相機後會持續反映實際倍率，供 UI collectAsState。 */
     val zoom: StateFlow<CameraZoom> = _zoom.asStateFlow()
@@ -90,27 +117,37 @@ class TrackPhotoManager(private val context: Context) {
         previewView: PreviewView,
         onResult: (Result<Unit>) -> Unit
     ) {
+        boundOwner = lifecycleOwner
+        boundPreview = previewView
         val providerFuture = ProcessCameraProvider.getInstance(context)
         providerFuture.addListener({
             try {
                 val provider = providerFuture.get()
                 cameraProvider = provider
-                val preview = Preview.Builder().build().also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
+                val base = CameraSelector.DEFAULT_BACK_CAMERA
+                // 先偵測夜景擴充；任何失敗（廠商未開放、舊機型）都退回一般拍照，不影響原本功能。
+                val extFuture = runCatching { ExtensionsManager.getInstanceAsync(context, provider) }.getOrNull()
+                if (extFuture == null) {
+                    bindWith(provider, lifecycleOwner, previewView, base, null, onResult)
+                    return@addListener
                 }
-                val capture = ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                    .build()
-                imageCapture = capture
-                provider.unbindAll()
-                camera = provider.bindToLifecycle(
-                    lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview,
-                    capture
-                )
-                observeZoom(lifecycleOwner)
-                onResult(Result.success(Unit))
+                extFuture.addListener({
+                    val manager = runCatching { extFuture.get() }.getOrNull()
+                    val mode = manager?.let { m ->
+                        listOf(ExtensionMode.AUTO, ExtensionMode.NIGHT)
+                            .firstOrNull { runCatching { m.isExtensionAvailable(base, it) }.getOrDefault(false) }
+                    }
+                    _nightAvailable.value = mode != null
+                    val useMode = if (mode != null && _nightAuto.value) mode else null
+                    val selector = if (useMode != null && manager != null) manager.getExtensionEnabledCameraSelector(base, useMode) else base
+                    // 帶擴充綁定失敗時，退回一般拍照再試一次。
+                    val result = bindWith(provider, lifecycleOwner, previewView, selector, useMode, null)
+                    if (result.isFailure && useMode != null) {
+                        bindWith(provider, lifecycleOwner, previewView, base, null, onResult)
+                    } else {
+                        onResult(result)
+                    }
+                }, ContextCompat.getMainExecutor(context))
             } catch (e: Exception) {
                 imageCapture = null
                 camera = null
@@ -118,6 +155,40 @@ class TrackPhotoManager(private val context: Context) {
                 onResult(Result.failure(e))
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    private fun bindWith(
+        provider: ProcessCameraProvider,
+        lifecycleOwner: LifecycleOwner,
+        previewView: PreviewView,
+        selector: CameraSelector,
+        extensionMode: Int?,
+        onResult: ((Result<Unit>) -> Unit)?
+    ): Result<Unit> {
+        val result = runCatching {
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(previewView.surfaceProvider)
+            }
+            val capture = ImageCapture.Builder()
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .build()
+            provider.unbindAll()
+            camera = provider.bindToLifecycle(lifecycleOwner, selector, preview, capture)
+            imageCapture = capture
+            observeZoom(lifecycleOwner)
+            _activeExtension.value = when (extensionMode) {
+                ExtensionMode.AUTO -> "AUTO"
+                ExtensionMode.NIGHT -> "NIGHT"
+                else -> null
+            }
+        }.onFailure {
+            imageCapture = null
+            camera = null
+            _zoom.value = CameraZoom()
+            _activeExtension.value = null
+        }
+        onResult?.invoke(result)
+        return result
     }
 
     fun unbind() {
@@ -223,6 +294,8 @@ class TrackPhotoManager(private val context: Context) {
         }
 
     companion object {
+        private const val KEY_NIGHT_AUTO = "night_auto"
+
         fun photoDir(context: Context, trackId: String): File =
             File(context.getExternalFilesDir("photos"), trackId)
 

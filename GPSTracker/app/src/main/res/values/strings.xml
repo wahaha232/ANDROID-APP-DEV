@@ -273,6 +273,8 @@
     <string name="recording_prepare_hint">可以先拍照、選移動方式，準備好再按「開始記錄」，按下之前不會開始記錄。</string>
     <string name="recording_mode_title">移動方式</string>
     <string name="recording_mode_hint">預設為「自動」，由移動速度判斷；也可以複選，例如「走路 + 大眾運輸」，記錄時只會在你選的方式中切換。</string>
+    <string name="recording_night_auto">🌙 夜景：自動</string>
+    <string name="recording_night_off">🌙 夜景：關</string>
     <string name="recording_mode_auto">自動（依速度判斷）</string>
     <string name="recording_pending_photos">已拍 %1$d 張照片，開始記錄後會加入這趟紀錄</string>
     <string name="mode_walking">走路</string>

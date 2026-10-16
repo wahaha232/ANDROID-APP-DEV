@@ -124,6 +124,9 @@ fun RecordingScreen(
 
     // 變焦（縮放）：直接 collect TrackPhotoManager 的即時變焦狀態（由 CameraX zoomState 驅動）。
     val cameraZoom by viewModel.photoManager.zoom.collectAsStateWithLifecycle()
+    val nightAvailable by viewModel.photoManager.nightAvailable.collectAsStateWithLifecycle()
+    val nightAuto by viewModel.photoManager.nightAuto.collectAsStateWithLifecycle()
+    val activeExtension by viewModel.photoManager.activeExtension.collectAsStateWithLifecycle()
     // 拍照快門閃光：counter 遞增會觸發一次短暫白畫面，讓使用者知道「按下去了」。
     var flashCounter by remember { mutableIntStateOf(0) }
     var flashAlpha by remember { mutableFloatStateOf(0f) }
@@ -470,6 +473,23 @@ fun RecordingScreen(
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                             )
                         }
+                    }
+
+                    // 夜景（左上角）：只有這支手機的相機開放夜景給第三方 App 才會出現。預設「自動」＝太暗才切成夜景。
+                    if (nightAvailable) {
+                        FilterChip(
+                            selected = nightAuto,
+                            onClick = {
+                                cameraReady = false
+                                viewModel.photoManager.setNightAuto(!nightAuto) { result -> cameraReady = result.isSuccess }
+                            },
+                            label = {
+                                Text(
+                                    if (nightAuto) stringResource(R.string.recording_night_auto) else stringResource(R.string.recording_night_off)
+                                )
+                            },
+                            modifier = Modifier.align(Alignment.TopStart).padding(12.dp)
+                        )
                     }
 
                     // 縮放鍵（右上角）

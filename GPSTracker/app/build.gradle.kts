@@ -187,6 +187,8 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.3.4")
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
+    // 夜景（ExtensionMode）：手機廠商有開放給第三方 App 時才可用，執行時偵測，不支援就維持一般拍照。
+    implementation("androidx.camera:camera-extensions:1.3.4")
     // CameraX 的 ProcessCameraProvider 回傳 com.google.common.util.concurrent.ListenableFuture。
     // 該類別由 guava 提供（已透過其他相依間接引入 runtime，但未在編譯期可見），
     // 因此明確加入 guava 讓編譯期也能解析（單一副本，不使用 listenablefuture 空殼版本避免重複類別）。
