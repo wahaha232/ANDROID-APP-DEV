@@ -1,6 +1,6 @@
 {
-  "updatedAt": 1792138446693,
-  "generatedAt": "2026-10-16",
+  "updatedAt": 1792223468257,
+  "generatedAt": "2026-10-17",
   "source": "NASA/JPL Horizons (https://ssd.jpl.nasa.gov/api/horizons.api)",
   "units": "km",
   "reference": {
@@ -12,15 +12,15 @@
   "probes": {
     "voyager1": {
       "horizonsId": "-31",
-      "fromSunKm": 25738861928,
-      "fromEarthKm": 25810013149,
-      "au": 172.053664983552
+      "fromSunKm": 25740320421,
+      "fromEarthKm": 25813152932,
+      "au": 172.063414405981
     },
     "voyager2": {
       "horizonsId": "-32",
-      "fromSunKm": 21573310070,
-      "fromEarthKm": 21576992970,
-      "au": 144.208670679473
+      "fromSunKm": 21574609990,
+      "fromEarthKm": 21580308850,
+      "au": 144.217360105167
     }
   }
 }
