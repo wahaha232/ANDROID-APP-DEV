@@ -153,7 +153,10 @@
     }, function (e) { renderError(e.message); });
 
     return Promise.all([main, voy]).then(function (r) {
-      renderChallenges(r[0][0].tracks, r[0][0].updatedAt, r[1]);
+      var m = r[0][0];
+      // 挑戰依裝置分開計算：先選裝置，再只把該裝置的紀錄交給挑戰計算。
+      var device = C.initDeviceBar("deviceBar", m.tracks || [], null, m.devices || []);
+      renderChallenges(C.filterByDevice(m.tracks || [], device), m.updatedAt, r[1]);
     }, function () { /* manifest 失敗：renderError 已顯示 */ });
   }
 

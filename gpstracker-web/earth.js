@@ -200,7 +200,9 @@
       nav.appendChild(b);
     });
     loadJSON("manifest.json", true).then(function (m) {
-      var res = CORE.cumulativeUnlock(ALL_LEVELS, (m && m.tracks) || []);
+      var tracks = (m && m.tracks) || [];
+      var device = window.GTCore.initDeviceBar("deviceBar", tracks, null, m.devices || []);
+      var res = CORE.cumulativeUnlock(ALL_LEVELS, window.GTCore.filterByDevice(tracks, device));
       state.totalKm = res.totalKm;
       state.valid = res.valid;
       state.unlock = res.unlock;

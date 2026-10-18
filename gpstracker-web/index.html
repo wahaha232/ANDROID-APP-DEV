@@ -23,18 +23,18 @@
     if (new URLSearchParams(location.search).get("track")) location.replace("activity.html" + location.search);
   </script>
   <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
-  <link href="gt-ui.css?v=e8cc6540" rel="stylesheet" />
+  <link href="gt-ui.css?v=dev4" rel="stylesheet" />
   <script defer src="common.js?v=46cd05d5"></script>
   <script defer src="solar-levels.js?v=38941ca7"></script>
   <script defer src="solar-core.js?v=3bca26ad"></script>
   <script defer src="earth-levels.js?v=b6ea575c"></script>
   <script defer src="taiwan-levels.js?v=ccfe21e1"></script>
   <script defer src="progress-core.js?v=b2883d11"></script>
-  <script defer src="gt-core.js?v=a2dc9e31"></script>
+  <script defer src="gt-core.js?v=dev4"></script>
   <script defer src="gt-data.js?v=d27f43b5"></script>
   <script defer src="gt-challenges.js?v=fd918865"></script>
   <script defer src="gt-nav.js?v=0a18e836"></script>
-  <script defer src="home.js?v=66cdc40b"></script>
+  <script defer src="home.js?v=dev4"></script>
 </head>
 <body>
   <a class="gt-skip" href="#main">跳到主要內容</a>
@@ -59,9 +59,10 @@
       </section>
 
       <section id="chSec" aria-labelledby="ch-h">
+        <div id="deviceBar" class="gt-device-bar" hidden></div>
         <div class="gt-sec-head"><h2 id="ch-h">五大挑戰</h2><a href="progress.html">全挑戰進度表 →</a></div>
         <div id="challenges" class="gt-ch-grid"><div class="gt-skel" style="height:220px"></div></div>
-        <p class="gt-note">挑戰進度以累積 GPS 里程換算，屬遊戲化目標，不代表實際抵達該地；所有挑戰共用同一份里程，每筆活動只計一次。Voyager 為探測器的參考距離，你追不上它。</p>
+        <p class="gt-note">挑戰進度以累積 GPS 里程換算，屬遊戲化目標，不代表實際抵達該地；上方可切換裝置，各裝置的挑戰進度分開累積、不會混合。Voyager 為探測器的參考距離，你追不上它。</p>
       </section>
 
       <section aria-labelledby="hero-h">

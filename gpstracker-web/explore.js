@@ -19,15 +19,15 @@
       (sub ? '<div class="s">' + esc(sub) + "</div>" : "") + "</div>";
   }
 
-  function render(m, voyager, daily) {
+  function render(m, voyager, daily, device) {
     var res = G.buildPlans(m.tracks || [], voyager, { updatedAt: m.updatedAt });
     var totals = res.totals, goals = res.goals;
     var doneGoals = goals.filter(function (g) { return g.done; }); // 與 progress.js 同口徑：分母含全部目標
 
-    $("summary").textContent = totals.validCount + " 筆有效活動 · " + fmtKm(totals.totalKm) + " km";
+    $("summary").textContent = (device ? device + "・" : "") + totals.validCount + " 筆有效活動 · " + fmtKm(totals.totalKm) + " km";
     $("overview").innerHTML = stat(fmtKm(totals.totalKm), "km", "有效累計里程") + stat(String(totals.validCount), "筆", "有效活動", totals.excluded > 0 ? "另有 " + totals.excluded + " 筆異常未計入" : "") +
       stat(doneGoals.length + " / " + goals.length, "", "已達成目標") + stat(m.updatedAt ? G.fmtDateTime(m.updatedAt) : "未知", "", "資料最後更新", m.updatedAt ? G.fmtAge(Date.now() - m.updatedAt) : "");
-    $("overviewNote").textContent = "所有挑戰共用同一份有效里程（相同活動只算一次、排除 GPS 異常），不會重複加總，也不必逐一完成才能開始下一個。" +
+    $("overviewNote").textContent = "所有挑戰共用同一份有效里程（依上方選擇的裝置分開計算；相同活動只算一次、排除 GPS 異常），不會重複加總，也不必逐一完成才能開始下一個。" +
       (totals.validCount === 0 ? " 目前還沒有有效活動，進度皆為 0。" : "");
 
     // 五大挑戰同層級；征服計畫在前，NASA Voyager 與共享成就中心緊接其後。
@@ -52,9 +52,12 @@
   function load() {
     var voy = G.loadVoyager(function (n) { return GT.fetchJson(n, true); }); // 失敗時保留最後一次有效值，不會歸零
     Promise.all([GT.loadManifest(), voy, loadOptional("steps.json")]).then(function (r) {
+      var m = r[0];
+      var device = C.initDeviceBar("deviceBar", m.tracks || [], null, m.devices || []);
+      var view = { tracks: C.filterByDevice(m.tracks || [], device), updatedAt: m.updatedAt };
       var s = r[2], days = (s && s.days) || [], total = 0;
       days.forEach(function (d) { total += d.total || 0; });
-      render(r[0], r[1], days.length && total > 0 ? { total: total, days: days.length } : null);
+      render(view, r[1], days.length && total > 0 ? { total: total, days: days.length } : null, device);
     }, function (e) {
       $("summary").textContent = "讀取失敗";
       $("overview").innerHTML = '<div class="gt-state err" style="grid-column:1/-1"><h3>無法讀取活動資料</h3><p>' + esc(e.message) + '</p><button class="btn gt-btn" id="retry" type="button">重新載入</button></div>';

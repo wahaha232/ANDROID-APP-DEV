@@ -319,3 +319,19 @@ main:focus { outline: none; }
 @media (prefers-reduced-motion: reduce) {
   .gt-skel, .gt-spin { animation: none; }
 }
+
+/* 挑戰裝置切換：各裝置分開累積，不提供「全部裝置」選項。 */
+.gt-device-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  margin-bottom: 14px;
+}
+.gt-device-bar .gt-device-label { color: var(--muted); font-size: 13px; font-weight: 600; }
+.gt-device-bar select {
+  min-height: 38px; padding: 6px 10px; border-radius: 9px;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); font: inherit;
+}
+.gt-device-bar .gt-device-note { color: var(--muted); font-size: 12.5px; }
+@media (max-width: 560px) {
+  .gt-device-bar select { flex: 1; min-width: 0; }
+}

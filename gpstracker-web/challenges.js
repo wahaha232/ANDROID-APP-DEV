@@ -941,8 +941,10 @@
     buildTabs();
     fetchJson("manifest.json", true).then(function (m) {
       manifest = m || { tracks: [] };
-      manifest.tracks = (manifest.tracks || []).slice().sort(function (a, b) { return b.startTimeMs - a.startTimeMs; });
-      $("summary").textContent = fmtInt(manifest.tracks.length) + " 筆紀錄 · 載入競賽資料中…";
+      var device = window.GTCore.initDeviceBar("deviceBar", manifest.tracks || [], null, manifest.devices || []);
+      manifest.tracks = window.GTCore.filterByDevice(manifest.tracks || [], device);
+      manifest.tracks = manifest.tracks.slice().sort(function (a, b) { return b.startTimeMs - a.startTimeMs; });
+      $("summary").textContent = (device ? device + "・" : "") + fmtInt(manifest.tracks.length) + " 筆紀錄 · 載入競賽資料中…";
       showTab("overview");
     }).catch(function (e) {
       $("summary").textContent = "讀取 manifest 失敗：" + e.message;

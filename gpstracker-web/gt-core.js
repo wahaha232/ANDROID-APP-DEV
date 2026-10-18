@@ -101,6 +101,86 @@
     return name ? String(name) : "未命名裝置";
   }
 
+  // ───── 挑戰裝置切換（探索挑戰、征服計畫共用）─────
+  // 挑戰進度必須依裝置分開計算；沒有「全部裝置」選項，避免兩支手機的里程混合。
+  var DEVICE_KEY = "gpst_device";
+
+  function deviceNames(tracks) {
+    var seen = {};
+    (tracks || []).forEach(function (t) { seen[deviceNameOf(t)] = true; });
+    return Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, "zh-Hant"); });
+  }
+
+  function getRequestedDevice() {
+    try {
+      var q = new URLSearchParams(location.search).get("device");
+      if (q) return q;
+    } catch (e) { /* 舊瀏覽器或非瀏覽器環境 */ }
+    try { return localStorage.getItem(DEVICE_KEY) || ""; } catch (e) { return ""; }
+  }
+
+  function setSelectedDevice(name) {
+    try { if (name) localStorage.setItem(DEVICE_KEY, name); } catch (e) { /* 無痕模式 */ }
+  }
+
+  function chooseDevice(tracks) {
+    var names = deviceNames(tracks), want = getRequestedDevice();
+    if (want && names.indexOf(want) >= 0) { setSelectedDevice(want); return want; }
+    var newest = null;
+    (tracks || []).forEach(function (t) {
+      if (!newest || (+t.startTimeMs || 0) > (+newest.startTimeMs || 0)) newest = t;
+    });
+    var fallback = newest ? deviceNameOf(newest) : (names[0] || "");
+    if (fallback) setSelectedDevice(fallback);
+    return fallback;
+  }
+
+  function filterByDevice(tracks, device) {
+    if (!device) return (tracks || []).slice();
+    return (tracks || []).filter(function (t) { return deviceNameOf(t) === device; });
+  }
+
+  // 在指定容器建立裝置切換列；切換後把裝置寫入網址並重新載入，讓所有挑戰同步重算。
+  // knownDevices 可包含尚無紀錄的裝置（例如新手機），讓它先以 0 進度出現在選單中。
+  function initDeviceBar(bar, tracks, selected, knownDevices) {
+    if (typeof bar === "string") bar = document.getElementById(bar);
+    if (!bar) return selected || "";
+    var names = deviceNames(tracks);
+    (knownDevices || []).forEach(function (n) {
+      if (n && names.indexOf(n) < 0) names.push(n);
+    });
+    names.sort(function (a, b) { return a.localeCompare(b, "zh-Hant"); });
+    if (!names.length) { bar.hidden = true; return ""; }
+    if (!selected) {
+      var requested = getRequestedDevice();
+      selected = (requested && names.indexOf(requested) >= 0) ? requested : chooseDevice(tracks);
+    }
+    if (names.indexOf(selected) < 0) selected = names[0];
+    setSelectedDevice(selected);
+    try {
+      var current = new URL(location.href);
+      if (current.searchParams.get("device") !== selected) {
+        current.searchParams.set("device", selected);
+        history.replaceState(null, "", current.toString());
+      }
+    } catch (e) { /* 非瀏覽器環境 */ }
+    bar.hidden = false;
+    bar.innerHTML = '<span class="gt-device-label">挑戰裝置</span><select aria-label="選擇挑戰裝置">' +
+      names.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + "</option>"; }).join("") +
+      '</select><span class="gt-device-note">各裝置分開累積，不混合</span>';
+    var sel = bar.querySelector("select");
+    sel.value = selected;
+    sel.addEventListener("change", function () {
+      setSelectedDevice(sel.value);
+      try {
+        var u = new URL(location.href);
+        u.searchParams.set("device", sel.value);
+        location.href = u.toString();
+      } catch (e) { location.reload(); }
+    });
+    return selected;
+  }
+
   function filterTracks(list, opt) {
     opt = opt || {};
     var q = (opt.q || "").trim().toLowerCase(), mode = opt.mode || "", device = opt.device || "", meta = opt.meta || {};
@@ -468,7 +548,9 @@
     modeEmoji: modeEmoji, modeName: modeName, modeOf: modeOf, modeOverridden: modeOverridden, pad: pad,
     fmtDay: fmtDay, fmtTime: fmtTime, fmtDate: fmtDate, fmtDur: fmtDur, fmtClock: fmtClock, fmtKm: fmtKm, fmtInt: fmtInt,
     kmh: kmh, stepSourceLabel: stepSourceLabel, escapeHtml: escapeHtml,
-    deviceNameOf: deviceNameOf,
+    deviceNameOf: deviceNameOf, DEVICE_KEY: DEVICE_KEY, deviceNames: deviceNames,
+    getRequestedDevice: getRequestedDevice, setSelectedDevice: setSelectedDevice, chooseDevice: chooseDevice,
+    filterByDevice: filterByDevice, initDeviceBar: initDeviceBar,
     activityTitle: activityTitle, filterTracks: filterTracks, sortTracks: sortTracks, groupByMonth: groupByMonth,
     downsample: downsample, routeProject: routeProject, routePath: routePath, routeTiles: routeTiles,
     isPhotoPath: isPhotoPath, photoMarks: photoMarks, photoStep: photoStep,

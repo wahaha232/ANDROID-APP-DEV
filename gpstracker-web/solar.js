@@ -172,7 +172,9 @@
 
   function loadAll(revalidate) {
     return loadJSON("manifest.json", true).then(function (m) {
-      applyData((m && m.tracks) || []);
+      var tracks = (m && m.tracks) || [];
+      var device = window.GTCore.initDeviceBar("deviceBar", tracks, null, m.devices || []);
+      applyData(window.GTCore.filterByDevice(tracks, device));
       renderAll();
       renderVoyager();
     }).catch(function (e) {

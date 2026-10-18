@@ -26,6 +26,9 @@
     $("note").className = "pg-note"; $("note").textContent = "載入中…";
     return loadJSON("manifest.json", true).then(function (m) {
       var tracks = (m && m.tracks) || [];
+      var device = window.GTCore.initDeviceBar("deviceBar", tracks, null, (m && m.devices) || []);
+      state.device = device;
+      tracks = window.GTCore.filterByDevice(tracks, device);
       var valid = window.SOLAR_CORE.validTracks(tracks);
       var totalKm = 0;
       valid.forEach(function (t) { totalKm += (t.distanceMeters || 0) / 1000; });
@@ -60,16 +63,16 @@
     var done = g.filter(function (x) { return x.done; }).length;
     var ageDays = state.updatedAt ? (Date.now() - state.updatedAt) / 86400000 : null;
 
-    $("summary").textContent = "全站 " + fmtKm(state.totalKm) + " km · " + state.count + " 筆有效活動 · " + g.length + " 個目標";
+    $("summary").textContent = (state.device ? state.device + "・" : "") + fmtKm(state.totalKm) + " km · " + state.count + " 筆有效活動 · " + g.length + " 個目標";
     $("cards").innerHTML =
-      card(fmtKm(state.totalKm) + " km", "全站有效累計里程（計一次）") +
+      card(fmtKm(state.totalKm) + " km", "此裝置有效累計里程（計一次）") +
       card(state.count + " 筆", "有效活動數") +
       (state.totalSteps > 0 ? card(state.totalSteps.toLocaleString("zh-Hant") + " 步", "累積步數（詳見競賽中心「步數統計」）") : "") +
       card(done + " / " + g.length, "已達成目標") +
       card(fmtDate(state.updatedAt), "紀錄資料更新時間");
 
     var noteLines = [];
-    noteLines.push("所有目標共用同一份有效里程，不會重複加總；累計里程改變時，全部挑戰同步更新（本頁載入即重算）。");
+    noteLines.push("此裝置的所有目標共用同一份有效里程，不會重複加總；累計里程改變時，全部挑戰同步更新（本頁載入即重算）。");
     if (ageDays !== null && ageDays > 3) noteLines.push("⚠️ 紀錄資料距今約 " + Math.floor(ageDays) + " 天，可能非最新。");
     var vs = state.voyagerStatus, vBad = !!vs && vs.state !== "ok";
     if (vs && vs.data) noteLines.push("NASA Voyager 參考距離（以日心為基準，即距太陽）資料時間：" + fmtDate(vs.updatedAt) + "・來源 " + (vs.data.source || "NASA/JPL Horizons") + "。");
