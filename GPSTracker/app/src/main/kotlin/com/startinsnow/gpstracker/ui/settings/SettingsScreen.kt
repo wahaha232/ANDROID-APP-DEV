@@ -495,6 +495,14 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     checked = settings.webUploadPhotos
                 ) { viewModel.setWebUploadPhotos(it) }
                 SectionDivider()
+                SettingsTextField(context.getString(R.string.settings_056), settings.deviceName) { viewModel.setDeviceName(it) }
+                Text(
+                    stringResource(R.string.settings_057),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+                SectionDivider()
                 SettingsTextField(context.getString(R.string.settings_051), settings.webRepo) { viewModel.setWebRepo(it) }
                 SettingsTextField(context.getString(R.string.settings_052), settings.webBranch) { viewModel.setWebBranch(it) }
                 SettingsTextField(context.getString(R.string.settings_053), settings.webDataPath) { viewModel.setWebDataPath(it) }

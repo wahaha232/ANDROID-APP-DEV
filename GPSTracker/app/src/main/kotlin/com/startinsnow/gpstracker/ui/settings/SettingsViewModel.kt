@@ -54,4 +54,5 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setGithubToken(value: String) = viewModelScope.launch { app.settingsRepository.setGithubToken(value) }
     fun setWebWifiOnly(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setWebWifiOnly(enabled) }
     fun setWebUploadPhotos(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setWebUploadPhotos(enabled) }
+    fun setDeviceName(value: String) = viewModelScope.launch { app.settingsRepository.setDeviceName(value) }
 }

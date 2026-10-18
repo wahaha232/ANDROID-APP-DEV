@@ -20,9 +20,9 @@
   <title>紀錄管理</title>
   <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
   <link href="gt-ui.css?v=e8cc6540" rel="stylesheet" />
-  <link href="records.css?v=cb65c38f" rel="stylesheet" />
+  <link href="records.css?v=dev20261018" rel="stylesheet" />
   <script defer src="common.js?v=46cd05d5"></script>
-  <script defer src="gt-core.js?v=a2dc9e31"></script>
+  <script defer src="gt-core.js?v=dev20261018"></script>
   <script defer src="gt-data.js?v=d27f43b5"></script>
   <script defer src="gt-nav.js?v=0a18e836"></script>
 </head>
@@ -67,7 +67,8 @@
     </details>
 
     <div class="rec-toolbar">
-      <input id="search" type="search" placeholder="搜尋日期 / 模式 / 備註…" />
+      <input id="search" type="search" placeholder="搜尋日期 / 模式 / 裝置 / 備註…" />
+      <select id="deviceFilter"><option value="">全部裝置</option></select>
       <select id="modeFilter"><option value="">全部模式</option></select>
       <select id="sortSel">
         <option value="date_desc">日期（新→舊）</option>
@@ -89,6 +90,6 @@
   </main>
 
   <script defer src="gt-gpx.js?v=f92801bb"></script>
-  <script defer src="records.js?v=0a22caa2"></script>
+  <script defer src="records.js?v=dev20261018"></script>
 </body>
 </html>

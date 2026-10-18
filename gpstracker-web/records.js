@@ -150,6 +150,7 @@
         if (!meta || !meta.tracks) meta = { tracks: {} };
       } catch (e) { meta = { tracks: {} }; }
       setNote("共 " + tracks.length + " 筆紀錄。" + (canWrite() ? "可編輯/刪除。" : "未設定 Token：僅能瀏覽/下載。"), "ok");
+      buildDeviceFilter();
       buildModeFilter();
       render();
     } catch (e) {
@@ -167,13 +168,28 @@
     Object.keys(set).forEach(function (m) { var o = document.createElement("option"); o.value = m; o.textContent = modeEmoji(m) + " " + modeName(m); sel.appendChild(o); });
   }
 
+  function buildDeviceFilter() {
+    var set = {};
+    tracks.forEach(function (t) { set[GTCore.deviceNameOf(t)] = true; });
+    var sel = $("deviceFilter");
+    sel.length = 1;
+    Object.keys(set).sort().forEach(function (name) {
+      var o = document.createElement("option");
+      o.value = name; o.textContent = "📱 " + name;
+      sel.appendChild(o);
+    });
+  }
+
   function filteredSorted() {
     var q = $("search").value.trim().toLowerCase();
     var mf = $("modeFilter").value;
+    var df = $("deviceFilter").value;
     var list = tracks.filter(function (t) {
       var note = (meta.tracks[t.trackId] && (meta.tracks[t.trackId].title || meta.tracks[t.trackId].notes)) || "";
+      var device = GTCore.deviceNameOf(t);
+      if (df && device !== df) return false;
       if (mf && effMode(t) !== mf) return false;
-      if (q && (fmtDate(t.startTimeMs).toLowerCase().indexOf(q) < 0) && String(effMode(t)).toLowerCase().indexOf(q) < 0 && modeName(effMode(t)).toLowerCase().indexOf(q) < 0 && note.toLowerCase().indexOf(q) < 0) return false;
+      if (q && (fmtDate(t.startTimeMs).toLowerCase().indexOf(q) < 0) && String(effMode(t)).toLowerCase().indexOf(q) < 0 && modeName(effMode(t)).toLowerCase().indexOf(q) < 0 && device.toLowerCase().indexOf(q) < 0 && note.toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
     var s = $("sortSel").value;
@@ -190,10 +206,10 @@
     var list = filteredSorted();
     var w = canWrite();
     var html = '<div class="rec-table-wrap"><table class="rec-table"><thead><tr>' +
-      '<th><input type="checkbox" id="chkHead" /></th><th>日期</th><th>模式</th><th>距離 (km)</th><th>時間</th>' +
+      '<th><input type="checkbox" id="chkHead" /></th><th>日期</th><th>裝置</th><th>模式</th><th>距離 (km)</th><th>時間</th>' +
       '<th>步數</th><th>照片</th><th>定位點</th><th>備註</th><th>操作</th></tr></thead><tbody>';
     if (!list.length) {
-      html += '<tr><td colspan="10"><div class="rec-empty">沒有符合條件的紀錄。</div></td></tr>';
+      html += '<tr><td colspan="11"><div class="rec-empty">沒有符合條件的紀錄。</div></td></tr>';
     }
     list.forEach(function (t) {
       var m = meta.tracks[t.trackId] || {};
@@ -201,6 +217,7 @@
       html += '<tr data-id="' + t.trackId + '">' +
         '<td><input type="checkbox" class="rowsel" data-id="' + t.trackId + '"' + (selected[t.trackId] ? " checked" : "") + ' /></td>' +
         '<td>' + fmtDate(t.startTimeMs) + '</td>' +
+        '<td>' + escapeHtml(GTCore.deviceNameOf(t)) + '</td>' +
         '<td>' + modeEmoji(effMode(t)) + " " + modeName(effMode(t)) +
           (m.mode && m.mode !== t.dominantMode ? ' <span class="rec-edited" title="已手動修改；App 原判斷：' + escapeHtml(modeName(t.dominantMode)) + '">✎</span>' : "") + '</td>' +
         '<td class="num">' + fmtKm(kmOf(t)) + '</td>' +
@@ -413,6 +430,7 @@
   });
 
   $("search").addEventListener("input", render);
+  $("deviceFilter").addEventListener("change", render);
   $("modeFilter").addEventListener("change", render);
   $("sortSel").addEventListener("change", render);
   $("selectAll").addEventListener("click", function () { toggleAll(true); });

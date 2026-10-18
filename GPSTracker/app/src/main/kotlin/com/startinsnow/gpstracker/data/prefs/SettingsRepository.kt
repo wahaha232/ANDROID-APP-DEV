@@ -39,7 +39,9 @@ data class AppSettings(
     val githubToken: String = "",
     val webWifiOnly: Boolean = true,
     /** 上傳照片縮圖到（公開的）網頁儀表板。預設關閉：照片會公開在 GitHub 倉庫。 */
-    val webUploadPhotos: Boolean = false
+    val webUploadPhotos: Boolean = false,
+    /** 裝置名稱：上傳紀錄時標記來源手機，網頁可依裝置切換檢視。空白時以手機型號代替。 */
+    val deviceName: String = ""
 ) {
     // 刻意覆寫：data class 預設的 toString() 會把 GitHub Token 印出來（log、除錯輸出、例外訊息都可能帶到）。
     override fun toString(): String =
@@ -47,7 +49,7 @@ data class AppSettings(
             "driveSyncEnabled=$driveSyncEnabled, wifiOnlySync=$wifiOnlySync, dataRetentionDays=$dataRetentionDays, " +
             "deleteLocalAfterUploadEnabled=$deleteLocalAfterUploadEnabled, offlineMapEnabled=$offlineMapEnabled, " +
             "webUploadEnabled=$webUploadEnabled, webRepo=$webRepo, webBranch=$webBranch, webDataPath=$webDataPath, " +
-            "githubToken=${if (githubToken.isEmpty()) "<empty>" else "<redacted>"}, webWifiOnly=$webWifiOnly)"
+            "githubToken=${if (githubToken.isEmpty()) "<empty>" else "<redacted>"}, webWifiOnly=$webWifiOnly, deviceName=$deviceName)"
 }
 
 /** 對應規格「64. 設定」。只放置真正有實作對應功能的設定項，避免「假設定」。 */
@@ -71,6 +73,7 @@ class SettingsRepository(private val context: Context) {
         val GITHUB_TOKEN = stringPreferencesKey("github_token")
         val WEB_WIFI_ONLY = booleanPreferencesKey("web_wifi_only")
         val WEB_UPLOAD_PHOTOS = booleanPreferencesKey("web_upload_photos")
+        val DEVICE_NAME = stringPreferencesKey("device_name")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -91,7 +94,8 @@ class SettingsRepository(private val context: Context) {
             webDataPath = prefs[Keys.WEB_DATA_PATH] ?: "gpstracker-web/data",
             githubToken = SecretCipher.decrypt(prefs[Keys.GITHUB_TOKEN] ?: ""),
             webWifiOnly = prefs[Keys.WEB_WIFI_ONLY] ?: true,
-            webUploadPhotos = prefs[Keys.WEB_UPLOAD_PHOTOS] ?: false
+            webUploadPhotos = prefs[Keys.WEB_UPLOAD_PHOTOS] ?: false,
+            deviceName = prefs[Keys.DEVICE_NAME] ?: ""
         )
     }.flowOn(Dispatchers.IO) // 解密要呼叫 Keystore，不放在主執行緒做
 
@@ -124,4 +128,5 @@ class SettingsRepository(private val context: Context) {
     }
     suspend fun setWebWifiOnly(enabled: Boolean) = context.dataStore.edit { it[Keys.WEB_WIFI_ONLY] = enabled }
     suspend fun setWebUploadPhotos(enabled: Boolean) = context.dataStore.edit { it[Keys.WEB_UPLOAD_PHOTOS] = enabled }
+    suspend fun setDeviceName(value: String) = context.dataStore.edit { it[Keys.DEVICE_NAME] = value.trim() }
 }

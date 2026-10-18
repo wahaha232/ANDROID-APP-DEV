@@ -238,7 +238,8 @@ class WebDashboardUploader(
         fun buildPayload(
             data: ExportTrackData,
             privacyZones: List<com.startinsnow.gpstracker.core.privacy.PrivacyZone> = emptyList(),
-            uploadPhotos: Boolean = false
+            uploadPhotos: Boolean = false,
+            deviceName: String = ""
         ): Payload {
             val track = data.track
             val startMs = track.startTimeMs
@@ -313,6 +314,7 @@ class WebDashboardUploader(
                 put("points", points)
                 put("photos", photos)
                 put("segments", segments)
+                if (deviceName.isNotBlank()) put("deviceName", deviceName)
             }
 
             val entry = JSONObject().apply {
@@ -329,6 +331,7 @@ class WebDashboardUploader(
                 put("totalDescentMeters", round(track.totalDescentMeters, 1))
                 put("photoCount", track.photoCount)
                 put("file", "${track.trackId}.json")
+                if (deviceName.isNotBlank()) put("deviceName", deviceName)
             }
             return Payload(json.toString(), entry, photoFiles)
         }

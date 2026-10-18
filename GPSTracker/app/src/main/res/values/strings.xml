@@ -73,6 +73,8 @@
     <string name="settings_053">資料夾路徑</string>
     <string name="settings_054">GitHub Token（fine-grained PAT）</string>
     <string name="settings_055">設定好儲存庫、分支、路徑與 token 後，每次記錄結束會自動上傳。\n網頁網址：https://wahaha232.github.io/ANDROID-APP-DEV/gpstracker-web/</string>
+    <string name="settings_056">裝置名稱</string>
+    <string name="settings_057">上傳紀錄時會標記這個名稱（例如「POCO F6」「SONY Xperia」），方便在網頁切換不同手機的軌跡。留空則自動使用手機型號。</string>
 
     <!-- detail -->
     <string name="detail_001">登入已取消</string>

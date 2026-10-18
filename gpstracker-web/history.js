@@ -15,8 +15,19 @@
   function $(id) { return document.getElementById(id); }
 
   function currentList() {
-    var f = C.filterTracks(tracks, { q: $("search").value, mode: $("modeFilter").value, meta: meta });
+    var f = C.filterTracks(tracks, { q: $("search").value, mode: $("modeFilter").value, device: $("deviceFilter").value, meta: meta });
     return C.sortTracks(f, $("sortSel").value);
+  }
+
+  function buildDeviceFilter() {
+    var seen = {}, sel = $("deviceFilter");
+    tracks.forEach(function (t) { seen[C.deviceNameOf(t)] = true; });
+    sel.length = 1;
+    Object.keys(seen).sort().forEach(function (name) {
+      var o = document.createElement("option");
+      o.value = name; o.textContent = "📱 " + name;
+      sel.appendChild(o);
+    });
   }
 
   function buildModeFilter() {
@@ -38,7 +49,7 @@
       '<div class="gt-nothumb"><span class="gt-spin" aria-hidden="true"></span></div></div>' +
       '<div class="gt-card-body">' +
         '<h3 class="gt-card-title"><a href="' + GT.activityUrl(t.trackId) + '">' + esc(C.activityTitle(t, meta)) + "</a></h3>" +
-        '<div class="gt-card-sub">' + esc(C.fmtDate(t.startTimeMs)) + "</div>" +
+        '<div class="gt-card-sub">' + esc(C.fmtDate(t.startTimeMs)) + "・📱 " + esc(C.deviceNameOf(t)) + "</div>" +
         '<div class="gt-card-stats">' + f.map(function (x) { return "<span>" + esc(x.value) + " " + esc(x.unit) + "</span>"; }).join("") + "</div>" +
         (m.notes ? '<div class="gt-card-note">' + esc(m.notes) + "</div>" : "") +
         '<div class="gt-card-actions">' +
@@ -59,7 +70,7 @@
     }
     if (!list.length) {
       box.innerHTML = '<div class="gt-state"><h3>沒有符合條件的活動</h3><p>試試其他關鍵字，或清除篩選。</p><button class="btn gt-btn secondary" id="clearFilters" type="button">清除篩選</button></div>';
-      $("clearFilters").onclick = function () { $("search").value = ""; $("modeFilter").value = ""; refresh(); };
+      $("clearFilters").onclick = function () { $("search").value = ""; $("modeFilter").value = ""; $("deviceFilter").value = ""; refresh(); };
       return;
     }
     var byDate = $("sortSel").value.indexOf("date_") === 0;
@@ -158,6 +169,11 @@
   }
 
   function refresh() {
+    var list = currentList();
+    var dist = 0;
+    list.forEach(function (t) { dist += t.distanceMeters || 0; });
+    $("summary").textContent = list.length ? list.length + " 筆活動 · 累積 " + C.fmtKm(dist) + " km" +
+      ($("deviceFilter").value ? "（" + $("deviceFilter").value + "）" : "") : (tracks.length ? "沒有符合條件的活動" : "尚無紀錄");
     renderList();
     if (view === "map") drawMap();
   }
@@ -165,6 +181,7 @@
   // ---- 事件 ----
   var timer = null;
   $("search").addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(refresh, SEARCH_DEBOUNCE_MS); });
+  $("deviceFilter").addEventListener("change", refresh);
   $("modeFilter").addEventListener("change", refresh);
   $("sortSel").addEventListener("change", renderList);
   $("viewCards").addEventListener("click", function () { setView("cards"); });
@@ -185,6 +202,7 @@
       var dist = 0;
       tracks.forEach(function (t) { dist += t.distanceMeters || 0; });
       $("summary").textContent = tracks.length ? tracks.length + " 筆活動 · 累積 " + C.fmtKm(dist) + " km" : "尚無紀錄";
+      buildDeviceFilter();
       buildModeFilter();
       renderList();
     }, function (e) {

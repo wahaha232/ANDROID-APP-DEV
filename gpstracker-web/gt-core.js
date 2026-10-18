@@ -95,15 +95,22 @@
     return entry ? fmtDay(entry.startTimeMs) + " " + modeName(modeOf(entry, metaTracks)) : "";
   }
 
+  // 裝置名稱：App 上傳時標記的來源手機；舊紀錄沒有這個欄位時歸類為「未命名裝置」。
+  function deviceNameOf(entry) {
+    var name = entry && entry.deviceName;
+    return name ? String(name) : "未命名裝置";
+  }
+
   function filterTracks(list, opt) {
     opt = opt || {};
-    var q = (opt.q || "").trim().toLowerCase(), mode = opt.mode || "", meta = opt.meta || {};
+    var q = (opt.q || "").trim().toLowerCase(), mode = opt.mode || "", device = opt.device || "", meta = opt.meta || {};
     return (list || []).filter(function (t) {
       if (mode && modeOf(t, meta) !== mode) return false;
+      if (device && deviceNameOf(t) !== device) return false;
       if (!q) return true;
       var m = meta[t.trackId] || {};
       var eff = modeOf(t, meta);
-      var hay = [fmtDate(t.startTimeMs), fmtDay(t.startTimeMs), eff, modeName(eff), m.title, m.notes]
+      var hay = [fmtDate(t.startTimeMs), fmtDay(t.startTimeMs), eff, modeName(eff), deviceNameOf(t), m.title, m.notes]
         .filter(Boolean).join(" ").toLowerCase();
       return hay.indexOf(q) >= 0;
     });
@@ -461,6 +468,7 @@
     modeEmoji: modeEmoji, modeName: modeName, modeOf: modeOf, modeOverridden: modeOverridden, pad: pad,
     fmtDay: fmtDay, fmtTime: fmtTime, fmtDate: fmtDate, fmtDur: fmtDur, fmtClock: fmtClock, fmtKm: fmtKm, fmtInt: fmtInt,
     kmh: kmh, stepSourceLabel: stepSourceLabel, escapeHtml: escapeHtml,
+    deviceNameOf: deviceNameOf,
     activityTitle: activityTitle, filterTracks: filterTracks, sortTracks: sortTracks, groupByMonth: groupByMonth,
     downsample: downsample, routeProject: routeProject, routePath: routePath, routeTiles: routeTiles,
     isPhotoPath: isPhotoPath, photoMarks: photoMarks, photoStep: photoStep,

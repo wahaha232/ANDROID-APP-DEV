@@ -65,7 +65,13 @@ object WebDashboardSync {
             branch = settings.webBranch,
             dataPath = settings.webDataPath,
             trackId = trackId,
-            payload = WebDashboardUploader.buildPayload(data, settings.privacyZones, settings.webUploadPhotos)
+            payload = WebDashboardUploader.buildPayload(
+                data,
+                settings.privacyZones,
+                settings.webUploadPhotos,
+                // 沒填裝置名稱時用機型，讓不同手機的紀錄至少能區分。
+                settings.deviceName.ifBlank { android.os.Build.MODEL.orEmpty() }
+            )
         ).getOrThrow()
         app.trackRepository.setWebUploadedAt(trackId, System.currentTimeMillis())
         runCatching { TrackEditsSync.flush(app, trackId) } // 這筆若有尚未同步的編輯（上傳前就改過），現在一併送出

@@ -222,7 +222,8 @@
     var title = C.activityTitle(track, meta);
     document.title = title + " · GPS Tracker";
     $("title").textContent = title;
-    $("summary").textContent = C.fmtDate(track.startTimeMs) + "・" + C.modeName(C.modeOf(track, meta));
+    $("summary").textContent = C.fmtDate(track.startTimeMs) + "・" + C.modeName(C.modeOf(track, meta)) +
+      (track.deviceName ? "・📱 " + track.deviceName : "");
     $("chips").innerHTML = '<span class="gt-chip">' + C.modeEmoji(C.modeOf(track, meta)) + " " + esc(C.modeName(C.modeOf(track, meta))) + "</span>";
     $("when").textContent = C.fmtDate(track.startTimeMs) + (track.endTimeMs ? " – " + C.fmtTime(track.endTimeMs) : "");
 
