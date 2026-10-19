@@ -64,6 +64,30 @@ class OverviewMathTest {
         assertEquals(listOf(0.0, 1.0), OverviewMath.niceScale(Double.NaN, 3.0).ticks)
     }
 
+    @Test fun byContextFiltersOnlyWhenAContextIsGiven() {
+        val ctxList = listOf(
+            rec("f", RecordType.BLOOD_GLUCOSE, 90.0, 1.0).copy(context = com.startinsnow.healthtracker.data.db.MeasureContext.FASTING),
+            rec("m", RecordType.BLOOD_GLUCOSE, 140.0, 1.0).copy(context = com.startinsnow.healthtracker.data.db.MeasureContext.AFTER_MEAL),
+            rec("n", RecordType.BLOOD_GLUCOSE, 100.0, 1.0),
+        )
+        assertEquals(3, OverviewMath.byContext(ctxList, null).size)
+        assertEquals(listOf("f"), OverviewMath.byContext(ctxList, com.startinsnow.healthtracker.data.db.MeasureContext.FASTING).map { it.id })
+        assertTrue(OverviewMath.byContext(ctxList, com.startinsnow.healthtracker.data.db.MeasureContext.BEDTIME).isEmpty())
+    }
+
+    @Test fun inRangeCountsValuesInsideTheUsersOwnRangeInclusive() {
+        val l = listOf(70.0, 100.0, 140.0, 141.0, 180.0).mapIndexed { i, v -> rec("r$i", RecordType.BLOOD_GLUCOSE, v, 1.0) }
+        val r = OverviewMath.inRange(l, 70.0, 140.0)!!
+        assertEquals(3, r.inRange)
+        assertEquals(5, r.total)
+        assertEquals(60, r.percent)
+    }
+
+    @Test fun inRangeIsNullWithoutRangeOrData() {
+        assertNull(OverviewMath.inRange(emptyList(), 70.0, 140.0))
+        assertNull(OverviewMath.inRange(listOf(rec("a", RecordType.BLOOD_GLUCOSE, 100.0, 1.0)), null, 140.0))
+    }
+
     @Test fun relativeAgeWording() {
         assertEquals("剛剛", OverviewMath.relativeAge(NOW - 30_000, NOW))
         assertEquals("5 分鐘前", OverviewMath.relativeAge(NOW - 5 * 60_000, NOW))

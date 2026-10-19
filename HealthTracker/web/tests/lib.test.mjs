@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   fetchAllPages,
+  contextLabel,
   rangeStart, normalizeBaseUrl, buildRecordsQuery, sessionNeedsRefresh,
   formatValue, formatTime, sourceLabel, summarize, isSafePhotoPath,
 } from '../lib.js';
@@ -40,7 +41,7 @@ test('buildRecordsQuery：排除已刪除、依時間新到舊、帶類型與起
   assert.equal(q.get('measured_at'), 'gte.1000');
   assert.equal(q.get('order'), 'measured_at.desc,id.desc');
   assert.equal(q.get('limit'), '50');
-  assert.ok(q.get('select').includes('photo_object'));
+  assert.equal(q.get('select'), '*');
 });
 
 test('buildRecordsQuery：不指定類型與時間就不帶這兩個條件', () => {
@@ -122,6 +123,17 @@ test('fetchAllPages：第一頁不滿就只請求一次', async () => {
   let calls = 0;
   await fetchAllPages(async (o, l) => { calls++; return source(10)(o, l); });
   assert.equal(calls, 1);
+});
+
+test('contextLabel：已知情境翻成中文，未知或空值回傳空字串', () => {
+  assert.equal(contextLabel('FASTING'), '空腹');
+  assert.equal(contextLabel('AFTER_MEAL'), '餐後');
+  assert.equal(contextLabel('NOPE'), '');
+  assert.equal(contextLabel(null), '');
+});
+
+test('buildRecordsQuery：select 用 *，雲端缺欄位時也不會整個失敗', () => {
+  assert.equal(new URLSearchParams(buildRecordsQuery()).get('select'), '*');
 });
 
 test('isSafePhotoPath：只接受 <uuid>/<uuid>.jpg', () => {

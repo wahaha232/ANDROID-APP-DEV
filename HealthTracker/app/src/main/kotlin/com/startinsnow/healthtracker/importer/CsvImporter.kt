@@ -1,6 +1,7 @@
 package com.startinsnow.healthtracker.importer
 
 import com.startinsnow.healthtracker.data.db.HealthRecord
+import com.startinsnow.healthtracker.data.db.MeasureContext
 import com.startinsnow.healthtracker.data.db.RecordSource
 import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.db.SyncState
@@ -38,6 +39,14 @@ object CsvImporter {
     private val valueNames = setOf("value", "數值", "值")
     private val value2Names = setOf("value2", "舒張壓", "數值2")
     private val noteNames = setOf("note", "備註")
+    private val contextNames = setOf("context", "情境", "測量情境")
+
+    private val contextAliases: Map<String, MeasureContext> = buildMap {
+        MeasureContext.entries.forEach { put(it.name.lowercase(Locale.ROOT), it); put(it.label, it) }
+        put("餐後2小時", MeasureContext.AFTER_MEAL)
+        put("飯後", MeasureContext.AFTER_MEAL)
+        put("飯前", MeasureContext.BEFORE_MEAL)
+    }
 
     private val typeAliases: Map<String, RecordType> = buildMap {
         RecordType.entries.forEach { put(it.name.lowercase(Locale.ROOT), it); put(it.label, it) }
@@ -68,6 +77,7 @@ object CsvImporter {
         }
         val iValue2 = col(value2Names)
         val iNote = col(noteNames)
+        val iContext = col(contextNames)
 
         val records = ArrayList<HealthRecord>()
         val errors = ArrayList<String>()
@@ -79,9 +89,12 @@ object CsvImporter {
             val measuredAt = parseTime(cell(iTime), zone)
             val value = cell(iValue).toDoubleOrNull()
             val value2 = if (iValue2 >= 0) cell(iValue2).toDoubleOrNull() else null
+            val rawContext = if (iContext >= 0) cell(iContext) else ""
+            val context = if (type == RecordType.BLOOD_GLUCOSE && rawContext.isNotBlank()) contextAliases[rawContext.lowercase(Locale.ROOT)] else null
             val problem = when {
                 type == null -> "類型「${cell(iType)}」看不懂"
                 measuredAt == null -> "時間「${cell(iTime)}」格式不對"
+                type == RecordType.BLOOD_GLUCOSE && rawContext.isNotBlank() && context == null -> "情境「$rawContext」看不懂（可填空腹、餐前、餐後、睡前）"
                 else -> RecordValidator.validate(type, value, value2)
             }
             if (problem != null) {
@@ -94,7 +107,7 @@ object CsvImporter {
                 id = ImportIds.fromCsvRow(type, measuredAt, value, v2),
                 type = type, value = value, value2 = v2, measuredAt = measuredAt,
                 source = RecordSource.IMPORT, note = if (iNote >= 0) cell(iNote) else "",
-                syncState = SyncState.PENDING, createdAt = now, updatedAt = now,
+                syncState = SyncState.PENDING, createdAt = now, updatedAt = now, context = context,
             )
         }
         return CsvParseResult(records, errors)

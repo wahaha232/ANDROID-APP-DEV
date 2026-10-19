@@ -85,7 +85,7 @@ test('buildRecordsQuery：offset 只在大於 0 時帶上', () => {
 
 test('toRows：台北時間、中文類型、數字保持數字', () => {
   const rows = toRows([rec(Date.UTC(2026, 9, 18, 22, 33), 70, { source: 'MIJIA', note: '晨間' })]);
-  assert.deepEqual(rows[0], ['2026-10-19 06:33', '體重', 70, '', '晨間', '米家畫面']);
+  assert.deepEqual(rows[0], ['2026-10-19 06:33', '體重', 70, '', '', '晨間', '米家畫面']);
 });
 
 test('guardFormula：公式開頭字元加單引號，一般文字不動', () => {
@@ -94,8 +94,8 @@ test('guardFormula：公式開頭字元加單引號，一般文字不動', () =>
 });
 
 test('toCsv：BOM、標題、CRLF、逗號與引號跳脫、公式防護', () => {
-  const csv = toCsv([['2026-10-19 06:33', '體重', 70.5, '', '含,逗號與"引號"', '手動輸入'], ['t', '體重', 1, '', '=HYPERLINK("x")', '']]);
-  assert.ok(csv.startsWith('﻿時間,類型,數值,數值2,備註,來源\r\n'));
+  const csv = toCsv([['2026-10-19 06:33', '體重', 70.5, '', '', '含,逗號與"引號"', '手動輸入'], ['t', '體重', 1, '', '', '=HYPERLINK("x")', '']]);
+  assert.ok(csv.startsWith('﻿時間,類型,數值,數值2,情境,備註,來源\r\n'));
   assert.ok(csv.includes('"含,逗號與""引號"""'));
   assert.ok(csv.includes(`"'=HYPERLINK(""x"")"`));
   assert.ok(csv.endsWith('\r\n'));

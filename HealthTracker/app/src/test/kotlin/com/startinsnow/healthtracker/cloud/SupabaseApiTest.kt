@@ -137,6 +137,17 @@ class SupabaseApiTest {
         assertEquals("u/r2.jpg", second["photo_object"]!!.jsonPrimitive.content)
     }
 
+    @Test fun upsertSendsContextOnlyWhenSet() = runTest {
+        server.enqueue(MockResponse().setResponseCode(201))
+        server.enqueue(MockResponse().setResponseCode(201))
+        api.upsert("tok", RemoteRecord("r1", "BLOOD_GLUCOSE", 100.0, null, 1, "MANUAL", "", 2, 3, null, null))
+        api.upsert("tok", RemoteRecord("r2", "BLOOD_GLUCOSE", 100.0, null, 1, "MANUAL", "", 2, 3, null, null, context = "FASTING"))
+        val first: JsonObject = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        val second: JsonObject = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertFalse("沒填情境就省略，雲端沒有 context 欄位時也能同步", first.containsKey("context"))
+        assertEquals("FASTING", second["context"]!!.jsonPrimitive.content)
+    }
+
     @Test fun uploadPhotoSendsBytesWithUpsertHeader() = runTest {
         server.enqueue(MockResponse().setResponseCode(200))
         api.uploadPhoto("tok", "uid/r1.jpg", byteArrayOf(1, 2, 3))

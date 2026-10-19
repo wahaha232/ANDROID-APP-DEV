@@ -58,7 +58,7 @@ fun HealthTrackerRoot(records: HealthRecordRepository, settings: UserSettingsRep
     ) { padding ->
         NavHost(nav, startDestination = ROUTE_OVERVIEW, modifier = Modifier.padding(padding)) {
             composable(ROUTE_OVERVIEW) {
-                OverviewScreen(records, cloud, onSeeAll = {
+                OverviewScreen(records, cloud, settings, onSeeAll = {
                     nav.navigate(ROUTE_RECORDS) {
                         launchSingleTop = true
                         restoreState = true

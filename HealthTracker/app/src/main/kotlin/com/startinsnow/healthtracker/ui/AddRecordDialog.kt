@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.startinsnow.healthtracker.data.db.HealthRecord
+import com.startinsnow.healthtracker.data.db.MeasureContext
 import com.startinsnow.healthtracker.data.db.RecordSource
 import com.startinsnow.healthtracker.data.repository.MeasureTime
 import com.startinsnow.healthtracker.data.db.RecordType
@@ -89,6 +90,7 @@ fun AddRecordDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var measuredAt by remember { mutableLongStateOf(existing?.measuredAt ?: System.currentTimeMillis()) }
     var showDate by remember { mutableStateOf(false) }
+    var ctx by remember { mutableStateOf(existing?.context) }
     var showTime by remember { mutableStateOf(false) }
 
     // 目前掛在這筆紀錄上的照片（存檔後才算數；取消或換類型就刪掉）。
@@ -195,6 +197,15 @@ fun AddRecordDialog(
 
                 if (existing?.photoPath != null && File(existing.photoPath).isFile) PhotoPreview(existing.photoPath)
 
+                if (type == RecordType.BLOOD_GLUCOSE) {
+                    Text("測量情境（選填，再點一次取消）", style = MaterialTheme.typography.bodyMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MeasureContext.entries.forEach { c ->
+                            FilterChip(selected = ctx == c, onClick = { ctx = if (ctx == c) null else c }, label = { Text(c.label) })
+                        }
+                    }
+                }
+
                 // 測量時間：預設現在；補登或照片時間不同時可改日期與時分
                 Text(
                     "測量時間　" + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(Instant.ofEpochMilli(measuredAt).atZone(zone)),
@@ -226,12 +237,13 @@ fun AddRecordDialog(
                 scope.launch {
                     val usePhoto = existing == null && type == RecordType.BLOOD_GLUCOSE && photoPath != null
                     val msg = if (existing != null) {
-                        records.update(existing.id, v.toDoubleOrNull(), v2.toDoubleOrNull(), measuredAt, note)
+                        records.update(existing.id, v.toDoubleOrNull(), v2.toDoubleOrNull(), measuredAt, note, ctx)
                     } else {
                         records.addManual(
                             type, v.toDoubleOrNull(), v2.toDoubleOrNull(), measuredAt, note,
                             source = if (usePhoto) RecordSource.OCR else RecordSource.MANUAL,
                             photoPath = if (usePhoto) photoPath else null,
+                            context = ctx,
                         )
                     }
                     if (msg == null) {

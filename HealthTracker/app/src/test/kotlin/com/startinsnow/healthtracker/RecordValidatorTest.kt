@@ -22,6 +22,17 @@ class RecordValidatorTest {
 
     @Test fun normalPressurePasses() = assertNull(RecordValidator.validate(RecordType.BLOOD_PRESSURE, 120.0, 80.0))
 
+    @Test fun glucoseRangeValidation() {
+        assertNull(RecordValidator.validateGlucoseRange(null, null))
+        assertNull(RecordValidator.validateGlucoseRange(70.0, 140.0))
+        assertNotNull(RecordValidator.validateGlucoseRange(70.0, null))
+        assertNotNull(RecordValidator.validateGlucoseRange(null, 140.0))
+        assertNotNull(RecordValidator.validateGlucoseRange(140.0, 70.0))
+        assertNotNull(RecordValidator.validateGlucoseRange(70.0, 70.0))
+        assertNotNull(RecordValidator.validateGlucoseRange(5.0, 140.0))
+        assertNotNull(RecordValidator.validateGlucoseRange(70.0, 900.0))
+    }
+
     @Test fun bmiComputedFromHeight() {
         val bmi = UserSettings(heightCm = 170.0).bmi(72.25)!!
         assertEquals(25.0, bmi, 0.01)

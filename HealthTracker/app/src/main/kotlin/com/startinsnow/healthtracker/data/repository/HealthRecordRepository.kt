@@ -4,6 +4,7 @@ import com.startinsnow.healthtracker.backup.RestoreAction
 import com.startinsnow.healthtracker.backup.planRestore
 import com.startinsnow.healthtracker.data.db.HealthRecord
 import com.startinsnow.healthtracker.data.db.HealthRecordDao
+import com.startinsnow.healthtracker.data.db.MeasureContext
 import com.startinsnow.healthtracker.data.db.RecordSource
 import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.db.SyncState
@@ -36,6 +37,7 @@ class HealthRecordRepository(private val dao: HealthRecordDao, private val db: R
         note: String,
         source: RecordSource = RecordSource.MANUAL,
         photoPath: String? = null,
+        context: MeasureContext? = null,
         now: Long = System.currentTimeMillis(),
     ): String? {
         RecordValidator.validate(type, value, value2)?.let { return it }
@@ -53,6 +55,7 @@ class HealthRecordRepository(private val dao: HealthRecordDao, private val db: R
                 createdAt = now,
                 updatedAt = now,
                 photoPath = photoPath,
+                context = if (type == RecordType.BLOOD_GLUCOSE) context else null,
             )
         )
         return null
@@ -68,6 +71,7 @@ class HealthRecordRepository(private val dao: HealthRecordDao, private val db: R
         value2: Double?,
         measuredAt: Long,
         note: String,
+        context: MeasureContext? = null,
         now: Long = System.currentTimeMillis(),
     ): String? {
         val existing = dao.get(id) ?: return "找不到這筆紀錄"
@@ -80,6 +84,7 @@ class HealthRecordRepository(private val dao: HealthRecordDao, private val db: R
                 value2 = if (existing.type == RecordType.BLOOD_PRESSURE) value2 else null,
                 measuredAt = measuredAt,
                 note = note.trim(),
+                context = if (existing.type == RecordType.BLOOD_GLUCOSE) context else null,
                 syncState = SyncState.PENDING,
                 updatedAt = maxOf(now, existing.updatedAt + 1),
             )

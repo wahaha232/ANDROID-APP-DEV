@@ -38,6 +38,18 @@ class BackupCodecTest {
         assertEquals(sample.map { it.copy(syncState = SyncState.PENDING, photoPath = null) }, back)
     }
 
+    @Test fun measurementContextSurvivesBackupAndRestore() {
+        val g = rec("g", type = RecordType.BLOOD_GLUCOSE).copy(context = com.startinsnow.healthtracker.data.db.MeasureContext.AFTER_MEAL)
+        val back = BackupCodec.decode(BackupCodec.encode(listOf(g), "pw"), "pw").mapNotNull(BackupCodec::toHealthRecord)
+        assertEquals(com.startinsnow.healthtracker.data.db.MeasureContext.AFTER_MEAL, back.single().context)
+    }
+
+    @Test fun backupFromBeforeContextExistedStillRestores() {
+        val json = """{"format":"healthtracker-backup","version":1,"createdAt":0,"encrypted":false,"records":[
+            {"id":"y","type":"BLOOD_GLUCOSE","value":100.0,"measuredAt":1,"source":"MANUAL","createdAt":1,"updatedAt":1}]}"""
+        assertNull(BackupCodec.decode(json.toByteArray(), null).mapNotNull(BackupCodec::toHealthRecord).single().context)
+    }
+
     @Test fun photoPathAndSyncStateAreNotStoredInTheFile() {
         val text = String(BackupCodec.encode(listOf(rec("a", photoPath = "/data/user/0/x/photos/secret.jpg")), null), Charsets.UTF_8)
         assertFalse(text.contains("secret.jpg"))

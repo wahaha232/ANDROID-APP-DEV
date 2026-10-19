@@ -36,6 +36,21 @@ class CsvImporterTest {
         assertEquals(listOf(RecordType.WEIGHT, RecordType.BODY_FAT, RecordType.BLOOD_GLUCOSE), r.records.map { it.type })
     }
 
+    @Test fun glucoseContextColumnIsParsedByLabelOrCode() {
+        val r = parse("時間,類型,數值,情境\n2026-10-19 07:00,血糖,95,空腹\n2026-10-19 09:00,血糖,130,after_meal\n2026-10-19 10:00,血糖,100,\n2026-10-19 10:05,體重,70,空腹")
+        assertTrue(r.errors.isEmpty())
+        assertEquals(
+            listOf(com.startinsnow.healthtracker.data.db.MeasureContext.FASTING, com.startinsnow.healthtracker.data.db.MeasureContext.AFTER_MEAL, null, null),
+            r.records.map { it.context },
+        )
+    }
+
+    @Test fun unknownContextIsReportedWithLineNumber() {
+        val r = parse("時間,類型,數值,情境\n2026-10-19 07:00,血糖,95,下午茶")
+        assertTrue(r.records.isEmpty())
+        assertTrue(r.errors.single().startsWith("第 2 列") && r.errors.single().contains("情境"))
+    }
+
     @Test fun bloodPressureNeedsValue2() {
         val r = parse("time,type,value,value2\n2026-10-19 08:00,血壓,120,80\n2026-10-19 08:10,血壓,120,")
         assertEquals(1, r.records.size)

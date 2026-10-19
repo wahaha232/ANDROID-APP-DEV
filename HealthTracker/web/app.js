@@ -1,6 +1,6 @@
 import {
   TYPES, RANGES, rangeStart, normalizeBaseUrl, buildRecordsQuery, sessionNeedsRefresh,
-  formatValue, formatTime, sourceLabel, summarize, isSafePhotoPath, fetchAllPages,
+  formatValue, formatTime, sourceLabel, summarize, isSafePhotoPath, fetchAllPages, CONTEXT_LABELS, contextLabel,
 } from './lib.js';
 import { renderChart } from './chart.js';
 import { toRows, toCsv, buildXlsx, exportFileName, EXPORT_HEADER } from './export.js';
@@ -16,7 +16,7 @@ const setMsg = (id, text, isErr = false) => {
   el.classList.toggle('err', isErr);
 };
 
-const state = { type: 'WEIGHT', range: '90', photoUrl: null, loadSeq: 0, photoSeq: 0, opener: null };
+const state = { type: 'WEIGHT', range: '90', ctx: null, photoUrl: null, loadSeq: 0, photoSeq: 0, opener: null };
 const MAX_EXPORT_PAGES = 50; // 5 萬筆；超過就明確告知並取消匯出
 
 const loadConfig = () => {
@@ -123,8 +123,16 @@ function buildTabs(containerId, items, current, onPick) {
   }
 }
 
+function renderCtxTabs() {
+  const box = $('ctx-tabs');
+  box.hidden = state.type !== 'BLOOD_GLUCOSE';
+  if (box.hidden) return;
+  buildTabs('ctx-tabs', [[null, '全部情境'], ...Object.entries(CONTEXT_LABELS)], state.ctx, (k) => { state.ctx = k; renderCtxTabs(); loadRecords(); });
+}
+
 function renderTabs() {
-  buildTabs('type-tabs', Object.entries(TYPES).map(([k, v]) => [k, v.label]), state.type, (k) => { state.type = k; renderTabs(); loadRecords(); });
+  buildTabs('type-tabs', Object.entries(TYPES).map(([k, v]) => [k, v.label]), state.type, (k) => { state.type = k; state.ctx = null; renderTabs(); loadRecords(); });
+  renderCtxTabs();
   buildTabs('range-tabs', RANGES.map((r) => [r.key, r.label]), state.range, (k) => { state.range = k; renderTabs(); loadRecords(); });
 }
 
@@ -171,7 +179,7 @@ function renderRows(records) {
       if (cls) td.className = cls;
       return td;
     };
-    tr.append(cell(formatTime(r.measured_at)), cell(formatValue(r), 'val'), cell(sourceLabel(r.source)), cell(r.note ?? ''));
+    tr.append(cell(formatTime(r.measured_at)), cell(formatValue(r), 'val'), cell(contextLabel(r.context)), cell(sourceLabel(r.source)), cell(r.note ?? ''));
     const photoTd = document.createElement('td');
     if (isSafePhotoPath(r.photo_object)) {
       const b = document.createElement('button');
@@ -192,8 +200,9 @@ async function loadRecords() {
   try {
     const q = buildRecordsQuery({ type: state.type, since: rangeStart(state.range) });
     const resp = await authed(`/rest/v1/health_records?${q}`);
-    const records = await resp.json();
+    const all = await resp.json();
     if (seq !== state.loadSeq) return;
+    const records = state.type === 'BLOOD_GLUCOSE' && state.ctx ? all.filter((r) => r.context === state.ctx) : all;
     renderSummary(records);
     renderRows(records);
     $('chart-title').textContent = records.length ? `${TYPES[state.type].label}趨勢（${TYPES[state.type].unit}）` : '';

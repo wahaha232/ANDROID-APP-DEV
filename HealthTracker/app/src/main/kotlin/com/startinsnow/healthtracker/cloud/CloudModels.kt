@@ -34,6 +34,8 @@ data class RemoteRecord(
     @SerialName("updated_at") val updatedAt: Long,
     @SerialName("deleted_at") val deletedAt: Long? = null,
     @SerialName("photo_object") val photoObject: String? = null,
+    /** 血糖測量情境（FASTING／BEFORE_MEAL／AFTER_MEAL／BEDTIME）；需要先在 Supabase 加上 context 欄位。 */
+    val context: String? = null,
     /** 伺服器時間，只在拉取時有值；推送時不送（由資料庫 trigger 蓋章）。 */
     @SerialName("synced_at") val syncedAt: String? = null,
 )
@@ -57,6 +59,7 @@ fun HealthRecord.toRemote(userId: String, photoObject: String? = null) = RemoteR
     updatedAt = updatedAt,
     deletedAt = deletedAt,
     photoObject = photoObject,
+    context = context?.name,
 )
 
 /** 未知的類型或來源（例如日後網站新增的種類）回傳 null，由呼叫端略過，不讓整批同步失敗。 */
@@ -76,5 +79,6 @@ fun RemoteRecord.toLocal(): HealthRecord? {
         updatedAt = updatedAt,
         deletedAt = deletedAt,
         photoPath = null,
+        context = context?.let { n -> com.startinsnow.healthtracker.data.db.MeasureContext.entries.firstOrNull { it.name == n } },
     )
 }

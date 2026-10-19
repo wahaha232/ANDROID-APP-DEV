@@ -15,6 +15,11 @@ enum class RecordType(val label: String, val unit: String) {
 /** 資料來源。第 1 階段只有手動；之後的 OCR／米家／同步來源在此擴充。 */
 enum class RecordSource { MANUAL, OCR, MIJIA, IMPORT, HEALTH_CONNECT }
 
+/** 血糖的測量情境（只用在血糖紀錄；其他類型為 null）。 */
+enum class MeasureContext(val label: String) {
+    FASTING("空腹"), BEFORE_MEAL("餐前"), AFTER_MEAL("餐後"), BEDTIME("睡前"),
+}
+
 /** 同步狀態：本機優先，日後同步（第 4、6 天）靠它判斷哪些資料待上傳。 */
 enum class SyncState { LOCAL_ONLY, PENDING, SYNCED }
 
@@ -44,4 +49,6 @@ data class HealthRecord(
     val deletedAt: Long? = null,
     /** OCR 拍照紀錄的原始照片（App 私有目錄的絕對路徑），供日後回頭核對。 */
     val photoPath: String? = null,
+    /** 血糖測量情境；沒選或非血糖為 null。 */
+    val context: MeasureContext? = null,
 )

@@ -186,7 +186,9 @@ private fun RecordCard(r: HealthRecord, user: UserSettings, onEdit: () -> Unit, 
             Column(Modifier.weight(1f)) {
                 Text(formatMain(r), style = MaterialTheme.typography.titleMedium)
                 val sub = buildString {
-                    append(r.type.label).append("　").append(clockFormat.format(java.time.Instant.ofEpochMilli(r.measuredAt).atZone(java.time.ZoneId.systemDefault())))
+                    append(r.type.label)
+                    r.context?.let { append("・").append(it.label) }
+                    append("　").append(clockFormat.format(java.time.Instant.ofEpochMilli(r.measuredAt).atZone(java.time.ZoneId.systemDefault())))
                     if (r.type == RecordType.WEIGHT) user.bmi(r.value)?.let { append("　BMI ${"%.1f".format(it)}") }
                 }
                 Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

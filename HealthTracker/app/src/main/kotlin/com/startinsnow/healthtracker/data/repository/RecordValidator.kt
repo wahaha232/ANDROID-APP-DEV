@@ -19,6 +19,15 @@ object RecordValidator {
         }
     }
 
+    /** 目標範圍（mg/dL）：兩個都不填＝不設定；要填就兩個一起填，且下限小於上限。回傳 null 表示通過。 */
+    fun validateGlucoseRange(low: Double?, high: Double?): String? {
+        if (low == null && high == null) return null
+        if (low == null || high == null) return "目標範圍請同時填下限與上限"
+        if (low < 20.0 || high > 800.0) return "目標範圍請填 20–800 mg/dL"
+        if (low >= high) return "下限必須小於上限"
+        return null
+    }
+
     /** 測量時間不能在未來（超過容許誤差）。回傳 null 表示通過。 */
     fun validateTime(measuredAt: Long, now: Long): String? =
         if (MeasureTime.isFuture(measuredAt, now)) "測量時間不能晚於現在" else null

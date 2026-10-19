@@ -107,7 +107,12 @@ class SupabaseApi(
         val url = base.newBuilder().addPathSegments("rest/v1/health_records").addQueryParameter("on_conflict", "id").build()
         // synced_at 由資料庫 trigger 蓋章，推送時直接拿掉這個欄位。
         // photo_object 為 null 時整個欄位省略（merge-duplicates 只更新有送出的欄位，不會把雲端原有的照片連結清掉）
-        val omitted = buildSet { add("synced_at"); if (record.photoObject == null) add("photo_object") }
+        // context 為 null 也省略：雲端還沒加 context 欄位時，沒填情境的紀錄仍能正常同步
+        val omitted = buildSet {
+            add("synced_at")
+            if (record.photoObject == null) add("photo_object")
+            if (record.context == null) add("context")
+        }
         val body = JsonObject(json.encodeToJsonElement(RemoteRecord.serializer(), record).jsonObject - omitted).toString()
         val req = authed(Request.Builder().url(url), accessToken)
             .header("Prefer", "resolution=merge-duplicates,return=minimal")

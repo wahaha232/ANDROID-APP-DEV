@@ -1,7 +1,7 @@
 // 匯出：CSV 與最小 XLSX 產生器（純函式，無第三方套件）。
-import { TYPES, formatTime, sourceLabel } from './lib.js';
+import { TYPES, formatTime, sourceLabel, contextLabel } from './lib.js';
 
-export const EXPORT_HEADER = ['時間', '類型', '數值', '數值2', '備註', '來源'];
+export const EXPORT_HEADER = ['時間', '類型', '數值', '數值2', '情境', '備註', '來源'];
 
 /** 紀錄 → 表格列。時間為台北時間 yyyy-MM-dd HH:mm（與 Android App 的 CSV 匯入格式相同，可直接匯回）。 */
 export function toRows(records) {
@@ -10,6 +10,7 @@ export function toRows(records) {
     TYPES[r.type]?.label ?? r.type,
     r.value,
     r.value2 ?? '',
+    contextLabel(r.context),
     r.note ?? '',
     sourceLabel(r.source),
   ]);

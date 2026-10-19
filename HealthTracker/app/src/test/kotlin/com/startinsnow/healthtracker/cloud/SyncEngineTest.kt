@@ -204,6 +204,14 @@ class SyncEngineTest {
         assertNull(api.upserted.single().photoObject)
     }
 
+    @Test fun contextIsPushedAndPulled() = runTest {
+        store.rows["c"] = local("c").copy(context = com.startinsnow.healthtracker.data.db.MeasureContext.BEDTIME)
+        api.remoteRows["p"] = remote("p").copy(type = "BLOOD_GLUCOSE", context = "AFTER_MEAL")
+        engine().sync()
+        assertEquals("BEDTIME", api.upserted.single { it.id == "c" }.context)
+        assertEquals(com.startinsnow.healthtracker.data.db.MeasureContext.AFTER_MEAL, store.rows["p"]!!.context)
+    }
+
     @Test fun deletedOcrRecordRemovesRemotePhoto() = runTest {
         store.rows["g"] = local("g", source = RecordSource.OCR, deletedAt = 120, photoPath = "/p/g.jpg")
         engine().sync()

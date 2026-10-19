@@ -14,6 +14,12 @@ export const SOURCE_LABELS = {
   HEALTH_CONNECT: 'Health Connect',
 };
 
+export const CONTEXT_LABELS = { FASTING: '空腹', BEFORE_MEAL: '餐前', AFTER_MEAL: '餐後', BEDTIME: '睡前' };
+
+export function contextLabel(code) {
+  return CONTEXT_LABELS[code] ?? '';
+}
+
 export const RANGES = [
   { key: '30', label: '30 天', days: 30 },
   { key: '90', label: '90 天', days: 90 },
@@ -48,7 +54,7 @@ export function normalizeBaseUrl(input, pageHost = '') {
 /** 組 PostgREST 查詢字串。type 為 null 表示全部類型。 */
 export function buildRecordsQuery({ type = null, since = null, limit = 1000, offset = 0 } = {}) {
   const p = new URLSearchParams();
-  p.set('select', 'id,type,value,value2,measured_at,source,note,photo_object');
+  p.set('select', '*'); // 用 * 才不會在雲端還沒有 context 欄位時整個查詢失敗
   p.set('deleted_at', 'is.null');
   if (type) p.set('type', `eq.${type}`);
   if (since != null) p.set('measured_at', `gte.${Math.floor(since)}`);

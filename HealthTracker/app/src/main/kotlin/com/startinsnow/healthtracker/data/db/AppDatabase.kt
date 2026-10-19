@@ -14,11 +14,13 @@ class Converters {
     @TypeConverter fun toType(v: String): RecordType = RecordType.valueOf(v)
     @TypeConverter fun fromSource(v: RecordSource): String = v.name
     @TypeConverter fun toSource(v: String): RecordSource = RecordSource.valueOf(v)
+    @TypeConverter fun fromContext(v: MeasureContext?): String? = v?.name
+    @TypeConverter fun toContext(v: String?): MeasureContext? = v?.let { n -> MeasureContext.entries.firstOrNull { it.name == n } }
     @TypeConverter fun fromSync(v: SyncState): String = v.name
     @TypeConverter fun toSync(v: String): SyncState = SyncState.valueOf(v)
 }
 
-@Database(entities = [HealthRecord::class], version = 2, exportSchema = true)
+@Database(entities = [HealthRecord::class], version = 3, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun healthRecordDao(): HealthRecordDao
@@ -31,9 +33,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v3：新增 context（血糖測量情境）。 */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE health_records ADD COLUMN context TEXT")
+            }
+        }
+
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "health_tracker.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }

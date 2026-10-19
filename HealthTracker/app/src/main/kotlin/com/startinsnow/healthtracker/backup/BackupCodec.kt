@@ -1,6 +1,7 @@
 package com.startinsnow.healthtracker.backup
 
 import com.startinsnow.healthtracker.data.db.HealthRecord
+import com.startinsnow.healthtracker.data.db.MeasureContext
 import com.startinsnow.healthtracker.data.db.RecordSource
 import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.db.SyncState
@@ -31,6 +32,7 @@ data class BackupRecord(
     val createdAt: Long,
     val updatedAt: Long,
     val deletedAt: Long? = null,
+    val context: String? = null,
 )
 
 @Serializable
@@ -65,6 +67,7 @@ object BackupCodec {
     fun toBackupRecord(r: HealthRecord) = BackupRecord(
         id = r.id, type = r.type.name, value = r.value, value2 = r.value2, measuredAt = r.measuredAt,
         source = r.source.name, note = r.note, createdAt = r.createdAt, updatedAt = r.updatedAt, deletedAt = r.deletedAt,
+        context = r.context?.name,
     )
 
     /** 未知的類型／來源（來自較新版本）回傳 null，由呼叫端略過。 */
@@ -75,6 +78,7 @@ object BackupCodec {
             id = b.id, type = type, value = b.value, value2 = b.value2, measuredAt = b.measuredAt,
             source = source, note = b.note, syncState = SyncState.PENDING,
             createdAt = b.createdAt, updatedAt = b.updatedAt, deletedAt = b.deletedAt, photoPath = null,
+            context = b.context?.let { n -> MeasureContext.entries.firstOrNull { it.name == n } },
         )
     }
 

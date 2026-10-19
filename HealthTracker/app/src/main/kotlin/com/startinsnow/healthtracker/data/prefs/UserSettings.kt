@@ -20,6 +20,9 @@ data class UserSettings(
     val birthYear: Int? = null,
     val heightCm: Double? = null,
     val targetWeightKg: Double? = null,
+    /** 血糖目標範圍（mg/dL），由使用者依醫師建議自行設定；App 只用來畫範圍帶與統計，不判斷好壞。 */
+    val glucoseLow: Double? = null,
+    val glucoseHigh: Double? = null,
 ) {
     /** BMI；身高或體重不合理時回傳 null。 */
     fun bmi(weightKg: Double): Double? {
@@ -39,6 +42,8 @@ class UserSettingsRepository(private val context: Context) {
         val birthYear = intPreferencesKey("birth_year")
         val height = doublePreferencesKey("height_cm")
         val target = doublePreferencesKey("target_weight_kg")
+        val glucoseLow = doublePreferencesKey("glucose_low")
+        val glucoseHigh = doublePreferencesKey("glucose_high")
     }
 
     val settings: Flow<UserSettings> = context.settingsStore.data.map { p ->
@@ -48,6 +53,8 @@ class UserSettingsRepository(private val context: Context) {
             birthYear = p[Keys.birthYear],
             heightCm = p[Keys.height],
             targetWeightKg = p[Keys.target],
+            glucoseLow = p[Keys.glucoseLow],
+            glucoseHigh = p[Keys.glucoseHigh],
         )
     }
 
@@ -58,6 +65,8 @@ class UserSettingsRepository(private val context: Context) {
             s.birthYear?.let { p[Keys.birthYear] = it } ?: p.remove(Keys.birthYear)
             s.heightCm?.let { p[Keys.height] = it } ?: p.remove(Keys.height)
             s.targetWeightKg?.let { p[Keys.target] = it } ?: p.remove(Keys.target)
+            s.glucoseLow?.let { p[Keys.glucoseLow] = it } ?: p.remove(Keys.glucoseLow)
+            s.glucoseHigh?.let { p[Keys.glucoseHigh] = it } ?: p.remove(Keys.glucoseHigh)
         }
     }
 }

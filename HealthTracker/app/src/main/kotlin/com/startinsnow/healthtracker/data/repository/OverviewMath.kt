@@ -26,6 +26,20 @@ object OverviewMath {
             .sortedBy { it.measuredAt }
     }
 
+    /** 只留下指定測量情境的紀錄；ctx 為 null 表示全部。 */
+    fun byContext(list: List<HealthRecord>, ctx: com.startinsnow.healthtracker.data.db.MeasureContext?): List<HealthRecord> =
+        if (ctx == null) list else list.filter { it.context == ctx }
+
+    data class RangeStat(val inRange: Int, val total: Int) {
+        val percent: Int get() = if (total == 0) 0 else Math.round(inRange * 100.0 / total).toInt()
+    }
+
+    /** 落在使用者自己設定的範圍（含上下限）內的筆數與比例。沒設定範圍或沒資料回傳 null。App 只統計，不判斷好壞。 */
+    fun inRange(list: List<HealthRecord>, low: Double?, high: Double?): RangeStat? {
+        if (low == null || high == null || list.isEmpty()) return null
+        return RangeStat(list.count { it.value in low..high }, list.size)
+    }
+
     fun stats(list: List<HealthRecord>): Stats? {
         if (list.isEmpty()) return null
         val v = list.map { it.value }

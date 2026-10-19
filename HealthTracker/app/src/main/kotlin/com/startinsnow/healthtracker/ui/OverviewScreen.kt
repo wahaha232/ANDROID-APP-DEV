@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -50,6 +51,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.startinsnow.healthtracker.cloud.CloudSync
 import com.startinsnow.healthtracker.data.db.HealthRecord
+import com.startinsnow.healthtracker.data.db.MeasureContext
+import com.startinsnow.healthtracker.data.prefs.UserSettings
+import com.startinsnow.healthtracker.data.prefs.UserSettingsRepository
 import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 import com.startinsnow.healthtracker.data.repository.OverviewMath
@@ -98,7 +102,9 @@ private val monthDay = DateTimeFormatter.ofPattern("MM/dd")
 
 /** 總覽：最新血糖、快速新增、近 7／30 天趨勢、其他類型最新值、最近紀錄、待同步提示。沒有資料就顯示空狀態，不補假資料。 */
 @Composable
-fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, onSeeAll: () -> Unit) {
+fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: UserSettingsRepository, onSeeAll: () -> Unit) {
+    val user by settings.settings.collectAsState(initial = UserSettings())
+    var ctxName by rememberSaveable { mutableStateOf<String?>(null) }
     val list by records.observeAll().collectAsState(initial = emptyList())
     val pending by cloud.pendingCount.collectAsState(initial = 0)
     var days by rememberSaveable { mutableIntStateOf(7) }
@@ -118,7 +124,7 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, onSeeAll: 
             FilledTonalButton(onClick = { addType = RecordType.WEIGHT }, modifier = Modifier.weight(1f)) { Text("記錄其他") }
         }
 
-        TrendCard(list, days, now, zone) { days = it }
+        TrendCard(list, days, now, zone, ctxName, user.glucoseLow, user.glucoseHigh, onCtx = { ctxName = it }) { days = it }
 
         val others = listOf(RecordType.WEIGHT, RecordType.BODY_FAT, RecordType.BLOOD_PRESSURE)
             .mapNotNull { t -> OverviewMath.latest(list, t) }
@@ -163,8 +169,12 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, onSeeAll: 
 }
 
 @Composable
-private fun TrendCard(list: List<HealthRecord>, days: Int, now: Long, zone: ZoneId, onDays: (Int) -> Unit) {
-    val window = OverviewMath.window(list, RecordType.BLOOD_GLUCOSE, days, now)
+private fun TrendCard(
+    list: List<HealthRecord>, days: Int, now: Long, zone: ZoneId,
+    ctxName: String?, low: Double?, high: Double?, onCtx: (String?) -> Unit, onDays: (Int) -> Unit,
+) {
+    val ctx = MeasureContext.entries.firstOrNull { it.name == ctxName }
+    val window = OverviewMath.byContext(OverviewMath.window(list, RecordType.BLOOD_GLUCOSE, days, now), ctx)
     val stats = OverviewMath.stats(window)
     AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -173,17 +183,29 @@ private fun TrendCard(list: List<HealthRecord>, days: Int, now: Long, zone: Zone
                 FilterChip(selected = days == 7, onClick = { onDays(7) }, label = { Text("近 7 天") })
                 FilterChip(selected = days == 30, onClick = { onDays(30) }, label = { Text("近 30 天") })
             }
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = ctx == null, onClick = { onCtx(null) }, label = { Text("全部情境") })
+                MeasureContext.entries.forEach { c ->
+                    FilterChip(selected = ctx == c, onClick = { onCtx(c.name) }, label = { Text(c.label) })
+                }
+            }
             if (window.size < 2) {
                 Text(
-                    if (window.isEmpty()) "近 $days 天沒有血糖紀錄" else "資料不足（近 $days 天只有 1 筆，至少要 2 筆才畫趨勢）",
+                    if (window.isEmpty()) "近 $days 天沒有${ctx?.label ?: ""}血糖紀錄" else "資料不足（近 $days 天只有 1 筆，至少要 2 筆才畫趨勢）",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             } else {
-                TrendChart(window, zone)
+                TrendChart(window, zone, if (low != null && high != null) low to high else null)
             }
             stats?.let {
                 Text(
                     "近 $days 天：${it.count} 筆　平均 ${"%.0f".format(it.avg)}　最低 ${"%.0f".format(it.min)}　最高 ${"%.0f".format(it.max)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            OverviewMath.inRange(window, low, high)?.let {
+                Text(
+                    "落在您設定的範圍（${low?.toInt()}–${high?.toInt()}）內：${it.inRange}/${it.total} 筆（${it.percent}%）",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -193,7 +215,8 @@ private fun TrendCard(list: List<HealthRecord>, days: Int, now: Long, zone: Zone
 
 /** 折線圖（2dp 線、含底色環的圓點、髮絲格線；文字用文字色，線色藍色，亮／暗各自選色）。 */
 @Composable
-private fun TrendChart(points: List<HealthRecord>, zone: ZoneId) {
+private fun TrendChart(points: List<HealthRecord>, zone: ZoneId, band: Pair<Double, Double>?) {
+    val bandColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f)
     val dark = isSystemInDarkTheme()
     val lineColor = if (dark) Color(0xFF3987E5) else Color(0xFF2A78D6)
     val gridColor = MaterialTheme.colorScheme.outlineVariant
@@ -201,7 +224,10 @@ private fun TrendChart(points: List<HealthRecord>, zone: ZoneId) {
     val ringColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val measurer = rememberTextMeasurer()
     val label = TextStyle(fontSize = 10.sp, color = textColor)
-    val scale = OverviewMath.niceScale(points.minOf { it.value }, points.maxOf { it.value })
+    val scale = OverviewMath.niceScale(
+        minOf(points.minOf { it.value }, band?.first ?: Double.MAX_VALUE),
+        maxOf(points.maxOf { it.value }, band?.second ?: -Double.MAX_VALUE),
+    )
     val description = "血糖趨勢圖，${points.size} 筆，最新 ${points.last().value.toInt()} mg/dL"
 
     Canvas(Modifier.fillMaxWidth().height(180.dp).semantics { contentDescription = description }) {
@@ -216,6 +242,9 @@ private fun TrendChart(points: List<HealthRecord>, zone: ZoneId) {
         fun x(t: Long) = left + if (t1 == t0) w / 2 else (t - t0).toFloat() / (t1 - t0) * w
         fun y(v: Double) = top + h - ((v - scale.min) / (scale.max - scale.min)).toFloat() * h
 
+        band?.let { (lo, hi) ->
+            drawRect(bandColor, topLeft = Offset(left, y(hi)), size = androidx.compose.ui.geometry.Size(w, y(lo) - y(hi)))
+        }
         scale.ticks.forEach { tick ->
             val ty = y(tick)
             drawLine(gridColor, Offset(left, ty), Offset(left + w, ty), strokeWidth = 1.dp.toPx())

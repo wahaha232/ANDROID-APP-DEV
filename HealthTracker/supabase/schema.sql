@@ -40,6 +40,15 @@ do $$ begin
     );
 exception when duplicate_object then null; end $$;
 
+-- 血糖測量情境（空腹／餐前／餐後／睡前）。已經建好資料表的人也只要再執行這一段就能升級。
+-- 沒加這個欄位時，App 只會讓「有選情境」的紀錄同步失敗，沒選情境的照常同步。
+alter table public.health_records add column if not exists context text;
+do $$ begin
+  alter table public.health_records
+    add constraint health_records_context_valid
+    check (context is null or context in ('FASTING', 'BEFORE_MEAL', 'AFTER_MEAL', 'BEDTIME'));
+exception when duplicate_object then null; end $$;
+
 create index if not exists health_records_user_synced_idx on public.health_records (user_id, synced_at);
 create index if not exists health_records_user_measured_idx on public.health_records (user_id, type, measured_at desc);
 

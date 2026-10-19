@@ -18,17 +18,17 @@ now = int(time.time() * 1000)
 DAY = 86400000
 random.seed(7)
 ROWS = []
-def add(t, v, v2, days_ago, source='MANUAL', note='', photo=None, deleted=None):
+def add(t, v, v2, days_ago, source='MANUAL', note='', photo=None, deleted=None, context=None):
     ROWS.append(dict(id=str(uuid.uuid4()), type=t, value=v, value2=v2, measured_at=now - int(days_ago * DAY),
-                     source=source, note=note, photo_object=photo, deleted_at=deleted))
+                     source=source, note=note, photo_object=photo, deleted_at=deleted, context=context))
 for i in range(0, 40, 2):
     add('WEIGHT', round(70 + random.uniform(-1.5, 1.5), 1), None, i, 'MIJIA' if i % 4 == 0 else 'MANUAL')
 add('WEIGHT', 99.9, None, 1, note='已刪除的不應出現', deleted=now)
 add('WEIGHT', 71.0, None, 200, note='半年多前')
 for i in range(0, 30, 5): add('BODY_FAT', round(22 + random.uniform(-1, 1), 1), None, i, 'MIJIA')
-add('BLOOD_GLUCOSE', 112, None, 0.2, 'OCR', '早餐前', PHOTO_PATH)
+add('BLOOD_GLUCOSE', 112, None, 0.2, 'OCR', '早餐前', PHOTO_PATH, context='FASTING')
 add('BLOOD_GLUCOSE', 98, None, 1.1, 'MANUAL', '<img src=x onerror=alert(1)> 備註含 HTML')
-add('BLOOD_GLUCOSE', 135, None, 3, 'OCR', 'photo 不存在', f'{USER_ID}/{uuid.uuid4()}.jpg')
+add('BLOOD_GLUCOSE', 135, None, 3, 'OCR', 'photo 不存在', f'{USER_ID}/{uuid.uuid4()}.jpg', context='AFTER_MEAL')
 add('BLOOD_PRESSURE', 120, 80, 2)
 add('BLOOD_PRESSURE', 118, 76, 9)
 
@@ -73,7 +73,7 @@ class H(BaseHTTPRequestHandler):
             if 'measured_at' in q: rows = [r for r in rows if r['measured_at'] >= int(q['measured_at'][0].removeprefix('gte.'))]
             rows.sort(key=lambda r: (r['measured_at'], r['id']), reverse=True)
             rows = rows[:int(q.get('limit', ['1000'])[0])]
-            cols = q['select'][0].split(',') if 'select' in q else None
+            cols = None if q.get('select', ['*'])[0] == '*' else q['select'][0].split(',')
             return self._send(200, [{k: r[k] for k in cols} if cols else r for r in rows])
         if u.path == '/storage/v1/object/authenticated/meter-photos/' + PHOTO_PATH:
             if not self._authed(): return self._send(401, {})

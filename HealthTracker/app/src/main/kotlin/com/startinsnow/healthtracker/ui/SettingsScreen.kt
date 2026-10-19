@@ -32,6 +32,7 @@ import com.startinsnow.healthtracker.data.prefs.Sex
 import com.startinsnow.healthtracker.data.prefs.UserSettings
 import com.startinsnow.healthtracker.data.prefs.UserSettingsRepository
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
+import com.startinsnow.healthtracker.data.repository.RecordValidator
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -43,6 +44,8 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
     var birthYear by remember { mutableStateOf("") }
     var height by remember { mutableStateOf("") }
     var target by remember { mutableStateOf("") }
+    var gLow by remember { mutableStateOf("") }
+    var gHigh by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var group by rememberSaveable { mutableIntStateOf(0) }
 
@@ -54,6 +57,8 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
         birthYear = s.birthYear?.toString().orEmpty()
         height = s.heightCm?.toString().orEmpty()
         target = s.targetWeightKg?.toString().orEmpty()
+        gLow = s.glucoseLow?.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() }.orEmpty()
+        gHigh = s.glucoseHigh?.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() }.orEmpty()
     }
 
     Column(
@@ -77,16 +82,26 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
         OutlinedTextField(birthYear, { birthYear = it }, label = { Text("出生年（西元）") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
         OutlinedTextField(height, { height = it }, label = { Text("身高（cm）") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
         OutlinedTextField(target, { target = it }, label = { Text("目標體重（kg）") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+        Text("血糖目標範圍（mg/dL，選填）", style = MaterialTheme.typography.titleSmall)
+        Text("請依醫師的建議自行填寫。App 只會在趨勢圖畫出範圍、統計落在範圍內的比例，不會判斷數值好壞。", style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(gLow, { gLow = it }, label = { Text("下限") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
+            OutlinedTextField(gHigh, { gHigh = it }, label = { Text("上限") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
+        }
         Button(onClick = {
             val by = birthYear.toIntOrNull()
             val h = height.toDoubleOrNull()
             val t = target.toDoubleOrNull()
+            val lo = gLow.toDoubleOrNull()
+            val hi = gHigh.toDoubleOrNull()
             message = when {
+                (gLow.isNotBlank() && lo == null) || (gHigh.isNotBlank() && hi == null) -> "目標範圍請填數字"
+                RecordValidator.validateGlucoseRange(lo, hi) != null -> RecordValidator.validateGlucoseRange(lo, hi)
                 birthYear.isNotBlank() && (by == null || by !in 1900..2100) -> "出生年請填 1900–2100"
                 height.isNotBlank() && (h == null || h !in 100.0..250.0) -> "身高請填 100–250 cm"
                 target.isNotBlank() && (t == null || t !in 20.0..300.0) -> "目標體重請填 20–300 kg"
                 else -> {
-                    scope.launch { repo.save(UserSettings(name.trim(), sex, by, h, t)) }
+                    scope.launch { repo.save(UserSettings(name.trim(), sex, by, h, t, lo, hi)) }
                     "已儲存"
                 }
             }
