@@ -96,7 +96,12 @@ fun CloudSection(cloud: CloudSync) {
                         engine.signIn(email, password)
                         session = engine.currentSession()
                         password = ""
-                        message = "登入成功"
+                        // 登入後立刻同步：換新手機只要登入同一個帳號，雲端的舊紀錄（含照片）就會下載回來
+                        message = "登入成功，同步中…"
+                        val r = engine.sync()
+                        message = "登入成功。" + r.summary()
+                        lastSync = cloud.sessions.lastSyncAt()
+                        lastResult = cloud.sessions.lastResult()
                     } catch (e: CloudException) {
                         message = e.message
                     } catch (e: Exception) {

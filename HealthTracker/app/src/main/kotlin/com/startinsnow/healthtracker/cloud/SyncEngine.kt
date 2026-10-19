@@ -50,6 +50,9 @@ class SyncEngine(
     private val api: RemoteApi,
     private val sessions: SessionStore,
     private val readPhoto: (String) -> ByteArray? = { null },
+    /** 把下載的照片存成本機檔，回傳路徑（失敗回傳 null）。 */
+    private val savePhoto: (id: String, bytes: ByteArray) -> String? = { _, _ -> null },
+    private val photoExists: (path: String?) -> Boolean = { it != null },
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val lock = Mutex()
@@ -117,15 +120,31 @@ class SyncEngine(
             r.syncedAt?.let { if (newCursor == null || it > newCursor!!) newCursor = it }
             val incoming = r.toLocal() ?: continue
             val local = store.get(incoming.id)
+            var toSave: HealthRecord? = null
+            var current: HealthRecord? = local
             when {
-                local == null -> { store.saveFromRemote(incoming); applied++ }
+                local == null -> { toSave = incoming; current = incoming; applied++ }
                 incoming.updatedAt > local.updatedAt -> {
-                    store.saveFromRemote(incoming.copy(photoPath = local.photoPath)); applied++
+                    toSave = incoming.copy(photoPath = local.photoPath); current = toSave; applied++
                 }
-                incoming.updatedAt == local.updatedAt && local.syncState != SyncState.SYNCED ->
+                incoming.updatedAt == local.updatedAt && local.syncState != SyncState.SYNCED -> {
                     store.markSynced(local.id, local.updatedAt) // 雲端已有一模一樣的版本（例如上次推送後沒來得及標記）
+                    current = local.copy(syncState = SyncState.SYNCED)
+                }
                 else -> {} // 本機較新：留給 push
             }
+            // 換新手機：雲端有照片、本機沒有就補下載（失敗不影響紀錄本身；網路中斷與登入問題才中止整批）
+            val photoObject = r.photoObject
+            if (current != null && photoObject != null && current.deletedAt == null && !photoExists(current.photoPath)) {
+                val bytes = try {
+                    api.downloadPhoto(session.accessToken, photoObject)
+                } catch (e: CloudException) {
+                    if (e.kind == CloudErrorKind.SERVER) null else throw e
+                }
+                val path = bytes?.let { savePhoto(current.id, it) }
+                if (path != null) toSave = (toSave ?: current).copy(photoPath = path)
+            }
+            toSave?.let { store.saveFromRemote(it) }
         }
         newCursor?.let { sessions.setCursor(it) }
         return applied

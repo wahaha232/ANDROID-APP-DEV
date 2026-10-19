@@ -29,6 +29,9 @@ interface RemoteApi {
     suspend fun upsert(accessToken: String, record: RemoteRecord)
     suspend fun uploadPhoto(accessToken: String, objectPath: String, bytes: ByteArray)
     suspend fun deletePhoto(accessToken: String, objectPath: String)
+
+    /** 下載照片；雲端沒有這張（404）回傳 null。換新手機登入後用來把舊紀錄的照片補回來。 */
+    suspend fun downloadPhoto(accessToken: String, objectPath: String): ByteArray?
 }
 
 @Serializable
@@ -136,6 +139,18 @@ class SupabaseApi(
         execute(req).use { resp ->
             // 照片本來就不存在也算成功。
             if (!resp.isSuccessful && resp.code != 404) throw httpError(resp.code, resp.body?.string().orEmpty())
+        }
+    }
+
+    override suspend fun downloadPhoto(accessToken: String, objectPath: String): ByteArray? {
+        val url = base.newBuilder().addPathSegments("storage/v1/object/authenticated/$BUCKET/$objectPath").build()
+        val req = authed(Request.Builder().url(url), accessToken).get().build()
+        return execute(req).use { resp ->
+            when {
+                resp.code == 404 || resp.code == 400 -> null // Storage 對不存在的物件可能回 400 或 404
+                !resp.isSuccessful -> throw httpError(resp.code, resp.body?.string().orEmpty())
+                else -> withContext(Dispatchers.IO) { resp.body?.bytes() }
+            }
         }
     }
 

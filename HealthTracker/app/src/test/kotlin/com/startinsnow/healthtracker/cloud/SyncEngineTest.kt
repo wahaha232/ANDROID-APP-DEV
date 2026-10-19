@@ -95,6 +95,14 @@ private class FakeApi(val store: FakeStore? = null) : RemoteApi {
     }
     override suspend fun uploadPhoto(accessToken: String, objectPath: String, bytes: ByteArray) { uploaded += objectPath to bytes.size }
     override suspend fun deletePhoto(accessToken: String, objectPath: String) { deletedPhotos += objectPath }
+    val cloudPhotos = HashMap<String, ByteArray>()
+    val downloaded = ArrayList<String>()
+    var downloadFailure: CloudException? = null
+    override suspend fun downloadPhoto(accessToken: String, objectPath: String): ByteArray? {
+        downloadFailure?.let { throw it }
+        downloaded += objectPath
+        return cloudPhotos[objectPath]
+    }
 }
 
 class SyncEngineTest {
@@ -118,6 +126,54 @@ class SyncEngineTest {
         assertEquals(SyncState.SYNCED, store.rows["r1"]!!.syncState)
         assertEquals(71.0, store.rows["r1"]!!.value, 0.0)
         assertEquals(NOW, sessions.lastSync)
+    }
+
+    private fun engineWithPhotos(saved: MutableMap<String, String>) = SyncEngine(
+        store, api, sessions,
+        savePhoto = { id, _ -> "/photos/$id.jpg".also { saved[id] = it } },
+        photoExists = { it != null },
+        clock = { NOW },
+    )
+
+    @Test fun newDevicePullDownloadsPhotosOfOldRecords() = runTest {
+        api.remoteRows["p1"] = remote("p1").copy(source = "OCR", photoObject = "$USER/p1.jpg")
+        api.cloudPhotos["$USER/p1.jpg"] = ByteArray(10)
+        val saved = HashMap<String, String>()
+        val r = engineWithPhotos(saved).sync()
+        assertTrue(r.ok)
+        assertEquals("/photos/p1.jpg", store.rows["p1"]!!.photoPath)
+        assertEquals(SyncState.SYNCED, store.rows["p1"]!!.syncState)
+    }
+
+    @Test fun existingLocalPhotoIsNotDownloadedAgain() = runTest {
+        store.rows["p2"] = local("p2", state = SyncState.SYNCED, photoPath = "/photos/p2.jpg")
+        api.remoteRows["p2"] = remote("p2").copy(photoObject = "$USER/p2.jpg")
+        engineWithPhotos(HashMap()).sync()
+        assertTrue(api.downloaded.isEmpty())
+    }
+
+    @Test fun missingCloudPhotoStillKeepsTheRecord() = runTest {
+        api.remoteRows["p3"] = remote("p3").copy(photoObject = "$USER/p3.jpg")
+        val r = engineWithPhotos(HashMap()).sync()
+        assertTrue(r.ok)
+        assertNull(store.rows["p3"]!!.photoPath)
+        assertNotNull(store.rows["p3"])
+    }
+
+    @Test fun photoServerErrorDoesNotFailTheSync() = runTest {
+        api.remoteRows["p4"] = remote("p4").copy(photoObject = "$USER/p4.jpg")
+        api.downloadFailure = CloudException(CloudErrorKind.SERVER, "boom", 500)
+        val r = engineWithPhotos(HashMap()).sync()
+        assertTrue(r.ok)
+        assertNotNull(store.rows["p4"])
+    }
+
+    @Test fun photoNetworkErrorAbortsSoItRetriesLater() = runTest {
+        api.remoteRows["p5"] = remote("p5").copy(photoObject = "$USER/p5.jpg")
+        api.downloadFailure = CloudException(CloudErrorKind.NETWORK, "offline")
+        val r = engineWithPhotos(HashMap()).sync()
+        assertFalse(r.ok)
+        assertNull(sessions.cursorValue) // 游標沒前進，下次會重新拉
     }
 
     @Test fun remoteNewerOverwritesLocalButKeepsLocalPhoto() = runTest {

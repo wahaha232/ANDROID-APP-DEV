@@ -38,6 +38,13 @@ object PhotoStore {
         return if (ok) f else null
     }
 
+    /** 把從雲端下載的照片存進私有目錄（檔名固定為紀錄 id，重複下載會覆蓋同一個檔）。 */
+    fun saveBytes(context: Context, recordId: String, bytes: ByteArray): File? = try {
+        File(dir(context), "cloud-$recordId.jpg").also { it.writeBytes(bytes) }
+    } catch (e: java.io.IOException) {
+        null
+    }
+
     fun uriOf(context: Context, file: File): Uri = FileProvider.getUriForFile(context, authority(context), file)
 
     /** 縮到長邊不超過 maxSide 的尺寸（不放大），保持長寬比。 */
