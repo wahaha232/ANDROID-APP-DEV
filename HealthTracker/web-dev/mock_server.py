@@ -71,7 +71,7 @@ class H(BaseHTTPRequestHandler):
             rows = [r for r in ROWS if r['deleted_at'] is None] if q.get('deleted_at') == ['is.null'] else list(ROWS)
             if 'type' in q: rows = [r for r in rows if f"eq.{r['type']}" == q['type'][0]]
             if 'measured_at' in q: rows = [r for r in rows if r['measured_at'] >= int(q['measured_at'][0].removeprefix('gte.'))]
-            rows.sort(key=lambda r: r['measured_at'], reverse=True)
+            rows.sort(key=lambda r: (r['measured_at'], r['id']), reverse=True)
             rows = rows[:int(q.get('limit', ['1000'])[0])]
             cols = q['select'][0].split(',') if 'select' in q else None
             return self._send(200, [{k: r[k] for k in cols} if cols else r for r in rows])

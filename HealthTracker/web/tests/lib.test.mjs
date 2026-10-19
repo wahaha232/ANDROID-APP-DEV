@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  fetchAllPages,
   rangeStart, normalizeBaseUrl, buildRecordsQuery, sessionNeedsRefresh,
   formatValue, formatTime, sourceLabel, summarize, isSafePhotoPath,
 } from '../lib.js';
@@ -37,7 +38,7 @@ test('buildRecordsQuery：排除已刪除、依時間新到舊、帶類型與起
   assert.equal(q.get('deleted_at'), 'is.null');
   assert.equal(q.get('type'), 'eq.WEIGHT');
   assert.equal(q.get('measured_at'), 'gte.1000');
-  assert.equal(q.get('order'), 'measured_at.desc');
+  assert.equal(q.get('order'), 'measured_at.desc,id.desc');
   assert.equal(q.get('limit'), '50');
   assert.ok(q.get('select').includes('photo_object'));
 });
@@ -95,6 +96,32 @@ test('summarize：血壓的舒張壓統計', () => {
   const s = summarize([{ value: 120, value2: 80 }, { value: 130, value2: 90 }, { value: 110, value2: null }]);
   assert.deepEqual(s.diastolic, { min: 80, max: 90, avg: 85 });
   assert.equal(summarize([{ value: 70 }]).diastolic, null);
+});
+
+// 假的分頁來源：總共 total 筆，依 offset/limit 回傳
+const source = (total) => async (offset, limit) =>
+  Array.from({ length: Math.max(0, Math.min(limit, total - offset)) }, (_, i) => offset + i);
+
+for (const [total, truncated] of [[0, false], [999, false], [1000, false], [1001, false], [20000, false], [20001, false]]) {
+  test(`fetchAllPages：${total} 筆（預設 50 頁上限）完整取回，不截斷`, async () => {
+    const r = await fetchAllPages(source(total));
+    assert.equal(r.rows.length, total);
+    assert.equal(r.truncated, truncated);
+    assert.equal(new Set(r.rows).size, total);
+  });
+}
+
+test('fetchAllPages：超過上限標示截斷，剛好等於上限不算截斷', async () => {
+  const exact = await fetchAllPages(source(5000), { pageSize: 1000, maxPages: 5 });
+  assert.deepEqual([exact.rows.length, exact.truncated], [5000, false]);
+  const over = await fetchAllPages(source(5001), { pageSize: 1000, maxPages: 5 });
+  assert.deepEqual([over.rows.length, over.truncated], [5000, true]);
+});
+
+test('fetchAllPages：第一頁不滿就只請求一次', async () => {
+  let calls = 0;
+  await fetchAllPages(async (o, l) => { calls++; return source(10)(o, l); });
+  assert.equal(calls, 1);
 });
 
 test('isSafePhotoPath：只接受 <uuid>/<uuid>.jpg', () => {

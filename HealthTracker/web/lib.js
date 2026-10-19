@@ -52,7 +52,8 @@ export function buildRecordsQuery({ type = null, since = null, limit = 1000, off
   p.set('deleted_at', 'is.null');
   if (type) p.set('type', `eq.${type}`);
   if (since != null) p.set('measured_at', `gte.${Math.floor(since)}`);
-  p.set('order', 'measured_at.desc');
+  // 同一時間有多筆時再以 id 排序，offset 分頁才不會跨頁重複或漏筆
+  p.set('order', 'measured_at.desc,id.desc');
   p.set('limit', String(limit));
   if (offset > 0) p.set('offset', String(offset));
   return p.toString();
@@ -106,6 +107,22 @@ export function summarize(records) {
 }
 
 /** 照片物件路徑必須是「<uuid>/<uuid>.jpg」的形狀，避免被塞入奇怪路徑後拿去組網址。 */
+/**
+ * 分頁抓完所有資料。fetchPage(offset, limit) 回傳該頁的列。
+ * 超過 maxPages 頁仍有資料就標示 truncated（呼叫端必須告知使用者，不能默默匯出不完整的檔案）。
+ * 剛好滿 maxPages 頁且後面沒有資料時不算截斷（多探一筆確認）。
+ */
+export async function fetchAllPages(fetchPage, { pageSize = 1000, maxPages = 50 } = {}) {
+  const rows = [];
+  for (let page = 0; page < maxPages; page++) {
+    const batch = await fetchPage(page * pageSize, pageSize);
+    rows.push(...batch);
+    if (batch.length < pageSize) return { rows, truncated: false };
+  }
+  const probe = await fetchPage(maxPages * pageSize, 1);
+  return { rows, truncated: probe.length > 0 };
+}
+
 export function isSafePhotoPath(path) {
   return typeof path === 'string' && /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.jpg$/i.test(path);
 }

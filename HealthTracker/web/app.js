@@ -1,6 +1,6 @@
 import {
   TYPES, RANGES, rangeStart, normalizeBaseUrl, buildRecordsQuery, sessionNeedsRefresh,
-  formatValue, formatTime, sourceLabel, summarize, isSafePhotoPath,
+  formatValue, formatTime, sourceLabel, summarize, isSafePhotoPath, fetchAllPages,
 } from './lib.js';
 import { renderChart } from './chart.js';
 import { toRows, toCsv, buildXlsx, exportFileName, EXPORT_HEADER } from './export.js';
@@ -16,7 +16,8 @@ const setMsg = (id, text, isErr = false) => {
   el.classList.toggle('err', isErr);
 };
 
-const state = { type: 'WEIGHT', range: '90', photoUrl: null, loadSeq: 0 };
+const state = { type: 'WEIGHT', range: '90', photoUrl: null, loadSeq: 0, photoSeq: 0, opener: null };
+const MAX_EXPORT_PAGES = 50; // 5 萬筆；超過就明確告知並取消匯出
 
 const loadConfig = () => {
   try { return JSON.parse(localStorage.getItem(CONFIG_KEY)); } catch { return null; }
@@ -148,7 +149,7 @@ function renderSummary(records) {
     item('平均', f(s.avg));
     item('最低', f(s.min));
     item('最高', f(s.max));
-    if (s.count > 1) item('區間變化', `${s.change > 0 ? '+' : s.change < 0 ? '−' : ''}${Math.abs(s.change).toFixed(t.digits)} ${t.unit}`);
+    if (s.count > 1) item('最新−最早', `${s.change > 0 ? '+' : s.change < 0 ? '−' : ''}${Math.abs(s.change).toFixed(t.digits)} ${t.unit}`);
   } else if (s.diastolic) {
     // 血壓：收縮壓／舒張壓分別看平均與範圍（就醫時最常被問到）
     const sys = records.map((r) => r.value);
@@ -197,6 +198,10 @@ async function loadRecords() {
     renderRows(records);
     $('chart-title').textContent = records.length ? `${TYPES[state.type].label}趨勢（${TYPES[state.type].unit}）` : '';
     renderChart($('chart'), $('tooltip'), state.type, records);
+    const who = loadSession()?.email;
+    $('load-info').textContent = records.length
+      ? `${who ? `帳號 ${who}　` : ''}已載入 ${records.length} 筆　更新於 ${new Date().toLocaleTimeString('zh-TW', { hour12: false })}`
+      : '';
     setMsg('list-msg', records.length === 0 ? '這段期間沒有資料' : records.length >= PAGE ? `資料很多，只顯示最近 ${PAGE} 筆` : '');
   } catch (e) {
     if (seq !== state.loadSeq) return;
@@ -218,15 +223,14 @@ async function loadRecords() {
 const PAGE = 1000;
 
 /** 分頁抓完（Supabase 預設單次最多 1000 筆）。 */
-async function fetchAll(type, since) {
-  const out = [];
-  for (let page = 0; page < 20; page++) {
-    const q = buildRecordsQuery({ type, since, limit: PAGE, offset: page * PAGE });
-    const rows = await (await authed(`/rest/v1/health_records?${q}`)).json();
-    out.push(...rows);
-    if (rows.length < PAGE) break;
-  }
-  return out;
+function fetchAll(type, since) {
+  return fetchAllPages(
+    async (offset, limit) => {
+      const q = buildRecordsQuery({ type, since, limit, offset });
+      return (await authed(`/rest/v1/health_records?${q}`)).json();
+    },
+    { pageSize: PAGE, maxPages: MAX_EXPORT_PAGES },
+  );
 }
 
 function download(bytesOrText, name, mime) {
@@ -244,7 +248,12 @@ async function doExport(format, scope) {
   setMsg('exp-msg', '匯出中…');
   try {
     const type = scope === 'all' ? null : state.type;
-    const records = await fetchAll(type, rangeStart(state.range));
+    const { rows: records, truncated } = await fetchAll(type, rangeStart(state.range));
+    if (truncated) {
+      // 寧可不給檔案，也不能給一份看起來完整、其實缺資料的檔案
+      setMsg('exp-msg', `資料超過 ${MAX_EXPORT_PAGES * PAGE} 筆上限，為避免匯出不完整已取消。請縮小時間範圍或只匯出單一類型。`, true);
+      return;
+    }
     if (!records.length) { setMsg('exp-msg', '這段期間沒有資料可匯出'); return; }
     const rows = toRows(records);
     const label = `${scope === 'all' ? '全部' : TYPES[state.type].label}_${state.range === 'all' ? '全部期間' : `${state.range}天`}`;
@@ -258,26 +267,37 @@ async function doExport(format, scope) {
 
 // ---------- 照片 ----------
 function closePhoto() {
+  state.photoSeq++; // 讓還在路上的照片請求失效
   if (state.photoUrl) URL.revokeObjectURL(state.photoUrl);
   state.photoUrl = null;
   $('photo-img').removeAttribute('src');
   show('photo-img', false);
+  const wasOpen = !$('photo-modal').hidden;
   show('photo-modal', false);
+  if (wasOpen && state.opener && document.contains(state.opener)) state.opener.focus(); // 焦點還給原本的按鈕
+  state.opener = null;
 }
 
 async function openPhoto(path) {
+  const seq = ++state.photoSeq;
+  state.opener = document.activeElement;
+  if (state.photoUrl) { URL.revokeObjectURL(state.photoUrl); state.photoUrl = null; }
+  $('photo-img').removeAttribute('src');
+  show('photo-img', false);
   show('photo-modal', true);
+  $('photo-close').focus();
   setMsg('photo-msg', '載入照片…');
   try {
     // 用登入憑證抓成 blob 再顯示：照片是私人 bucket，網址本身不含任何可分享的權限。
     const resp = await authed(`/storage/v1/object/authenticated/meter-photos/${path}`);
     const blob = await resp.blob();
-    if ($('photo-modal').hidden) return; // 使用者已關掉
+    if (seq !== state.photoSeq || $('photo-modal').hidden) return; // 已關掉或已改開別張，丟掉這份結果
     state.photoUrl = URL.createObjectURL(blob);
     $('photo-img').src = state.photoUrl;
     show('photo-img', true);
     setMsg('photo-msg', '');
   } catch (e) {
+    if (seq !== state.photoSeq) return;
     setMsg('photo-msg', e.status === 404 ? '照片不存在（可能只存在手機上，尚未上傳）' : e.message, true);
   }
 }
