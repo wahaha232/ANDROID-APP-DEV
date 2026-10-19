@@ -67,7 +67,7 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
     ) {
         // 設定分組：一次只顯示一組，常用的個人資料與雲端同步不必在一長串裡找
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("個人資料", "匯入資料", "雲端同步", "報告", "備份與隱私", "關於").forEachIndexed { i, name ->
+            listOf("個人資料", "匯入資料", "雲端同步", "報告", "備份與隱私", "提醒與安全", "關於").forEachIndexed { i, name ->
                 FilterChip(selected = group == i, onClick = { group = i }, label = { Text(name) })
             }
         }
@@ -112,7 +112,8 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
         if (group == 2) CloudSection(cloud)
         if (group == 3) ReportSection(records, repo)
         if (group == 4) BackupSection(records)
-        if (group == 5) {
+        if (group == 5) ReminderLockSection(repo)
+        if (group == 6) {
             Text("關於", style = MaterialTheme.typography.titleLarge)
             Text("血糖記錄　版本 ${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）", style = MaterialTheme.typography.bodyMedium)
             Text("資料預設只存在這支手機；登入並同步後才會上傳到您自己的雲端。", style = MaterialTheme.typography.bodySmall)

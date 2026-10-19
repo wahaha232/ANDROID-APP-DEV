@@ -5,12 +5,14 @@ import com.startinsnow.healthtracker.cloud.CloudSync
 import com.startinsnow.healthtracker.data.db.AppDatabase
 import com.startinsnow.healthtracker.data.prefs.UserSettingsRepository
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
+import com.startinsnow.healthtracker.reminder.ReminderScheduler
 import com.startinsnow.healthtracker.sync.SyncScheduler
 
 class HealthTrackerApp : Application() {
     override fun onCreate() {
         super.onCreate()
         SyncScheduler.ensureScheduled(this)
+        ReminderScheduler.ensureChannel(this)
     }
 
     val database: AppDatabase by lazy { AppDatabase.create(this) }

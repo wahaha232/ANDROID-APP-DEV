@@ -8,6 +8,10 @@ import android.graphics.Matrix
 import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -79,6 +83,26 @@ object PhotoStore {
             false
         }
     }
+
+    private val exifFormat = DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss")
+
+    /** 把 EXIF 時間字串（yyyy:MM:dd HH:mm:ss，可帶 +08:00 這類時差）轉成毫秒；格式不對回傳 null。 */
+    internal fun parseExifTime(text: String?, offset: String?, zone: ZoneId): Long? {
+        val t = text?.trim().orEmpty()
+        if (t.isEmpty()) return null
+        val local = try { LocalDateTime.parse(t, exifFormat) } catch (e: Exception) { return null }
+        val z: ZoneId = offset?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { runCatching { ZoneOffset.of(it) }.getOrNull() } ?: zone
+        return local.atZone(z).toInstant().toEpochMilli()
+    }
+
+    /** 讀照片的拍攝時間（EXIF）。一定要在 compressInPlace 之前呼叫，縮圖後 EXIF 會被丟掉。沒有就回傳 null。 */
+    fun captureTime(file: File, zone: ZoneId = ZoneId.systemDefault()): Long? = try {
+        val e = ExifInterface(file.absolutePath)
+        parseExifTime(e.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL), e.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL), zone)
+            ?: parseExifTime(e.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED), e.getAttribute(ExifInterface.TAG_OFFSET_TIME_DIGITIZED), zone)
+            ?: parseExifTime(e.getAttribute(ExifInterface.TAG_DATETIME), e.getAttribute(ExifInterface.TAG_OFFSET_TIME), zone)
+    } catch (e: Exception) { null }
 
     fun delete(path: String?) {
         if (path != null) File(path).delete()

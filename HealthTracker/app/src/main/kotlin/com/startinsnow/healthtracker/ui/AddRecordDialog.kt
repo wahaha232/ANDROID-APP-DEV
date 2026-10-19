@@ -97,11 +97,13 @@ fun AddRecordDialog(
     var photoPath by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingCameraPath by rememberSaveable { mutableStateOf<String?>(null) }
     var ocr by remember { mutableStateOf<OcrState>(OcrState.Idle) }
+    var photoTimeUsed by remember { mutableStateOf(false) }
 
     fun discardPhoto() {
         PhotoStore.delete(photoPath)
         photoPath = null
         ocr = OcrState.Idle
+        photoTimeUsed = false
     }
 
     fun recognize(file: File) {
@@ -110,6 +112,11 @@ fun AddRecordDialog(
         ocr = OcrState.Running
         scope.launch {
             ocr = try {
+                val taken = withContext(Dispatchers.IO) { PhotoStore.captureTime(file) } // 縮圖會丟掉 EXIF，要先讀
+                if (existing == null && taken != null && taken <= System.currentTimeMillis()) {
+                    measuredAt = taken // 依照片拍攝時間歸類，統計才會落在正確日期
+                    photoTimeUsed = true
+                }
                 withContext(Dispatchers.IO) { PhotoStore.compressInPlace(file) } // 先縮圖：省空間、上傳快，OCR 也更快
                 val lines = OcrEngine.recognize(context, PhotoStore.uriOf(context, file))
                 val candidates = GlucoseOcrParser.candidates(lines)
@@ -211,6 +218,7 @@ fun AddRecordDialog(
                     "測量時間　" + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(Instant.ofEpochMilli(measuredAt).atZone(zone)),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                if (photoTimeUsed) Text("已依照片拍攝時間填入，可自行修改", style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { showDate = true }) { Text("改日期") }
                     OutlinedButton(onClick = { showTime = true }) { Text("改時間") }

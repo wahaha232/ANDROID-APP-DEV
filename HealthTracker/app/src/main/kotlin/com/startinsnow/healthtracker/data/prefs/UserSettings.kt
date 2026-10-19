@@ -3,6 +3,7 @@ package com.startinsnow.healthtracker.data.prefs
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -23,6 +24,12 @@ data class UserSettings(
     /** 血糖目標範圍（mg/dL），由使用者依醫師建議自行設定；App 只用來畫範圍帶與統計，不判斷好壞。 */
     val glucoseLow: Double? = null,
     val glucoseHigh: Double? = null,
+    /** 量測提醒：啟用、每天的提醒時間（當天第幾分鐘，0–1439）、今天已記錄血糖就不提醒。 */
+    val reminderEnabled: Boolean = false,
+    val reminderTimes: List<Int> = emptyList(),
+    val reminderSkipIfRecorded: Boolean = true,
+    /** 開啟 App 需要指紋 / 臉部 / 手機 PIN。 */
+    val appLock: Boolean = false,
 ) {
     /** BMI；身高或體重不合理時回傳 null。 */
     fun bmi(weightKg: Double): Double? {
@@ -44,6 +51,10 @@ class UserSettingsRepository(private val context: Context) {
         val target = doublePreferencesKey("target_weight_kg")
         val glucoseLow = doublePreferencesKey("glucose_low")
         val glucoseHigh = doublePreferencesKey("glucose_high")
+        val reminderEnabled = booleanPreferencesKey("reminder_enabled")
+        val reminderTimes = stringPreferencesKey("reminder_times")
+        val reminderSkip = booleanPreferencesKey("reminder_skip_if_recorded")
+        val appLock = booleanPreferencesKey("app_lock")
     }
 
     val settings: Flow<UserSettings> = context.settingsStore.data.map { p ->
@@ -55,8 +66,28 @@ class UserSettingsRepository(private val context: Context) {
             targetWeightKg = p[Keys.target],
             glucoseLow = p[Keys.glucoseLow],
             glucoseHigh = p[Keys.glucoseHigh],
+            reminderEnabled = p[Keys.reminderEnabled] ?: false,
+            reminderTimes = parseTimes(p[Keys.reminderTimes]),
+            reminderSkipIfRecorded = p[Keys.reminderSkip] ?: true,
+            appLock = p[Keys.appLock] ?: false,
         )
     }
+
+    /** 只改提醒設定，不動個人資料欄位。 */
+    suspend fun saveReminders(enabled: Boolean, times: List<Int>, skipIfRecorded: Boolean) {
+        context.settingsStore.edit { p ->
+            p[Keys.reminderEnabled] = enabled
+            p[Keys.reminderTimes] = times.distinct().sorted().joinToString(",")
+            p[Keys.reminderSkip] = skipIfRecorded
+        }
+    }
+
+    suspend fun saveAppLock(enabled: Boolean) {
+        context.settingsStore.edit { it[Keys.appLock] = enabled }
+    }
+
+    private fun parseTimes(raw: String?): List<Int> =
+        raw.orEmpty().split(',').mapNotNull { it.trim().toIntOrNull() }.filter { it in 0..1439 }.distinct().sorted()
 
     suspend fun save(s: UserSettings) {
         context.settingsStore.edit { p ->
