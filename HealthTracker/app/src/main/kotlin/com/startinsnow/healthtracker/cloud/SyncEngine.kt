@@ -164,10 +164,15 @@ class SyncEngine(
                     if (e.kind != CloudErrorKind.SERVER) throw e
                 }
             }
-        } else if (r.source == RecordSource.OCR && r.photoPath != null) {
-            readPhoto(r.photoPath)?.let { api.uploadPhoto(session.accessToken, path, it) }
         }
-        api.upsert(session.accessToken, r.toRemote(session.userId))
+        var uploaded = false
+        if (r.deletedAt == null && r.source == RecordSource.OCR && r.photoPath != null) {
+            readPhoto(r.photoPath)?.let {
+                api.uploadPhoto(session.accessToken, path, it)
+                uploaded = true
+            }
+        }
+        api.upsert(session.accessToken, r.toRemote(session.userId, photoObject = if (uploaded) path else null))
     }
 
     private companion object {

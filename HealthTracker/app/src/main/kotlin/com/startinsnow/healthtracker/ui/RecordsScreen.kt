@@ -47,12 +47,16 @@ import java.util.Locale
 
 private val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.TAIWAN)
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsRepository) {
     val list by records.observeAll().collectAsState(initial = emptyList())
     val user by settings.settings.collectAsState(initial = UserSettings())
     val scope = rememberCoroutineScope()
     var showAdd by remember { mutableStateOf(false) }
+    var filter by remember { mutableStateOf<RecordType?>(null) } // null = 全部
+    var pendingDelete by remember { mutableStateOf<HealthRecord?>(null) }
+    val shown = if (filter == null) list else list.filter { it.type == filter }
 
     Scaffold(
         floatingActionButton = {
@@ -61,21 +65,58 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
             }
         },
     ) { padding ->
-        if (list.isEmpty()) {
-            Column(Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
-                Text("尚無紀錄，點右下角「＋」新增第一筆。", style = MaterialTheme.typography.bodyLarge)
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            if (list.isNotEmpty()) {
+                FlowRow(
+                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text("全部") })
+                    RecordType.entries.forEach { t ->
+                        FilterChip(selected = filter == t, onClick = { filter = t }, label = { Text(t.label) })
+                    }
+                }
             }
-        } else {
-            LazyColumn(
-                Modifier.fillMaxSize().padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(list, key = { it.id }) { r ->
-                    RecordCard(r, user) { scope.launch { records.delete(r.id) } }
+            if (list.isEmpty()) {
+                Text(
+                    "尚無紀錄，點右下角「＋」新增第一筆。",
+                    Modifier.padding(24.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            } else if (shown.isEmpty()) {
+                Text("這個類型還沒有紀錄。", Modifier.padding(24.dp), style = MaterialTheme.typography.bodyLarge)
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(shown, key = { it.id }) { r ->
+                        RecordCard(r, user) { pendingDelete = r }
+                    }
                 }
             }
         }
+    }
+
+    pendingDelete?.let { r ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("刪除這筆紀錄？") },
+            text = {
+                Text(
+                    "${r.type.label}　${formatMain(r)}\n${timeFormat.format(Date(r.measuredAt))}\n\n" +
+                        "刪除後無法復原" + if (r.photoPath != null) "，原始照片也會一併刪除。" else "。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDelete = null
+                    scope.launch { records.delete(r.id) }
+                }) { Text("刪除") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } },
+        )
     }
 
     if (showAdd) {
@@ -87,19 +128,19 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
     }
 }
 
+private fun formatMain(r: HealthRecord): String = when (r.type) {
+    RecordType.BLOOD_PRESSURE -> "${r.value.toInt()}/${r.value2?.toInt()} ${r.type.unit}"
+    RecordType.BLOOD_GLUCOSE -> "${r.value.toInt()} ${r.type.unit}"
+    else -> "${"%.1f".format(r.value)} ${r.type.unit}"
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RecordCard(r: HealthRecord, user: UserSettings, onDelete: () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
-                val main = if (r.type == RecordType.BLOOD_PRESSURE) {
-                    "${r.value.toInt()}/${r.value2?.toInt()} ${r.type.unit}"
-                } else if (r.type == RecordType.BLOOD_GLUCOSE) {
-                    "${r.value.toInt()} ${r.type.unit}"
-                } else {
-                    "${"%.1f".format(r.value)} ${r.type.unit}"
-                }
-                Text("${r.type.label}　$main", style = MaterialTheme.typography.titleMedium)
+                Text("${r.type.label}　${formatMain(r)}", style = MaterialTheme.typography.titleMedium)
                 if (r.type == RecordType.WEIGHT) {
                     user.bmi(r.value)?.let { Text("BMI ${"%.1f".format(it)}") }
                 }

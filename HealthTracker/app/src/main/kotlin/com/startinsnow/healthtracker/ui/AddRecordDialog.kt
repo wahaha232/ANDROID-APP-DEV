@@ -91,6 +91,7 @@ fun AddRecordDialog(
         ocr = OcrState.Running
         scope.launch {
             ocr = try {
+                withContext(Dispatchers.IO) { PhotoStore.compressInPlace(file) } // 先縮圖：省空間、上傳快，OCR 也更快
                 val lines = OcrEngine.recognize(context, PhotoStore.uriOf(context, file))
                 val candidates = GlucoseOcrParser.candidates(lines)
                 candidates.firstOrNull()?.let { v = formatValue(it.value) }

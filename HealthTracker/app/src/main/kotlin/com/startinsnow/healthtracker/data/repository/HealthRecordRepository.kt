@@ -8,6 +8,8 @@ import com.startinsnow.healthtracker.data.db.RecordSource
 import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.db.SyncState
 import com.startinsnow.healthtracker.ocr.PhotoStore
+import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -15,7 +17,10 @@ data class ImportResult(val inserted: Int, val skipped: Int)
 
 data class RestoreResult(val inserted: Int, val updated: Int, val skipped: Int)
 
-class HealthRecordRepository(private val dao: HealthRecordDao) {
+class HealthRecordRepository(private val dao: HealthRecordDao, private val db: RoomDatabase? = null) {
+    /** 批次寫入合併成單一交易：全有或全無（中途失敗不留半套資料），畫面只重繪一次。 */
+    private suspend fun <T> inTransaction(block: suspend () -> T): T = db?.withTransaction { block() } ?: block()
+
     private companion object {
         const val DUPLICATE_WINDOW_MS = 2 * 60_000L
     }
@@ -54,19 +59,22 @@ class HealthRecordRepository(private val dao: HealthRecordDao) {
 
     /** 批次匯入（Health Connect／CSV）。id 是確定性的，所以重複匯入、或匯入使用者已刪除的紀錄都不會重複出現。 */
     suspend fun importRecords(records: List<HealthRecord>): ImportResult {
+        return inTransaction {
         var inserted = 0
         for (r in records) {
             // 不同來源（米家畫面、Health Connect、CSV）可能是同一次量測：同類型、同數值、時間差 2 分鐘內視為重複。
             val duplicate = dao.countNearby(r.type, r.value, r.value2, r.measuredAt - DUPLICATE_WINDOW_MS, r.measuredAt + DUPLICATE_WINDOW_MS) > 0
             if (!duplicate && dao.insertIgnore(r) != -1L) inserted++
         }
-        return ImportResult(inserted = inserted, skipped = records.size - inserted)
+        ImportResult(inserted = inserted, skipped = records.size - inserted)
+        }
     }
 
     suspend fun allForBackup(): List<HealthRecord> = dao.all()
 
     /** 還原備份：新增沒有的、較新的覆蓋舊的、其餘略過。還原的資料一律標為待同步。 */
     suspend fun restore(incoming: List<HealthRecord>): RestoreResult {
+        return inTransaction {
         var inserted = 0
         var updated = 0
         var skipped = 0
@@ -78,7 +86,8 @@ class HealthRecordRepository(private val dao: HealthRecordDao) {
                 RestoreAction.SKIP -> skipped++
             }
         }
-        return RestoreResult(inserted, updated, skipped)
+        RestoreResult(inserted, updated, skipped)
+        }
     }
 
     /** 軟刪除並一併刪掉原始照片檔（同步端只需要知道刪除事件，不需要照片）。 */

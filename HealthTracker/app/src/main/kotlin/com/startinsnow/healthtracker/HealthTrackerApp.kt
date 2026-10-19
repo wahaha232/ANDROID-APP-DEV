@@ -14,7 +14,7 @@ class HealthTrackerApp : Application() {
     }
 
     val database: AppDatabase by lazy { AppDatabase.create(this) }
-    val records: HealthRecordRepository by lazy { HealthRecordRepository(database.healthRecordDao()) }
+    val records: HealthRecordRepository by lazy { HealthRecordRepository(database.healthRecordDao(), database) }
     val settings: UserSettingsRepository by lazy { UserSettingsRepository(this) }
     val cloud: CloudSync by lazy { CloudSync(this, database.healthRecordDao()) }
 }

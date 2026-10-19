@@ -106,7 +106,9 @@ class SupabaseApi(
     override suspend fun upsert(accessToken: String, record: RemoteRecord) {
         val url = base.newBuilder().addPathSegments("rest/v1/health_records").addQueryParameter("on_conflict", "id").build()
         // synced_at 由資料庫 trigger 蓋章，推送時直接拿掉這個欄位。
-        val body = JsonObject(json.encodeToJsonElement(RemoteRecord.serializer(), record).jsonObject - "synced_at").toString()
+        // photo_object 為 null 時整個欄位省略（merge-duplicates 只更新有送出的欄位，不會把雲端原有的照片連結清掉）
+        val omitted = buildSet { add("synced_at"); if (record.photoObject == null) add("photo_object") }
+        val body = JsonObject(json.encodeToJsonElement(RemoteRecord.serializer(), record).jsonObject - omitted).toString()
         val req = authed(Request.Builder().url(url), accessToken)
             .header("Prefer", "resolution=merge-duplicates,return=minimal")
             .post(body.toRequestBody(jsonType)).build()

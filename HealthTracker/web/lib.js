@@ -39,7 +39,8 @@ export function normalizeBaseUrl(input, pageHost = '') {
     throw new Error('網址格式不對');
   }
   const isSupabase = u.protocol === 'https:' && /^[a-z0-9-]+\.supabase\.co$/i.test(u.hostname);
-  const isLocalDev = u.protocol === 'http:' && u.hostname === 'localhost' && pageHost === 'localhost';
+  const isLoopback = (h) => h === 'localhost' || h === '127.0.0.1';
+  const isLocalDev = u.protocol === 'http:' && isLoopback(u.hostname) && isLoopback(pageHost);
   if (!isSupabase && !isLocalDev) throw new Error('只接受 https://<專案>.supabase.co 的網址');
   return u.origin;
 }
@@ -80,6 +81,12 @@ export function sourceLabel(source) {
   return SOURCE_LABELS[source] ?? source ?? '';
 }
 
+function diastolicStats(records) {
+  const v = records.map((r) => r.value2).filter((x) => x != null);
+  if (!v.length) return null;
+  return { min: Math.min(...v), max: Math.max(...v), avg: v.reduce((a, b) => a + b, 0) / v.length };
+}
+
 /** 統計（單一數值類型）。沒有資料回傳 null。records 需為新到舊。 */
 export function summarize(records) {
   if (!records.length) return null;
@@ -93,6 +100,8 @@ export function summarize(records) {
     avg: sum / values.length,
     // 區間變化：最新一筆減最早一筆（records 新到舊）。只有一筆時為 0。
     change: records[0].value - records[records.length - 1].value,
+    // 血壓：舒張壓（value2）的統計；沒有任何 value2 時為 null
+    diastolic: diastolicStats(records),
   };
 }
 

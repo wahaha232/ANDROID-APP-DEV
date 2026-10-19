@@ -85,7 +85,7 @@ class H(BaseHTTPRequestHandler):
         data = open(f, 'rb').read()
         ctype = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css'}.get(os.path.splitext(f)[1], 'application/octet-stream')
         if rel == 'index.html':  # 只有開發用的假伺服器放寬 CSP，讓頁面能連到 localhost
-            data = data.replace(b'connect-src https://*.supabase.co', f'connect-src http://localhost:{PORT} https://*.supabase.co'.encode())
+            data = data.replace(b'connect-src https://*.supabase.co', f'connect-src http://localhost:{PORT} http://127.0.0.1:{PORT} https://*.supabase.co'.encode())
         self._send(200, data, ctype)
 
 if __name__ == '__main__':

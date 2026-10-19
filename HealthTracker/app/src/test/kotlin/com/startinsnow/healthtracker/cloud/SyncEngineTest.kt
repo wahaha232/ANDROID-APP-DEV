@@ -194,6 +194,14 @@ class SyncEngineTest {
         assertTrue(r.ok)
         assertTrue(api.uploaded.isEmpty())
         assertEquals(1, api.upserted.size)
+        assertNull("沒有真的上傳照片，就不能帶照片連結", api.upserted.single().photoObject)
+    }
+
+    @Test fun restoredOcrRecordWithoutLocalPhotoSendsNoPhotoLink() = runTest {
+        store.rows["g"] = local("g", source = RecordSource.OCR, photoPath = null)
+        engine { error("不該讀照片") }.sync()
+        assertTrue(api.uploaded.isEmpty())
+        assertNull(api.upserted.single().photoObject)
     }
 
     @Test fun deletedOcrRecordRemovesRemotePhoto() = runTest {

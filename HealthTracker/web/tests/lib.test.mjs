@@ -84,6 +84,19 @@ test('summarize：最新、筆數、平均、最低、最高', () => {
   assert.equal(s.avg, 70);
 });
 
+test('normalizeBaseUrl：127.0.0.1 與 localhost 都算本機開發', () => {
+  assert.equal(normalizeBaseUrl('http://127.0.0.1:8791', '127.0.0.1'), 'http://127.0.0.1:8791');
+  assert.equal(normalizeBaseUrl('http://localhost:8791', '127.0.0.1'), 'http://localhost:8791');
+  assert.throws(() => normalizeBaseUrl('http://127.0.0.1:8791', 'wahaha232.github.io'));
+  assert.throws(() => normalizeBaseUrl('http://127.0.0.2:8791', '127.0.0.2'));
+});
+
+test('summarize：血壓的舒張壓統計', () => {
+  const s = summarize([{ value: 120, value2: 80 }, { value: 130, value2: 90 }, { value: 110, value2: null }]);
+  assert.deepEqual(s.diastolic, { min: 80, max: 90, avg: 85 });
+  assert.equal(summarize([{ value: 70 }]).diastolic, null);
+});
+
 test('isSafePhotoPath：只接受 <uuid>/<uuid>.jpg', () => {
   const id = '123e4567-e89b-12d3-a456-426614174000';
   assert.equal(isSafePhotoPath(`${id}/${id}.jpg`), true);

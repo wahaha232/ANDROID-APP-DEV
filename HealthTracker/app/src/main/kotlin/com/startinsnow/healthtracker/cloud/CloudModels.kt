@@ -40,7 +40,12 @@ data class RemoteRecord(
 
 fun photoObjectPath(userId: String, recordId: String) = "$userId/$recordId.jpg"
 
-fun HealthRecord.toRemote(userId: String) = RemoteRecord(
+/**
+ * photoObject 由呼叫端決定：只有這次確實把照片上傳到雲端時才帶路徑；
+ * 本機沒有照片（還原備份、檔案遺失）就傳 null，上傳時整個欄位省略，不會蓋掉雲端原有的照片連結，
+ * 也不會憑空產生指向不存在檔案的連結。
+ */
+fun HealthRecord.toRemote(userId: String, photoObject: String? = null) = RemoteRecord(
     id = id,
     type = type.name,
     value = value,
@@ -51,7 +56,7 @@ fun HealthRecord.toRemote(userId: String) = RemoteRecord(
     createdAt = createdAt,
     updatedAt = updatedAt,
     deletedAt = deletedAt,
-    photoObject = if (source == RecordSource.OCR) photoObjectPath(userId, id) else null,
+    photoObject = photoObject,
 )
 
 /** 未知的類型或來源（例如日後網站新增的種類）回傳 null，由呼叫端略過，不讓整批同步失敗。 */

@@ -149,6 +149,13 @@ function renderSummary(records) {
     item('最低', f(s.min));
     item('最高', f(s.max));
     if (s.count > 1) item('區間變化', `${s.change > 0 ? '+' : s.change < 0 ? '−' : ''}${Math.abs(s.change).toFixed(t.digits)} ${t.unit}`);
+  } else if (s.diastolic) {
+    // 血壓：收縮壓／舒張壓分別看平均與範圍（就醫時最常被問到）
+    const sys = records.map((r) => r.value);
+    const avgSys = sys.reduce((a, b) => a + b, 0) / sys.length;
+    item('平均', `${Math.round(avgSys)}/${Math.round(s.diastolic.avg)} mmHg`);
+    item('收縮壓範圍', `${Math.min(...sys)}–${Math.max(...sys)}`);
+    item('舒張壓範圍', `${s.diastolic.min}–${s.diastolic.max}`);
   }
 }
 

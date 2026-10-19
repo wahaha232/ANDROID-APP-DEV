@@ -126,6 +126,17 @@ class SupabaseApiTest {
         assertEquals("r1", body["id"]!!.jsonPrimitive.content)
     }
 
+    @Test fun upsertOmitsPhotoObjectWhenNullAndSendsItWhenSet() = runTest {
+        server.enqueue(MockResponse().setResponseCode(201))
+        server.enqueue(MockResponse().setResponseCode(201))
+        api.upsert("tok", RemoteRecord("r1", "WEIGHT", 70.0, null, 1, "MANUAL", "", 2, 3, null, null))
+        api.upsert("tok", RemoteRecord("r2", "BLOOD_GLUCOSE", 100.0, null, 1, "OCR", "", 2, 3, null, "u/r2.jpg"))
+        val first: JsonObject = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        val second: JsonObject = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertFalse("省略欄位才不會蓋掉雲端原有的照片連結", first.containsKey("photo_object"))
+        assertEquals("u/r2.jpg", second["photo_object"]!!.jsonPrimitive.content)
+    }
+
     @Test fun uploadPhotoSendsBytesWithUpsertHeader() = runTest {
         server.enqueue(MockResponse().setResponseCode(200))
         api.uploadPhoto("tok", "uid/r1.jpg", byteArrayOf(1, 2, 3))
