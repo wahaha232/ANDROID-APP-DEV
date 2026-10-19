@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.startinsnow.healthtracker.cloud.CloudException
 import com.startinsnow.healthtracker.cloud.CloudSync
 import com.startinsnow.healthtracker.cloud.Session
@@ -57,11 +58,17 @@ fun CloudSection(cloud: CloudSync) {
         var message by remember { mutableStateOf<String?>(null) }
         var loaded by remember { mutableStateOf(false) }
 
-        LaunchedEffect(Unit) {
+        suspend fun reload() {
             session = engine.currentSession()
             lastSync = cloud.sessions.lastSyncAt()
             lastResult = cloud.sessions.lastResult()
             loaded = true
+        }
+        LaunchedEffect(Unit) { reload() }
+        // 回到這個畫面（例如背景同步剛跑完）時重新讀取，不要停在舊的結果
+        LifecycleResumeEffect(Unit) {
+            scope.launch { reload() }
+            onPauseOrDispose {}
         }
 
         val current = session
