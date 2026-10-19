@@ -49,12 +49,15 @@ private class FakeStore : SyncStore {
 private class FakeSessions(var session: Session? = null) : SessionStore {
     var cursorValue: String? = null
     var lastSync: Long? = null
+    var lastResultValue: String? = null
     override suspend fun load() = session
     override suspend fun save(session: Session?) { this.session = session }
     override suspend fun cursor() = cursorValue
     override suspend fun setCursor(cursor: String?) { cursorValue = cursor }
     override suspend fun lastSyncAt() = lastSync
     override suspend fun setLastSyncAt(millis: Long) { lastSync = millis }
+    override suspend fun lastResult() = lastResultValue
+    override suspend fun setLastResult(message: String?) { lastResultValue = message }
 }
 
 private class FakeApi(val store: FakeStore? = null) : RemoteApi {
@@ -260,6 +263,46 @@ class SyncEngineTest {
         val r = engine().sync()
         assertEquals("登入已失效，請重新登入", r.error)
         assertNull(sessions.session)
+    }
+
+    @Test fun networkFailureIsRetryableAndAuthFailureIsNot() = runTest {
+        api.fetchFailure = CloudException(CloudErrorKind.NETWORK, "斷線")
+        assertTrue(engine().sync().retryable)
+        api.fetchFailure = null
+        sessions.session = null
+        assertFalse(engine().sync().retryable)
+    }
+
+    @Test fun serverErrorOnOneRecordIsRetryable() = runTest {
+        store.rows["bad"] = local("bad")
+        api.upsertFailures["bad"] = CloudException(CloudErrorKind.SERVER, "伺服器錯誤（HTTP 500）", 500)
+        assertTrue(engine().sync().retryable)
+    }
+
+    @Test fun successfulSyncIsNotRetryable() = runTest {
+        assertFalse(engine().sync().retryable)
+    }
+
+    @Test fun lastResultIsRecordedForBothSuccessAndFailure() = runTest {
+        store.rows["a"] = local("a")
+        engine().sync()
+        assertEquals("同步完成：下載 0 筆、上傳 1 筆", sessions.lastResultValue)
+        api.fetchFailure = CloudException(CloudErrorKind.NETWORK, "無法連線到雲端")
+        engine().sync()
+        assertEquals("無法連線到雲端", sessions.lastResultValue)
+    }
+
+    @Test fun hasPendingReflectsStore() = runTest {
+        assertFalse(engine().hasPending())
+        store.rows["a"] = local("a")
+        assertTrue(engine().hasPending())
+    }
+
+    @Test fun failedSyncDoesNotAdvanceLastSyncTime() = runTest {
+        store.rows["bad"] = local("bad")
+        api.upsertFailures["bad"] = CloudException(CloudErrorKind.SERVER, "x", 500)
+        engine().sync()
+        assertNull(sessions.lastSync)
     }
 
     @Test fun signOutClearsSessionAndCursorButKeepsLocalData() = runTest {

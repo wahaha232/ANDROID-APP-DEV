@@ -26,6 +26,7 @@ class DataStoreSessionStore(private val context: Context) : SessionStore {
         val email = stringPreferencesKey("email")
         val cursor = stringPreferencesKey("pull_cursor")
         val lastSync = longPreferencesKey("last_sync_at")
+        val lastResult = stringPreferencesKey("last_result")
     }
 
     override suspend fun load(): Session? {
@@ -60,6 +61,12 @@ class DataStoreSessionStore(private val context: Context) : SessionStore {
     }
 
     override suspend fun lastSyncAt(): Long? = context.cloudStore.data.first()[K.lastSync]
+
+    override suspend fun lastResult(): String? = context.cloudStore.data.first()[K.lastResult]
+
+    override suspend fun setLastResult(message: String?) {
+        context.cloudStore.edit { p -> message?.let { p[K.lastResult] = it } ?: p.remove(K.lastResult) }
+    }
 
     override suspend fun setLastSyncAt(millis: Long) {
         context.cloudStore.edit { it[K.lastSync] = millis }

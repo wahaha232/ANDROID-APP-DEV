@@ -12,6 +12,10 @@ import java.util.UUID
 data class ImportResult(val inserted: Int, val skipped: Int)
 
 class HealthRecordRepository(private val dao: HealthRecordDao) {
+    private companion object {
+        const val DUPLICATE_WINDOW_MS = 2 * 60_000L
+    }
+
     fun observeAll(): Flow<List<HealthRecord>> = dao.observeAll()
 
     /** 新增手動紀錄；驗證失敗回傳錯誤訊息，成功回傳 null。 */
@@ -47,7 +51,11 @@ class HealthRecordRepository(private val dao: HealthRecordDao) {
     /** 批次匯入（Health Connect／CSV）。id 是確定性的，所以重複匯入、或匯入使用者已刪除的紀錄都不會重複出現。 */
     suspend fun importRecords(records: List<HealthRecord>): ImportResult {
         var inserted = 0
-        for (r in records) if (dao.insertIgnore(r) != -1L) inserted++
+        for (r in records) {
+            // 不同來源（米家畫面、Health Connect、CSV）可能是同一次量測：同類型、同數值、時間差 2 分鐘內視為重複。
+            val duplicate = dao.countNearby(r.type, r.value, r.value2, r.measuredAt - DUPLICATE_WINDOW_MS, r.measuredAt + DUPLICATE_WINDOW_MS) > 0
+            if (!duplicate && dao.insertIgnore(r) != -1L) inserted++
+        }
         return ImportResult(inserted = inserted, skipped = records.size - inserted)
     }
 

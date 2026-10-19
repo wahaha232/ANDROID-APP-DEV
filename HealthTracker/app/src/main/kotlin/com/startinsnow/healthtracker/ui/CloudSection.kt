@@ -1,5 +1,7 @@
 package com.startinsnow.healthtracker.ui
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -47,6 +50,7 @@ fun CloudSection(cloud: CloudSync) {
         val scope = rememberCoroutineScope()
         var session by remember { mutableStateOf<Session?>(null) }
         var lastSync by remember { mutableStateOf<Long?>(null) }
+        var lastResult by remember { mutableStateOf<String?>(null) }
         var email by remember { mutableStateOf("") }
         var password by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
@@ -56,6 +60,7 @@ fun CloudSection(cloud: CloudSync) {
         LaunchedEffect(Unit) {
             session = engine.currentSession()
             lastSync = cloud.sessions.lastSyncAt()
+            lastResult = cloud.sessions.lastResult()
             loaded = true
         }
 
@@ -98,6 +103,8 @@ fun CloudSection(cloud: CloudSync) {
                 "上次同步：" + (lastSync?.let { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.TAIWAN).format(Date(it)) } ?: "尚未同步"),
                 style = MaterialTheme.typography.bodySmall,
             )
+            lastResult?.let { Text("最近一次（含背景自動同步）：$it", style = MaterialTheme.typography.bodySmall) }
+            Text("自動同步：每晚 20:00，另外每 6 小時檢查一次有沒有待上傳的資料。", style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(enabled = !busy, onClick = {
                     busy = true
@@ -106,6 +113,7 @@ fun CloudSection(cloud: CloudSync) {
                         val r = engine.sync()
                         message = if (r.error != null) r.error else "同步完成：下載 ${r.pulled} 筆、上傳 ${r.pushed} 筆"
                         lastSync = cloud.sessions.lastSyncAt()
+                        lastResult = cloud.sessions.lastResult()
                         session = engine.currentSession() // 登入失效時憑證會被清掉，畫面回到登入表單
                         busy = false
                     }
@@ -118,6 +126,11 @@ fun CloudSection(cloud: CloudSync) {
                     }
                 }) { Text("登出") }
             }
+            val context = LocalContext.current
+            OutlinedButton(onClick = {
+                // 背景同步會被省電機制延後；到清單把「健康紀錄」設為不限制（小米：應用程式省電）。
+                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }) { Text("省電設定（確保背景同步）") }
         }
         message?.let { Text(it, color = if (it.startsWith("同步完成") || it == "登入成功" || it.startsWith("已登出")) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error) }
     }

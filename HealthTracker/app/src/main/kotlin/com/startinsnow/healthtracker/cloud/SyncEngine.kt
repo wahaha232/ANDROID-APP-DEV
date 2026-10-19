@@ -23,10 +23,21 @@ interface SessionStore {
     suspend fun setCursor(cursor: String?)
     suspend fun lastSyncAt(): Long?
     suspend fun setLastSyncAt(millis: Long)
+    suspend fun lastResult(): String?
+    suspend fun setLastResult(message: String?)
 }
 
-data class SyncResult(val pulled: Int = 0, val pushed: Int = 0, val failed: Int = 0, val error: String? = null) {
+/** retryable：網路中斷、伺服器暫時錯誤這類「晚點再試可能就好」的失敗；沒登入、權限問題重試也沒用。 */
+data class SyncResult(
+    val pulled: Int = 0,
+    val pushed: Int = 0,
+    val failed: Int = 0,
+    val error: String? = null,
+    val retryable: Boolean = false,
+) {
     val ok get() = error == null && failed == 0
+
+    fun summary(): String = error ?: "同步完成：下載 $pulled 筆、上傳 $pushed 筆"
 }
 
 /**
@@ -56,16 +67,20 @@ class SyncEngine(
 
     suspend fun currentSession(): Session? = sessions.load()
 
+    suspend fun hasPending(): Boolean = store.pending().isNotEmpty()
+
     suspend fun sync(): SyncResult = lock.withLock {
-        try {
-            val result = withAuth { session -> doSync(session) }
-            sessions.setLastSyncAt(clock())
-            result
+        val result = try {
+            val r = withAuth { session -> doSync(session) }
+            if (r.error == null) sessions.setLastSyncAt(clock())
+            r
         } catch (e: CloudException) {
-            SyncResult(error = e.message)
+            SyncResult(error = e.message, retryable = e.kind == CloudErrorKind.NETWORK || e.kind == CloudErrorKind.SERVER)
         } catch (e: Exception) {
             SyncResult(error = "同步失敗：${e.message ?: e::class.simpleName}")
         }
+        sessions.setLastResult(result.summary())
+        result
     }
 
     private suspend fun <T> withAuth(block: suspend (Session) -> T): T {
@@ -133,7 +148,7 @@ class SyncEngine(
                 if (firstError == null) firstError = e.message
             }
         }
-        return SyncResult(pushed = pushed, failed = failed, error = firstError?.let { "有 $failed 筆上傳失敗：$it" })
+        return SyncResult(pushed = pushed, failed = failed, error = firstError?.let { "有 $failed 筆上傳失敗：$it" }, retryable = failed > 0)
     }
 
     private suspend fun pushOne(session: Session, r: HealthRecord) {

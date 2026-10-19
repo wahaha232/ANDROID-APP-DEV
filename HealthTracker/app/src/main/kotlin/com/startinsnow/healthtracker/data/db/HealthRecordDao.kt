@@ -27,6 +27,14 @@ interface HealthRecordDao {
     @Query("UPDATE health_records SET deletedAt = :now, updatedAt = :now, syncState = :pending WHERE id = :id")
     suspend fun softDelete(id: String, now: Long, pending: SyncState = SyncState.PENDING)
 
+    /** 同一次量測的近似重複判斷：同類型、數值幾乎相同、時間差在區間內（含已刪除的，避免刪掉的又被別的來源帶回）。 */
+    @Query(
+        "SELECT COUNT(*) FROM health_records WHERE type = :type AND ABS(value - :value) < 0.05 " +
+            "AND ((value2 IS NULL AND :value2 IS NULL) OR ABS(IFNULL(value2, 0) - IFNULL(:value2, 0)) < 0.5) " +
+            "AND measuredAt BETWEEN :from AND :to"
+    )
+    suspend fun countNearby(type: RecordType, value: Double, value2: Double?, from: Long, to: Long): Int
+
     @Query("UPDATE health_records SET syncState = 'SYNCED' WHERE id = :id AND updatedAt = :updatedAt")
     suspend fun markSynced(id: String, updatedAt: Long): Int
 
