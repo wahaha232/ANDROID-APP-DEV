@@ -1,6 +1,17 @@
 package com.startinsnow.healthtracker.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,11 +23,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,9 +53,45 @@ import com.startinsnow.healthtracker.data.db.HealthRecord
 import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 import com.startinsnow.healthtracker.data.repository.OverviewMath
+import com.startinsnow.healthtracker.ui.theme.AppCard
+import com.startinsnow.healthtracker.ui.theme.BrandBlue
+import com.startinsnow.healthtracker.ui.theme.BrandTeal
+import com.startinsnow.healthtracker.ui.theme.recordAccent
+import com.startinsnow.healthtracker.ui.theme.recordIcon
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+@Composable
+private fun GlucoseHero(latest: HealthRecord?, now: Long, zone: ZoneId, avg7: Double?) {
+    val brush = Brush.linearGradient(listOf(BrandBlue, BrandTeal))
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(brush).padding(20.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(28.dp).clip(CircleShape).background(Color.White), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    Icon(Icons.Filled.WaterDrop, contentDescription = null, tint = Color(0xFFD6303E), modifier = Modifier.size(18.dp))
+                }
+                Text("最新血糖", style = MaterialTheme.typography.titleSmall, color = Color.White.copy(alpha = 0.9f))
+            }
+            if (latest == null) {
+                Text("還沒有血糖紀錄", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("按下面的「記錄血糖」新增第一筆，可用拍照辨識。", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.9f))
+            } else {
+                Row(verticalAlignment = androidx.compose.ui.Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${latest.value.toInt()}", style = MaterialTheme.typography.displayLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = Color.White)
+                    Text(RecordType.BLOOD_GLUCOSE.unit, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.9f), modifier = Modifier.padding(bottom = 10.dp))
+                }
+                Text(
+                    dateTime.format(Instant.ofEpochMilli(latest.measuredAt).atZone(zone)) + "（${OverviewMath.relativeAge(latest.measuredAt, now)}）",
+                    style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.9f),
+                )
+                avg7?.let {
+                    Text("近 7 天平均 ${"%.0f".format(it)} mg/dL", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+                }
+            }
+        }
+    }
+}
 
 private val dateTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 private val monthDay = DateTimeFormatter.ofPattern("MM/dd")
@@ -66,29 +111,11 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, onSeeAll: 
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("最新血糖", style = MaterialTheme.typography.titleSmall)
-                if (latestGlucose == null) {
-                    Text("還沒有血糖紀錄", style = MaterialTheme.typography.titleLarge)
-                    Text("按下面的「記錄血糖」新增第一筆，可用拍照辨識。", style = MaterialTheme.typography.bodyMedium)
-                } else {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("${latestGlucose.value.toInt()}", style = MaterialTheme.typography.displayMedium)
-                        Text(RecordType.BLOOD_GLUCOSE.unit, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
-                    }
-                    Text(
-                        dateTime.format(Instant.ofEpochMilli(latestGlucose.measuredAt).atZone(zone)) +
-                            "（${OverviewMath.relativeAge(latestGlucose.measuredAt, now)}）",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-        }
+        GlucoseHero(latestGlucose, now, zone, OverviewMath.stats(OverviewMath.window(list, RecordType.BLOOD_GLUCOSE, 7, now))?.avg)
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { addType = RecordType.BLOOD_GLUCOSE }) { Text("記錄血糖") }
-            OutlinedButton(onClick = { addType = RecordType.WEIGHT }) { Text("記錄其他") }
+            Button(onClick = { addType = RecordType.BLOOD_GLUCOSE }, modifier = Modifier.weight(1f)) { Text("記錄血糖") }
+            FilledTonalButton(onClick = { addType = RecordType.WEIGHT }, modifier = Modifier.weight(1f)) { Text("記錄其他") }
         }
 
         TrendCard(list, days, now, zone) { days = it }
@@ -96,18 +123,22 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, onSeeAll: 
         val others = listOf(RecordType.WEIGHT, RecordType.BODY_FAT, RecordType.BLOOD_PRESSURE)
             .mapNotNull { t -> OverviewMath.latest(list, t) }
         if (others.isNotEmpty()) {
-            Card(Modifier.fillMaxWidth()) {
+            AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("其他最新數值", style = MaterialTheme.typography.titleSmall)
                     others.forEach { r ->
-                        Text("${r.type.label}　${formatMain(r)}　${OverviewMath.relativeAge(r.measuredAt, now)}", style = MaterialTheme.typography.bodyMedium)
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(recordIcon(r.type), contentDescription = null, tint = recordAccent(r.type), modifier = Modifier.size(20.dp))
+                            Text("${r.type.label}　${formatMain(r)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            Text(OverviewMath.relativeAge(r.measuredAt, now), style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
         }
 
         if (list.isNotEmpty()) {
-            Card(Modifier.fillMaxWidth()) {
+            AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("最近紀錄", style = MaterialTheme.typography.titleSmall)
                     list.take(3).forEach { r ->
@@ -135,7 +166,7 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, onSeeAll: 
 private fun TrendCard(list: List<HealthRecord>, days: Int, now: Long, zone: ZoneId, onDays: (Int) -> Unit) {
     val window = OverviewMath.window(list, RecordType.BLOOD_GLUCOSE, days, now)
     val stats = OverviewMath.stats(window)
-    Card(Modifier.fillMaxWidth()) {
+    AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("血糖趨勢（mg/dL）", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

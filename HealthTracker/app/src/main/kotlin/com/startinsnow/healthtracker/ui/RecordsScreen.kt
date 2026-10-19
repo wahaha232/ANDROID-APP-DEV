@@ -1,6 +1,9 @@
 package com.startinsnow.healthtracker.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,7 +20,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -41,6 +43,9 @@ import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.prefs.UserSettings
 import com.startinsnow.healthtracker.data.prefs.UserSettingsRepository
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
+import com.startinsnow.healthtracker.ui.theme.AppCard
+import com.startinsnow.healthtracker.ui.theme.recordAccent
+import com.startinsnow.healthtracker.ui.theme.recordIcon
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -95,8 +100,19 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(shown, key = { it.id }) { r ->
-                        RecordCard(r, user, onEdit = { editing = r }, onPhoto = { viewingPhoto = r.photoPath }, onDelete = { pendingDelete = r })
+                    // 依日期分組（資料已是新到舊），掃讀長清單比較輕鬆
+                    shown.groupBy { dayLabel(it.measuredAt) }.forEach { (day, dayRecords) ->
+                        item(key = "day-$day") {
+                            Text(
+                                day,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                            )
+                        }
+                        items(dayRecords, key = { it.id }) { r ->
+                            RecordCard(r, user, onEdit = { editing = r }, onPhoto = { viewingPhoto = r.photoPath }, onDelete = { pendingDelete = r })
+                        }
                     }
                 }
             }
@@ -149,18 +165,32 @@ internal fun formatMain(r: HealthRecord): String = when (r.type) {
     else -> "${"%.1f".format(r.value)} ${r.type.unit}"
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+private val dayFormat = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd（E）", Locale.TAIWAN)
+private val clockFormat = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+
+private fun dayLabel(ms: Long): String = dayFormat.format(java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()))
+
 @Composable
 private fun RecordCard(r: HealthRecord, user: UserSettings, onEdit: () -> Unit, onPhoto: () -> Unit, onDelete: () -> Unit) {
-    Card(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+    val accent = recordAccent(r.type)
+    AppCard(Modifier.fillMaxWidth(), onClick = onEdit) {
+        Row(
+            Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            androidx.compose.foundation.layout.Box(
+                Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(accent.copy(alpha = 0.14f)),
+                contentAlignment = androidx.compose.ui.Alignment.Center,
+            ) { Icon(recordIcon(r.type), contentDescription = r.type.label, tint = accent, modifier = Modifier.size(22.dp)) }
             Column(Modifier.weight(1f)) {
-                Text("${r.type.label}　${formatMain(r)}", style = MaterialTheme.typography.titleMedium)
-                if (r.type == RecordType.WEIGHT) {
-                    user.bmi(r.value)?.let { Text("BMI ${"%.1f".format(it)}") }
+                Text(formatMain(r), style = MaterialTheme.typography.titleMedium)
+                val sub = buildString {
+                    append(r.type.label).append("　").append(clockFormat.format(java.time.Instant.ofEpochMilli(r.measuredAt).atZone(java.time.ZoneId.systemDefault())))
+                    if (r.type == RecordType.WEIGHT) user.bmi(r.value)?.let { append("　BMI ${"%.1f".format(it)}") }
                 }
-                Text(timeFormat.format(Date(r.measuredAt)), style = MaterialTheme.typography.bodySmall)
-                if (r.note.isNotEmpty()) Text(r.note, style = MaterialTheme.typography.bodySmall)
+                Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (r.note.isNotEmpty()) Text(r.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (r.photoPath != null && File(r.photoPath).isFile) {
                 IconButton(onClick = onPhoto) { Icon(Icons.Filled.PhotoCamera, contentDescription = "查看照片") }

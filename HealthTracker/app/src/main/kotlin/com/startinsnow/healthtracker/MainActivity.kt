@@ -3,7 +3,7 @@ package com.startinsnow.healthtracker
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
+import com.startinsnow.healthtracker.ui.theme.HealthTrackerTheme
 import com.startinsnow.healthtracker.ui.HealthTrackerRoot
 
 class MainActivity : ComponentActivity() {
@@ -11,7 +11,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as HealthTrackerApp
         setContent {
-            MaterialTheme {
+            HealthTrackerTheme {
                 HealthTrackerRoot(app.records, app.settings, app.cloud)
             }
         }
