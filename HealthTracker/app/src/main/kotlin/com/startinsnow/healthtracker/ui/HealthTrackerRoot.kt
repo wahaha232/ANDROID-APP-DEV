@@ -17,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.startinsnow.healthtracker.cloud.CloudSync
 import com.startinsnow.healthtracker.data.prefs.UserSettingsRepository
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 
@@ -24,7 +25,7 @@ private const val ROUTE_RECORDS = "records"
 private const val ROUTE_SETTINGS = "settings"
 
 @Composable
-fun HealthTrackerRoot(records: HealthRecordRepository, settings: UserSettingsRepository) {
+fun HealthTrackerRoot(records: HealthRecordRepository, settings: UserSettingsRepository, cloud: CloudSync) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination
@@ -54,7 +55,7 @@ fun HealthTrackerRoot(records: HealthRecordRepository, settings: UserSettingsRep
     ) { padding ->
         NavHost(nav, startDestination = ROUTE_RECORDS, modifier = Modifier.padding(padding)) {
             composable(ROUTE_RECORDS) { RecordsScreen(records, settings) }
-            composable(ROUTE_SETTINGS) { SettingsScreen(settings) }
+            composable(ROUTE_SETTINGS) { SettingsScreen(settings, records, cloud) }
         }
     }
 }

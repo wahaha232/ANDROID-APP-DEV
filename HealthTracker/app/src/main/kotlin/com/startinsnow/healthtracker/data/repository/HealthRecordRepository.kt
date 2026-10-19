@@ -9,6 +9,8 @@ import com.startinsnow.healthtracker.ocr.PhotoStore
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
+data class ImportResult(val inserted: Int, val skipped: Int)
+
 class HealthRecordRepository(private val dao: HealthRecordDao) {
     fun observeAll(): Flow<List<HealthRecord>> = dao.observeAll()
 
@@ -40,6 +42,13 @@ class HealthRecordRepository(private val dao: HealthRecordDao) {
             )
         )
         return null
+    }
+
+    /** 批次匯入（Health Connect／CSV）。id 是確定性的，所以重複匯入、或匯入使用者已刪除的紀錄都不會重複出現。 */
+    suspend fun importRecords(records: List<HealthRecord>): ImportResult {
+        var inserted = 0
+        for (r in records) if (dao.insertIgnore(r) != -1L) inserted++
+        return ImportResult(inserted = inserted, skipped = records.size - inserted)
     }
 
     /** 軟刪除並一併刪掉原始照片檔（同步端只需要知道刪除事件，不需要照片）。 */

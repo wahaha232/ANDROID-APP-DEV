@@ -1,11 +1,20 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
 }
+
+// 雲端設定放在不進版控的 local.properties：supabase.url=https://xxxx.supabase.co、supabase.anonKey=...
+// （anon key 本來就是給用戶端用的公開金鑰，資料安全靠 RLS；但仍不進版控。絕不要放 service_role 金鑰。）
+val localProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun localProp(name: String) = localProps.getProperty(name, "").trim().replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.startinsnow.healthtracker"
@@ -17,6 +26,9 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+
+        buildConfigField("String", "SUPABASE_URL", "\"${localProp("supabase.url")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProp("supabase.anonKey")}\"")
     }
 
     buildTypes {
@@ -95,8 +107,16 @@ dependencies {
 
     // 裝置端 OCR（內建模型，不需 Google Play 服務、照片不上傳）
     implementation("com.google.mlkit:text-recognition:16.0.1")
+
+    // 體重／體脂來源：Health Connect（版本同 GPSTracker；1.1.0 需要 compileSdk 36 + AGP 8.9.1）
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha10")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 
+    // 雲端同步：Supabase REST（不用 SDK，只靠 OkHttp + JSON）
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }

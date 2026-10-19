@@ -12,7 +12,7 @@ class MainActivity : ComponentActivity() {
         val app = application as HealthTrackerApp
         setContent {
             MaterialTheme {
-                HealthTrackerRoot(app.records, app.settings)
+                HealthTrackerRoot(app.records, app.settings, app.cloud)
             }
         }
     }

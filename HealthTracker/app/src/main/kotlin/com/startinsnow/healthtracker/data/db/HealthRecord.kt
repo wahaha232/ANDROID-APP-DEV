@@ -13,7 +13,7 @@ enum class RecordType(val label: String, val unit: String) {
 }
 
 /** 資料來源。第 1 階段只有手動；之後的 OCR／米家／同步來源在此擴充。 */
-enum class RecordSource { MANUAL, OCR, MIJIA, IMPORT }
+enum class RecordSource { MANUAL, OCR, MIJIA, IMPORT, HEALTH_CONNECT }
 
 /** 同步狀態：本機優先，日後同步（第 4、6 天）靠它判斷哪些資料待上傳。 */
 enum class SyncState { LOCAL_ONLY, PENDING, SYNCED }

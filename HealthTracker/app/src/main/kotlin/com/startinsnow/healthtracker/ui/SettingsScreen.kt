@@ -23,14 +23,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.startinsnow.healthtracker.cloud.CloudSync
 import com.startinsnow.healthtracker.data.prefs.Sex
 import com.startinsnow.healthtracker.data.prefs.UserSettings
 import com.startinsnow.healthtracker.data.prefs.UserSettingsRepository
+import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(repo: UserSettingsRepository) {
+fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository, cloud: CloudSync) {
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var sex by remember { mutableStateOf(Sex.UNSPECIFIED) }
@@ -78,5 +80,7 @@ fun SettingsScreen(repo: UserSettingsRepository) {
             }
         }) { Text("儲存") }
         message?.let { Text(it) }
+        ImportSection(records)
+        CloudSection(cloud)
     }
 }
