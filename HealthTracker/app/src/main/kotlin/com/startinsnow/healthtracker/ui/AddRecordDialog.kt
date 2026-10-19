@@ -17,6 +17,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -26,6 +31,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -38,7 +44,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.startinsnow.healthtracker.data.db.HealthRecord
 import com.startinsnow.healthtracker.data.db.RecordSource
+import com.startinsnow.healthtracker.data.repository.MeasureTime
 import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 import com.startinsnow.healthtracker.ocr.GlucoseCandidate
@@ -49,6 +57,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private sealed interface OcrState {
     data object Idle : OcrState
@@ -63,16 +74,21 @@ private fun formatValue(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toStr
 @Composable
 fun AddRecordDialog(
     records: HealthRecordRepository,
+    existing: HealthRecord? = null, // 有值＝修改這筆紀錄（類型、來源、照片不變）
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var type by remember { mutableStateOf(RecordType.WEIGHT) }
-    var v by remember { mutableStateOf("") }
-    var v2 by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
+    val zone = remember { ZoneId.systemDefault() }
+    var type by remember { mutableStateOf(existing?.type ?: RecordType.WEIGHT) }
+    var v by remember { mutableStateOf(existing?.let { formatValue(it.value) } ?: "") }
+    var v2 by remember { mutableStateOf(existing?.value2?.let { formatValue(it) } ?: "") }
+    var note by remember { mutableStateOf(existing?.note ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
+    var measuredAt by remember { mutableLongStateOf(existing?.measuredAt ?: System.currentTimeMillis()) }
+    var showDate by remember { mutableStateOf(false) }
+    var showTime by remember { mutableStateOf(false) }
 
     // 目前掛在這筆紀錄上的照片（存檔後才算數；取消或換類型就刪掉）。
     var photoPath by rememberSaveable { mutableStateOf<String?>(null) }
@@ -121,13 +137,14 @@ fun AddRecordDialog(
 
     AlertDialog(
         onDismissRequest = { discardPhoto(); onDismiss() },
-        title = { Text("新增紀錄") },
+        title = { Text(if (existing == null) "新增紀錄" else "修改紀錄") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RecordType.entries.forEach { t ->
                         FilterChip(
                             selected = type == t,
+                            enabled = existing == null,
                             onClick = {
                                 if (t != type) {
                                     if (t != RecordType.BLOOD_GLUCOSE) discardPhoto()
@@ -140,7 +157,7 @@ fun AddRecordDialog(
                     }
                 }
 
-                if (type == RecordType.BLOOD_GLUCOSE) {
+                if (type == RecordType.BLOOD_GLUCOSE && existing == null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = {
                             val (file, uri) = PhotoStore.newCameraTarget(context)
@@ -175,6 +192,18 @@ fun AddRecordDialog(
                     }
                 }
 
+                if (existing?.photoPath != null && File(existing.photoPath).isFile) PhotoPreview(existing.photoPath)
+
+                // 測量時間：預設現在；補登或照片時間不同時可改日期與時分
+                Text(
+                    "測量時間　" + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(Instant.ofEpochMilli(measuredAt).atZone(zone)),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { showDate = true }) { Text("改日期") }
+                    OutlinedButton(onClick = { showTime = true }) { Text("改時間") }
+                }
+
                 OutlinedTextField(
                     value = v, onValueChange = { v = it },
                     label = { Text(if (type == RecordType.BLOOD_PRESSURE) "收縮壓" else "${type.label}（${type.unit}）") },
@@ -194,12 +223,16 @@ fun AddRecordDialog(
         confirmButton = {
             TextButton(onClick = {
                 scope.launch {
-                    val usePhoto = type == RecordType.BLOOD_GLUCOSE && photoPath != null
-                    val msg = records.addManual(
-                        type, v.toDoubleOrNull(), v2.toDoubleOrNull(), System.currentTimeMillis(), note,
-                        source = if (usePhoto) RecordSource.OCR else RecordSource.MANUAL,
-                        photoPath = if (usePhoto) photoPath else null,
-                    )
+                    val usePhoto = existing == null && type == RecordType.BLOOD_GLUCOSE && photoPath != null
+                    val msg = if (existing != null) {
+                        records.update(existing.id, v.toDoubleOrNull(), v2.toDoubleOrNull(), measuredAt, note)
+                    } else {
+                        records.addManual(
+                            type, v.toDoubleOrNull(), v2.toDoubleOrNull(), measuredAt, note,
+                            source = if (usePhoto) RecordSource.OCR else RecordSource.MANUAL,
+                            photoPath = if (usePhoto) photoPath else null,
+                        )
+                    }
                     if (msg == null) {
                         photoPath = null // 已交給紀錄保管，不能被 discardPhoto 刪掉
                         onSaved()
@@ -211,6 +244,36 @@ fun AddRecordDialog(
         },
         dismissButton = { TextButton(onClick = { discardPhoto(); onDismiss() }) { Text("取消") } },
     )
+
+    if (showDate) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = MeasureTime.utcMidnightOfLocalDate(measuredAt, zone))
+        DatePickerDialog(
+            onDismissRequest = { showDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { measuredAt = MeasureTime.withDate(measuredAt, it, zone) }
+                    showDate = false
+                }) { Text("確定") }
+            },
+            dismissButton = { TextButton(onClick = { showDate = false }) { Text("取消") } },
+        ) { DatePicker(state = state) }
+    }
+
+    if (showTime) {
+        val parts = Instant.ofEpochMilli(measuredAt).atZone(zone)
+        val state = rememberTimePickerState(initialHour = parts.hour, initialMinute = parts.minute, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { showTime = false },
+            text = { TimePicker(state = state) },
+            confirmButton = {
+                TextButton(onClick = {
+                    measuredAt = MeasureTime.withTime(measuredAt, state.hour, state.minute, zone)
+                    showTime = false
+                }) { Text("確定") }
+            },
+            dismissButton = { TextButton(onClick = { showTime = false }) { Text("取消") } },
+        )
+    }
 }
 
 @Composable

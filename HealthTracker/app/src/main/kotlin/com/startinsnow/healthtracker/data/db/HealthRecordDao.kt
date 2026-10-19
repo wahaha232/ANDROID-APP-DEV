@@ -42,6 +42,10 @@ interface HealthRecordDao {
     @Query("UPDATE health_records SET syncState = 'SYNCED' WHERE id = :id AND updatedAt = :updatedAt")
     suspend fun markSynced(id: String, updatedAt: Long): Int
 
+    /** 待上傳的筆數（含已刪除、尚未同步的），給設定頁顯示。 */
+    @Query("SELECT COUNT(*) FROM health_records WHERE syncState != 'SYNCED'")
+    fun observePendingCount(): Flow<Int>
+
     @Query("SELECT * FROM health_records WHERE syncState != 'SYNCED'")
     suspend fun pendingSync(): List<HealthRecord>
 }

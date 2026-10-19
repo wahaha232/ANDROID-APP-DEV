@@ -37,8 +37,12 @@ button[aria-selected="true"] { background: #5b4b9f; color: #fff; border-color: #
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .summary { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .9rem; }
 .summary b { font-size: 1.15rem; }
-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+/* 手機上表格太寬時在容器內橫向捲動，不要把整個頁面撐破 */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: .9rem; }
 th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #8883; vertical-align: top; }
+td:first-child { white-space: nowrap; }
+td:nth-child(4) { min-width: 120px; overflow-wrap: anywhere; }
 td.val { font-weight: 600; white-space: nowrap; }
 #photo-modal { position: fixed; inset: 0; background: #000a; display: grid; place-items: center; padding: 16px; }
 #photo-modal[hidden] { display: none; }

@@ -39,6 +39,7 @@ class HealthRecordRepository(private val dao: HealthRecordDao, private val db: R
         now: Long = System.currentTimeMillis(),
     ): String? {
         RecordValidator.validate(type, value, value2)?.let { return it }
+        RecordValidator.validateTime(measuredAt, now)?.let { return it }
         dao.upsert(
             HealthRecord(
                 id = UUID.randomUUID().toString(),
@@ -52,6 +53,35 @@ class HealthRecordRepository(private val dao: HealthRecordDao, private val db: R
                 createdAt = now,
                 updatedAt = now,
                 photoPath = photoPath,
+            )
+        )
+        return null
+    }
+
+    /**
+     * 修改既有紀錄（數值、測量時間、備註）。類型、來源與照片不變。
+     * 更新時間一定比原本大，並標為待同步，雲端與其他裝置才會以這次修改為準。
+     */
+    suspend fun update(
+        id: String,
+        value: Double?,
+        value2: Double?,
+        measuredAt: Long,
+        note: String,
+        now: Long = System.currentTimeMillis(),
+    ): String? {
+        val existing = dao.get(id) ?: return "找不到這筆紀錄"
+        if (existing.deletedAt != null) return "這筆紀錄已被刪除"
+        RecordValidator.validate(existing.type, value, value2)?.let { return it }
+        RecordValidator.validateTime(measuredAt, now)?.let { return it }
+        dao.upsert(
+            existing.copy(
+                value = value!!,
+                value2 = if (existing.type == RecordType.BLOOD_PRESSURE) value2 else null,
+                measuredAt = measuredAt,
+                note = note.trim(),
+                syncState = SyncState.PENDING,
+                updatedAt = maxOf(now, existing.updatedAt + 1),
             )
         )
         return null

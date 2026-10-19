@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -41,6 +42,7 @@ import com.startinsnow.healthtracker.data.prefs.UserSettings
 import com.startinsnow.healthtracker.data.prefs.UserSettingsRepository
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -56,6 +58,8 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
     var showAdd by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf<RecordType?>(null) } // null = 全部
     var pendingDelete by remember { mutableStateOf<HealthRecord?>(null) }
+    var editing by remember { mutableStateOf<HealthRecord?>(null) }
+    var viewingPhoto by remember { mutableStateOf<String?>(null) }
     val shown = if (filter == null) list else list.filter { it.type == filter }
 
     Scaffold(
@@ -92,7 +96,7 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(shown, key = { it.id }) { r ->
-                        RecordCard(r, user) { pendingDelete = r }
+                        RecordCard(r, user, onEdit = { editing = r }, onPhoto = { viewingPhoto = r.photoPath }, onDelete = { pendingDelete = r })
                     }
                 }
             }
@@ -119,6 +123,17 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
         )
     }
 
+    editing?.let { r ->
+        AddRecordDialog(
+            records = records,
+            existing = r,
+            onDismiss = { editing = null },
+            onSaved = { editing = null },
+        )
+    }
+
+    viewingPhoto?.let { path -> PhotoViewDialog(path) { viewingPhoto = null } }
+
     if (showAdd) {
         AddRecordDialog(
             records = records,
@@ -136,8 +151,8 @@ private fun formatMain(r: HealthRecord): String = when (r.type) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RecordCard(r: HealthRecord, user: UserSettings, onDelete: () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
+private fun RecordCard(r: HealthRecord, user: UserSettings, onEdit: () -> Unit, onPhoto: () -> Unit, onDelete: () -> Unit) {
+    Card(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text("${r.type.label}　${formatMain(r)}", style = MaterialTheme.typography.titleMedium)
@@ -146,6 +161,9 @@ private fun RecordCard(r: HealthRecord, user: UserSettings, onDelete: () -> Unit
                 }
                 Text(timeFormat.format(Date(r.measuredAt)), style = MaterialTheme.typography.bodySmall)
                 if (r.note.isNotEmpty()) Text(r.note, style = MaterialTheme.typography.bodySmall)
+            }
+            if (r.photoPath != null && File(r.photoPath).isFile) {
+                IconButton(onClick = onPhoto) { Icon(Icons.Filled.PhotoCamera, contentDescription = "查看照片") }
             }
             IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "刪除") }
         }

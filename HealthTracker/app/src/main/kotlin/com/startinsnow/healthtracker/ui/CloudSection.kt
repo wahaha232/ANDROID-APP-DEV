@@ -15,6 +15,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,7 @@ fun CloudSection(cloud: CloudSync) {
         var busy by remember { mutableStateOf(false) }
         var message by remember { mutableStateOf<String?>(null) }
         var loaded by remember { mutableStateOf(false) }
+        val pending by cloud.pendingCount.collectAsState(initial = 0)
 
         suspend fun reload() {
             session = engine.currentSession()
@@ -108,6 +110,10 @@ fun CloudSection(cloud: CloudSync) {
             Text("已登入：${current.email ?: current.userId}")
             Text(
                 "上次同步：" + (lastSync?.let { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.TAIWAN).format(Date(it)) } ?: "尚未同步"),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                if (pending == 0) "待同步：0 筆（全部已上傳）" else "待同步：$pending 筆（按「立即同步」或等每晚 20:00 自動上傳）",
                 style = MaterialTheme.typography.bodySmall,
             )
             lastResult?.let { Text("最近一次（含背景自動同步）：$it", style = MaterialTheme.typography.bodySmall) }

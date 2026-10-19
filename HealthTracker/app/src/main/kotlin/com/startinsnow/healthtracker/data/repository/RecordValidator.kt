@@ -19,6 +19,10 @@ object RecordValidator {
         }
     }
 
+    /** 測量時間不能在未來（超過容許誤差）。回傳 null 表示通過。 */
+    fun validateTime(measuredAt: Long, now: Long): String? =
+        if (MeasureTime.isFuture(measuredAt, now)) "測量時間不能晚於現在" else null
+
     private fun range(name: String, v: Double, min: Double, max: Double, unit: String): String? =
         if (v < min || v > max) "$name 應介於 $min–$max $unit" else null
 }
