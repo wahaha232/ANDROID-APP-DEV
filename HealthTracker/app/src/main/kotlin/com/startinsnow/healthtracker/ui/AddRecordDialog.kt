@@ -75,13 +75,14 @@ private fun formatValue(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toStr
 fun AddRecordDialog(
     records: HealthRecordRepository,
     existing: HealthRecord? = null, // 有值＝修改這筆紀錄（類型、來源、照片不變）
+    initialType: RecordType? = null, // 從總覽「記錄血糖」進來時預選血糖
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val zone = remember { ZoneId.systemDefault() }
-    var type by remember { mutableStateOf(existing?.type ?: RecordType.WEIGHT) }
+    var type by remember { mutableStateOf(existing?.type ?: initialType ?: RecordType.WEIGHT) }
     var v by remember { mutableStateOf(existing?.let { formatValue(it.value) } ?: "") }
     var v2 by remember { mutableStateOf(existing?.value2?.let { formatValue(it) } ?: "") }
     var note by remember { mutableStateOf(existing?.note ?: "") }

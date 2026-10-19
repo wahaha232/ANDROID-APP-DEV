@@ -143,7 +143,7 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
     }
 }
 
-private fun formatMain(r: HealthRecord): String = when (r.type) {
+internal fun formatMain(r: HealthRecord): String = when (r.type) {
     RecordType.BLOOD_PRESSURE -> "${r.value.toInt()}/${r.value2?.toInt()} ${r.type.unit}"
     RecordType.BLOOD_GLUCOSE -> "${r.value.toInt()} ${r.type.unit}"
     else -> "${"%.1f".format(r.value)} ${r.type.unit}"

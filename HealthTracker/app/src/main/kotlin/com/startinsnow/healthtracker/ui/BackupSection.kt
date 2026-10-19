@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +62,19 @@ fun BackupSection(records: HealthRecordRepository) {
         }
     }
 
+    // 加密的備份先暫存在這裡，等使用者在對話框輸入密碼
+    var pendingBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var dialogPassword by remember { mutableStateOf("") }
+    var dialogError by remember { mutableStateOf<String?>(null) }
+
+    suspend fun restoreFrom(bytes: ByteArray, pw: String?) {
+        val decoded = withContext(Dispatchers.Default) { BackupCodec.decode(bytes, pw) }
+        val incoming = decoded.mapNotNull(BackupCodec::toHealthRecord)
+        val result = records.restore(incoming)
+        message = "還原完成：新增 ${result.inserted} 筆、更新 ${result.updated} 筆、略過 ${result.skipped} 筆（已有或較新）" +
+            if (decoded.size > incoming.size) "；${decoded.size - incoming.size} 筆來自較新版本，已略過" else ""
+    }
+
     val openDoc = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         busy = true
@@ -67,11 +82,13 @@ fun BackupSection(records: HealthRecordRepository) {
             try {
                 val bytes = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }
                     ?: throw BackupException("無法讀取檔案")
-                val decoded = withContext(Dispatchers.Default) { BackupCodec.decode(bytes, password) }
-                val incoming = decoded.mapNotNull(BackupCodec::toHealthRecord)
-                val result = records.restore(incoming)
-                message = "還原完成：新增 ${result.inserted} 筆、更新 ${result.updated} 筆、略過 ${result.skipped} 筆（已有或較新）" +
-                    if (decoded.size > incoming.size) "；${decoded.size - incoming.size} 筆來自較新版本，已略過" else ""
+                if (BackupCodec.isEncrypted(bytes)) {
+                    dialogPassword = password // 密碼框已經填過就預設帶入
+                    dialogError = null
+                    pendingBytes = bytes
+                } else {
+                    restoreFrom(bytes, null) // 沒加密：不需要密碼
+                }
             } catch (e: BackupException) {
                 message = e.message
             } catch (e: Exception) {
@@ -82,11 +99,44 @@ fun BackupSection(records: HealthRecordRepository) {
         }
     }
 
+    pendingBytes?.let { bytes ->
+        AlertDialog(
+            onDismissRequest = { pendingBytes = null },
+            title = { Text("這個備份有加密") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        dialogPassword, { dialogPassword = it; dialogError = null }, label = { Text("備份密碼") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    )
+                    dialogError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        try {
+                            restoreFrom(bytes, dialogPassword)
+                            pendingBytes = null
+                        } catch (e: BackupException) {
+                            dialogError = e.message // 密碼錯誤：對話框留著讓使用者重試
+                        } catch (e: Exception) {
+                            pendingBytes = null
+                            message = "還原失敗：${e.message}"
+                        }
+                    }
+                }) { Text("還原") }
+            },
+            dismissButton = { TextButton(onClick = { pendingBytes = null }) { Text("取消") } },
+        )
+    }
+
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
         Text("備份與還原", style = MaterialTheme.typography.titleLarge)
         Text(
-            "把全部紀錄存成一個檔案（不含照片）；換手機或誤刪時可還原。密碼選填：有填就加密，還原時要輸入同一組密碼。",
+            "把全部紀錄存成一個檔案（不含照片）；換手機或誤刪時可還原。密碼選填：有填就加密；還原加密的備份時會請您輸入密碼。",
             style = MaterialTheme.typography.bodySmall,
         )
         OutlinedTextField(

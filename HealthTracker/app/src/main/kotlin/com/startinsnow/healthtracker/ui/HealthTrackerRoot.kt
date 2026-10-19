@@ -3,6 +3,7 @@ package com.startinsnow.healthtracker.ui
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -21,6 +22,7 @@ import com.startinsnow.healthtracker.cloud.CloudSync
 import com.startinsnow.healthtracker.data.prefs.UserSettingsRepository
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 
+private const val ROUTE_OVERVIEW = "overview"
 private const val ROUTE_RECORDS = "records"
 private const val ROUTE_SETTINGS = "settings"
 
@@ -34,6 +36,7 @@ fun HealthTrackerRoot(records: HealthRecordRepository, settings: UserSettingsRep
         bottomBar = {
             NavigationBar {
                 listOf(
+                    Triple(ROUTE_OVERVIEW, "總覽", Icons.Filled.Home),
                     Triple(ROUTE_RECORDS, "紀錄", Icons.AutoMirrored.Filled.List),
                     Triple(ROUTE_SETTINGS, "設定", Icons.Filled.Settings),
                 ).forEach { (route, label, icon) ->
@@ -43,7 +46,7 @@ fun HealthTrackerRoot(records: HealthRecordRepository, settings: UserSettingsRep
                             nav.navigate(route) {
                                 launchSingleTop = true
                                 restoreState = true
-                                popUpTo(ROUTE_RECORDS) { saveState = true }
+                                popUpTo(ROUTE_OVERVIEW) { saveState = true }
                             }
                         },
                         icon = { Icon(icon, contentDescription = label) },
@@ -53,7 +56,16 @@ fun HealthTrackerRoot(records: HealthRecordRepository, settings: UserSettingsRep
             }
         },
     ) { padding ->
-        NavHost(nav, startDestination = ROUTE_RECORDS, modifier = Modifier.padding(padding)) {
+        NavHost(nav, startDestination = ROUTE_OVERVIEW, modifier = Modifier.padding(padding)) {
+            composable(ROUTE_OVERVIEW) {
+                OverviewScreen(records, cloud, onSeeAll = {
+                    nav.navigate(ROUTE_RECORDS) {
+                        launchSingleTop = true
+                        restoreState = true
+                        popUpTo(ROUTE_OVERVIEW) { saveState = true }
+                    }
+                })
+            }
             composable(ROUTE_RECORDS) { RecordsScreen(records, settings) }
             composable(ROUTE_SETTINGS) { SettingsScreen(settings, records, cloud) }
         }

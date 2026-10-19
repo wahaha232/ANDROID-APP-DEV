@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -17,7 +18,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -41,6 +44,7 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
     var height by remember { mutableStateOf("") }
     var target by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
+    var group by rememberSaveable { mutableIntStateOf(0) }
 
     // 只在進入畫面時載入一次，之後以輸入框內容為準。
     LaunchedEffect(Unit) {
@@ -56,6 +60,13 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
         Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // 設定分組：一次只顯示一組，常用的個人資料與雲端同步不必在一長串裡找
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("個人資料", "匯入資料", "雲端同步", "備份與隱私", "關於").forEachIndexed { i, name ->
+                FilterChip(selected = group == i, onClick = { group = i }, label = { Text(name) })
+            }
+        }
+        if (group == 0) {
         Text("個人設定", style = MaterialTheme.typography.titleLarge)
         OutlinedTextField(name, { name = it }, label = { Text("顯示名稱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -81,12 +92,14 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
             }
         }) { Text("儲存") }
         message?.let { Text(it) }
-        ImportSection(records)
-        BackupSection(records)
-        CloudSection(cloud)
-        Text(
-            "版本 ${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）",
-            style = MaterialTheme.typography.bodySmall,
-        )
+        }
+        if (group == 1) ImportSection(records)
+        if (group == 2) CloudSection(cloud)
+        if (group == 3) BackupSection(records)
+        if (group == 4) {
+            Text("關於", style = MaterialTheme.typography.titleLarge)
+            Text("血糖記錄　版本 ${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）", style = MaterialTheme.typography.bodyMedium)
+            Text("資料預設只存在這支手機；登入並同步後才會上傳到您自己的雲端。", style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
