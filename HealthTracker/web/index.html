@@ -43,6 +43,19 @@
       </div>
       <div id="summary" class="summary"></div>
       <p id="list-msg" class="msg" role="status"></p>
+      <div id="chart-wrap" class="chart-wrap">
+        <h2 id="chart-title" class="chart-title"></h2>
+        <div id="chart"></div>
+        <div id="tooltip" class="tooltip" hidden></div>
+      </div>
+      <div class="toolbar export">
+        <span class="hint">匯出（依目前的時間範圍）：</span>
+        <button id="exp-csv" type="button">CSV（目前類型）</button>
+        <button id="exp-xlsx" type="button">Excel（目前類型）</button>
+        <button id="exp-all-csv" type="button">CSV（全部類型）</button>
+        <button id="exp-all-xlsx" type="button">Excel（全部類型）</button>
+      </div>
+      <p id="exp-msg" class="msg" role="status"></p>
       <table>
         <thead><tr><th>時間（台北）</th><th>數值</th><th>來源</th><th>備註</th><th>照片</th></tr></thead>
         <tbody id="rows"></tbody>

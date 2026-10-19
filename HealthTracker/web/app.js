@@ -2,6 +2,8 @@ import {
   TYPES, RANGES, rangeStart, normalizeBaseUrl, buildRecordsQuery, sessionNeedsRefresh,
   formatValue, formatTime, sourceLabel, summarize, isSafePhotoPath,
 } from './lib.js';
+import { renderChart } from './chart.js';
+import { toRows, toCsv, buildXlsx, exportFileName, EXPORT_HEADER } from './export.js';
 
 const CONFIG_KEY = 'ht.config'; // { url, key }：只存在這個瀏覽器
 const SESSION_KEY = 'ht.session'; // sessionStorage：關掉分頁就登出
@@ -146,6 +148,7 @@ function renderSummary(records) {
     item('平均', f(s.avg));
     item('最低', f(s.min));
     item('最高', f(s.max));
+    if (s.count > 1) item('區間變化', `${s.change > 0 ? '+' : s.change < 0 ? '−' : ''}${Math.abs(s.change).toFixed(t.digits)} ${t.unit}`);
   }
 }
 
@@ -177,6 +180,7 @@ function renderRows(records) {
 async function loadRecords() {
   const seq = ++state.loadSeq; // 快速切換分頁時，只採用最後一次請求的結果
   setMsg('list-msg', '載入中…');
+  $('chart').classList.add('loading'); // 重新載入時保留上一張圖、降低透明度，不閃爍
   try {
     const q = buildRecordsQuery({ type: state.type, since: rangeStart(state.range) });
     const resp = await authed(`/rest/v1/health_records?${q}`);
@@ -184,13 +188,60 @@ async function loadRecords() {
     if (seq !== state.loadSeq) return;
     renderSummary(records);
     renderRows(records);
-    setMsg('list-msg', records.length ? '' : '這段期間沒有資料');
+    $('chart-title').textContent = records.length ? `${TYPES[state.type].label}趨勢（${TYPES[state.type].unit}）` : '';
+    renderChart($('chart'), $('tooltip'), state.type, records);
+    setMsg('list-msg', records.length === 0 ? '這段期間沒有資料' : records.length >= PAGE ? `資料很多，只顯示最近 ${PAGE} 筆` : '');
   } catch (e) {
     if (seq !== state.loadSeq) return;
     renderSummary([]);
     renderRows([]);
+    renderChart($('chart'), $('tooltip'), state.type, []);
     if (e.status === 401) { route(); setMsg('login-msg', e.message, true); return; }
     setMsg('list-msg', e.message, true);
+  } finally {
+    if (seq === state.loadSeq) $('chart').classList.remove('loading');
+  }
+}
+
+// ---------- 匯出 ----------
+const PAGE = 1000;
+
+/** 分頁抓完（Supabase 預設單次最多 1000 筆）。 */
+async function fetchAll(type, since) {
+  const out = [];
+  for (let page = 0; page < 20; page++) {
+    const q = buildRecordsQuery({ type, since, limit: PAGE, offset: page * PAGE });
+    const rows = await (await authed(`/rest/v1/health_records?${q}`)).json();
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
+function download(bytesOrText, name, mime) {
+  const url = URL.createObjectURL(new Blob([bytesOrText], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+async function doExport(format, scope) {
+  setMsg('exp-msg', '匯出中…');
+  try {
+    const type = scope === 'all' ? null : state.type;
+    const records = await fetchAll(type, rangeStart(state.range));
+    if (!records.length) { setMsg('exp-msg', '這段期間沒有資料可匯出'); return; }
+    const rows = toRows(records);
+    const label = `${scope === 'all' ? '全部' : TYPES[state.type].label}_${state.range === 'all' ? '全部期間' : `${state.range}天`}`;
+    if (format === 'csv') download(toCsv(rows), exportFileName(label, 'csv'), 'text/csv;charset=utf-8');
+    else download(buildXlsx([EXPORT_HEADER, ...rows]), exportFileName(label, 'xlsx'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    setMsg('exp-msg', `已匯出 ${records.length} 筆`);
+  } catch (e) {
+    setMsg('exp-msg', e.message, true);
   }
 }
 
@@ -266,6 +317,10 @@ $('login-go').addEventListener('click', async () => {
 $('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('login-go').click(); });
 $('logout').addEventListener('click', () => { saveSession(null); closePhoto(); route(); });
 $('reload').addEventListener('click', loadRecords);
+$('exp-csv').addEventListener('click', () => doExport('csv', 'current'));
+$('exp-xlsx').addEventListener('click', () => doExport('xlsx', 'current'));
+$('exp-all-csv').addEventListener('click', () => doExport('csv', 'all'));
+$('exp-all-xlsx').addEventListener('click', () => doExport('xlsx', 'all'));
 $('photo-close').addEventListener('click', closePhoto);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePhoto(); });
 

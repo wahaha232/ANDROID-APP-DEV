@@ -1,5 +1,26 @@
-:root { color-scheme: light dark; font-family: system-ui, "Noto Sans TC", sans-serif; }
-body { margin: 0; background: Canvas; color: CanvasText; }
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, "Noto Sans TC", sans-serif;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #6b6a66;
+  --grid: #e4e3df;
+  --s1: #2a78d6; /* 類別色 1：藍 */
+  --s2: #eb6834; /* 類別色 2：橘 */
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #9a998f;
+    --grid: #2f2f2d;
+    --s1: #3987e5;
+    --s2: #d95926;
+  }
+}
+body { margin: 0; background: var(--surface-1); color: var(--text-primary); }
 header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #8884; }
 h1 { font-size: 1.2rem; margin: 0; }
 main { max-width: 860px; margin: 0 auto; padding: 16px; }
@@ -21,6 +42,34 @@ th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #8883; ver
 td.val { font-weight: 600; white-space: nowrap; }
 #photo-modal { position: fixed; inset: 0; background: #000a; display: grid; place-items: center; padding: 16px; }
 #photo-modal[hidden] { display: none; }
-.modal-box { background: Canvas; padding: 12px; border-radius: 12px; max-width: 95vw; max-height: 95vh; overflow: auto; display: grid; gap: 8px; }
+.modal-box { background: var(--surface-1); padding: 12px; border-radius: 12px; max-width: 95vw; max-height: 95vh; overflow: auto; display: grid; gap: 8px; }
 .modal-box img { max-width: 100%; max-height: 75vh; }
 [hidden] { display: none !important; }
+
+/* ---- 趨勢圖 ---- */
+.chart-wrap { position: relative; }
+.chart-title { font-size: 1rem; margin: 4px 0; font-weight: 600; }
+#chart svg { width: 100%; height: auto; display: block; }
+#chart.loading { opacity: .5; }
+svg .grid { stroke: var(--grid); stroke-width: 1; }
+svg .axis { fill: var(--text-muted); font-size: 11px; }
+svg .endlabel { fill: var(--text-primary); font-size: 12px; font-weight: 600; }
+svg .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+svg .dot { stroke: var(--surface-1); stroke-width: 2; }
+svg .key { stroke-width: 2; stroke-linecap: round; }
+svg .line.s1, svg .key.s1 { stroke: var(--s1); }
+svg .line.s2, svg .key.s2 { stroke: var(--s2); }
+svg .dot.s1 { fill: var(--s1); }
+svg .dot.s2 { fill: var(--s2); }
+svg .cross { stroke: var(--text-muted); stroke-width: 1; }
+svg .hit { fill: transparent; cursor: crosshair; outline: none; }
+svg .hit:focus-visible { stroke: var(--text-muted); stroke-dasharray: 4 3; }
+.legend { display: flex; gap: 16px; font-size: .85rem; color: var(--text-secondary); margin: 4px 0; }
+.tt-key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 4px; }
+.tt-key.s1 { border-color: var(--s1); }
+.tt-key.s2 { border-color: var(--s2); }
+.tooltip { position: absolute; top: 28px; min-width: 130px; padding: 8px 10px; background: var(--surface-1); border: 1px solid var(--grid); border-radius: 8px; box-shadow: 0 2px 8px #0003; font-size: .85rem; pointer-events: none; }
+.tt-time { color: var(--text-secondary); font-size: .8rem; margin-bottom: 2px; }
+.tt-row b { font-size: 1rem; color: var(--text-primary); }
+.tt-name { color: var(--text-secondary); font-size: .8rem; }
+.export { margin-top: 8px; }

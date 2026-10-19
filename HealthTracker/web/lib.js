@@ -45,7 +45,7 @@ export function normalizeBaseUrl(input, pageHost = '') {
 }
 
 /** 組 PostgREST 查詢字串。type 為 null 表示全部類型。 */
-export function buildRecordsQuery({ type = null, since = null, limit = 1000 } = {}) {
+export function buildRecordsQuery({ type = null, since = null, limit = 1000, offset = 0 } = {}) {
   const p = new URLSearchParams();
   p.set('select', 'id,type,value,value2,measured_at,source,note,photo_object');
   p.set('deleted_at', 'is.null');
@@ -53,6 +53,7 @@ export function buildRecordsQuery({ type = null, since = null, limit = 1000 } = 
   if (since != null) p.set('measured_at', `gte.${Math.floor(since)}`);
   p.set('order', 'measured_at.desc');
   p.set('limit', String(limit));
+  if (offset > 0) p.set('offset', String(offset));
   return p.toString();
 }
 
@@ -90,6 +91,8 @@ export function summarize(records) {
     min: Math.min(...values),
     max: Math.max(...values),
     avg: sum / values.length,
+    // 區間變化：最新一筆減最早一筆（records 新到舊）。只有一筆時為 0。
+    change: records[0].value - records[records.length - 1].value,
   };
 }
 
