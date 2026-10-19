@@ -14,6 +14,8 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
+enum class AddOutcome { ADDED, DUPLICATE, INVALID }
+
 data class ImportResult(val inserted: Int, val skipped: Int)
 
 data class RestoreResult(val inserted: Int, val updated: Int, val skipped: Int)
@@ -59,6 +61,17 @@ class HealthRecordRepository(private val dao: HealthRecordDao, private val db: R
             )
         )
         return null
+    }
+
+    /** 批次照片匯入用：數值不合理回 INVALID；±2 分鐘內已有相同數值回 DUPLICATE（不重複寫入）。 */
+    suspend fun addFromPhoto(value: Double, measuredAt: Long, photoPath: String, now: Long = System.currentTimeMillis()): AddOutcome {
+        if (RecordValidator.validate(RecordType.BLOOD_GLUCOSE, value, null) != null) return AddOutcome.INVALID
+        if (RecordValidator.validateTime(measuredAt, now) != null) return AddOutcome.INVALID
+        if (dao.countNearby(RecordType.BLOOD_GLUCOSE, value, null, measuredAt - DUPLICATE_WINDOW_MS, measuredAt + DUPLICATE_WINDOW_MS) > 0) {
+            return AddOutcome.DUPLICATE
+        }
+        val err = addManual(RecordType.BLOOD_GLUCOSE, value, null, measuredAt, "", RecordSource.OCR, photoPath, null, now)
+        return if (err == null) AddOutcome.ADDED else AddOutcome.INVALID
     }
 
     /**

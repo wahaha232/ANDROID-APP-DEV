@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- 不含任何內嵌程式；只允許連到 Supabase。金鑰與網址由使用者在瀏覽器輸入，不寫在檔案裡。 -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src https://*.supabase.co; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' https://*.supabase.co; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex, nofollow">
   <title>血糖記錄</title>
@@ -50,6 +50,19 @@
         <div id="chart"></div>
         <div id="tooltip" class="tooltip" role="status" aria-live="polite" hidden></div>
       </div>
+      <details id="batch" class="batch">
+        <summary>批次匯入血糖機照片</summary>
+        <p class="hint">一次選多張照片：在瀏覽器本機辨識血糖數值（照片不會送到第三方），測量時間依照片的拍攝時間，核對後寫入雲端。辨識可能有誤，請逐列確認。</p>
+        <label>選擇照片（最多 60 張）<input id="batch-files" type="file" accept="image/*" multiple></label>
+        <p id="batch-msg" class="msg" role="status"></p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>寫入</th><th>照片</th><th>血糖 mg/dL</th><th>測量時間（台北）</th><th>狀態</th></tr></thead>
+            <tbody id="batch-rows"></tbody>
+          </table>
+        </div>
+        <button id="batch-save" type="button" disabled>寫入雲端</button>
+      </details>
       <div class="toolbar export">
         <span class="hint">匯出（依目前的時間範圍）：</span>
         <button id="exp-csv" type="button">CSV（目前類型）</button>

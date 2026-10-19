@@ -108,7 +108,7 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
         }) { Text("儲存") }
         message?.let { Text(it) }
         }
-        if (group == 1) ImportSection(records)
+        if (group == 1) ImportSection(records, cloud)
         if (group == 2) CloudSection(cloud)
         if (group == 3) ReportSection(records, repo)
         if (group == 4) BackupSection(records)

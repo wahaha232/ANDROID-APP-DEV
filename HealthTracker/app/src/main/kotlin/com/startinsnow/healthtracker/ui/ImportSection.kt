@@ -26,7 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
+import com.startinsnow.healthtracker.cloud.CloudSync
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
+import com.startinsnow.healthtracker.importer.PhotoBatchImporter
 import com.startinsnow.healthtracker.importer.CsvImporter
 import com.startinsnow.healthtracker.importer.HcSample
 import com.startinsnow.healthtracker.importer.HealthConnectImporter
@@ -37,7 +39,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ImportSection(records: HealthRecordRepository) {
+fun ImportSection(records: HealthRecordRepository, cloud: CloudSync) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val hc = remember { HealthConnectImporter(context) }
@@ -71,6 +73,35 @@ fun ImportSection(records: HealthRecordRepository) {
         if (granted.containsAll(HealthConnectImporter.PERMISSIONS)) scan() else message = "沒有授權，無法讀取 Health Connect"
     }
 
+    var batchProgress by remember { mutableStateOf<String?>(null) }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(50)) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            try {
+                val result = PhotoBatchImporter(context, records).run(uris) { done, total ->
+                    batchProgress = "處理中 $done / $total"
+                }
+                batchProgress = null
+                message = result.summary() + "。"
+                if (result.saved > 0) {
+                    // 先存好在手機，再接著上傳；沒登入就留在手機，登入後會自動上傳
+                    val engine = cloud.engine
+                    message += if (engine == null || engine.currentSession() == null) {
+                        "尚未登入雲端，資料已存在手機，登入後會自動上傳。"
+                    } else {
+                        "上傳：" + engine.sync().summary()
+                    }
+                }
+            } catch (e: Exception) {
+                batchProgress = null
+                message = "批次匯入失敗：${e.message}"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
     val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         busy = true
@@ -101,6 +132,12 @@ fun ImportSection(records: HealthRecordRepository) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
         Text("匯入資料", style = MaterialTheme.typography.titleLarge)
+        Text("血糖機照片（批次）", style = MaterialTheme.typography.titleMedium)
+        Text("一次選多張血糖機照片：自動辨識數值，測量時間依照片拍攝時間，先存在手機，再接著上傳雲端。辨識可能有誤，請到「紀錄」點照片對照確認。", style = MaterialTheme.typography.bodySmall)
+        Button(enabled = !busy, onClick = {
+            message = null
+            photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }) { Text(batchProgress ?: "批次匯入照片") }
         Text("小米體脂計 S400（米家）", style = MaterialTheme.typography.titleMedium)
         MijiaCaptureStatus()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

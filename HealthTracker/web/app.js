@@ -3,6 +3,7 @@ import {
   formatValue, formatTime, sourceLabel, summarize, isSafePhotoPath, fetchAllPages, CONTEXT_LABELS, contextLabel,
 } from './lib.js';
 import { renderChart } from './chart.js';
+import { initBatch } from './batch.js';
 import { toRows, toCsv, buildXlsx, exportFileName, EXPORT_HEADER } from './export.js';
 
 const CONFIG_KEY = 'ht.config'; // { url, key }：只存在這個瀏覽器
@@ -363,6 +364,18 @@ $('exp-all-csv').addEventListener('click', () => doExport('csv', 'all'));
 $('exp-all-xlsx').addEventListener('click', () => doExport('xlsx', 'all'));
 $('photo-close').addEventListener('click', closePhoto);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePhoto(); });
+
+/** 登入憑證（JWT）裡的使用者 id；照片要放在 <user_id>/ 資料夾下。 */
+async function currentUserId() {
+  const s = await validSession();
+  try {
+    const payload = JSON.parse(atob(s.accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    if (typeof payload.sub === 'string') return payload.sub;
+  } catch { /* 落到下面的錯誤 */ }
+  throw new ApiError('無法取得使用者 id，請重新登入', 401);
+}
+
+initBatch({ authed, userId: currentUserId, onSaved: loadRecords });
 
 renderTabs();
 route();

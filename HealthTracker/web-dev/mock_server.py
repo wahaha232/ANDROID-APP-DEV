@@ -2,7 +2,7 @@
 用法：python web-dev/mock_server.py   然後開 http://localhost:8791/
 測試帳號（假的，只對這個假伺服器有效）：demo@example.com / demo-pass
 """
-import io, json, os, random, time, uuid
+import base64, io, json, os, random, time, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -39,9 +39,11 @@ def make_jpeg():
     d.text((220, 150), '112 mg/dL (mock photo)', fill=(20, 20, 20))
     buf = io.BytesIO(); im.save(buf, 'JPEG'); return buf.getvalue()
 JPEG = make_jpeg()
+UPLOADS = {}
 
 def token(email, refresh_n=0):
-    return dict(access_token=f'mock-access-{refresh_n}-{int(time.time())}', refresh_token=f'mock-refresh-{refresh_n + 1}',
+    payload = base64.urlsafe_b64encode(json.dumps(dict(sub=USER_ID)).encode()).decode().rstrip('=')
+    return dict(access_token=f'mock-access-{refresh_n}-{int(time.time())}.{payload}.sig', refresh_token=f'mock-refresh-{refresh_n + 1}',
                 expires_in=EXPIRES_IN, token_type='bearer', user=dict(id=USER_ID, email=email))
 
 class H(BaseHTTPRequestHandler):
@@ -55,7 +57,17 @@ class H(BaseHTTPRequestHandler):
     def do_OPTIONS(self): self._send(204)
     def do_POST(self):
         u = urlparse(self.path); q = parse_qs(u.query)
-        body = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))) or b'{}')
+        raw = self.rfile.read(int(self.headers.get('Content-Length', 0)))
+        if u.path.startswith('/storage/v1/object/meter-photos/'):  # 照片上傳（只記下路徑與大小）
+            if not self._authed(): return self._send(401, {})
+            UPLOADS[u.path.removeprefix('/storage/v1/object/meter-photos/')] = len(raw)
+            return self._send(200, dict(Key=u.path))
+        body = json.loads(raw or b'{}')
+        if u.path == '/rest/v1/health_records':  # 寫入紀錄（只在記憶體）
+            if not self._authed(): return self._send(401, dict(code='PGRST301'))
+            body.setdefault('deleted_at', None); body.setdefault('photo_object', None); body.setdefault('context', None)
+            ROWS.append(body)
+            return self._send(201, b'')
         if u.path == '/auth/v1/token':
             if q.get('grant_type') == ['password']:
                 if body.get('email') == EMAIL and body.get('password') == PASSWORD: return self._send(200, token(EMAIL))
@@ -70,7 +82,9 @@ class H(BaseHTTPRequestHandler):
             if not self._authed(): return self._send(401, dict(code='PGRST301'))
             rows = [r for r in ROWS if r['deleted_at'] is None] if q.get('deleted_at') == ['is.null'] else list(ROWS)
             if 'type' in q: rows = [r for r in rows if f"eq.{r['type']}" == q['type'][0]]
-            if 'measured_at' in q: rows = [r for r in rows if r['measured_at'] >= int(q['measured_at'][0].removeprefix('gte.'))]
+            for cond in q.get('measured_at', []):
+                n = int(cond.split('.', 1)[1])
+                rows = [r for r in rows if (r['measured_at'] >= n if cond.startswith('gte.') else r['measured_at'] <= n)]
             rows.sort(key=lambda r: (r['measured_at'], r['id']), reverse=True)
             rows = rows[:int(q.get('limit', ['1000'])[0])]
             cols = None if q.get('select', ['*'])[0] == '*' else q['select'][0].split(',')
@@ -78,14 +92,18 @@ class H(BaseHTTPRequestHandler):
         if u.path == '/storage/v1/object/authenticated/meter-photos/' + PHOTO_PATH:
             if not self._authed(): return self._send(401, {})
             return self._send(200, JPEG, 'image/jpeg')
+        if u.path.startswith('/_testphotos/'):  # 開發測試用：提供自備的測試照片
+            f = os.path.join(os.environ.get('MOCK_PHOTOS', ''), os.path.basename(u.path))
+            if os.path.isfile(f): return self._send(200, open(f, 'rb').read(), 'image/jpeg')
+            return self._send(404, {})
         if u.path.startswith('/storage/'): return self._send(404, dict(error='not_found'))
         rel = 'index.html' if u.path in ('/', '') else u.path.lstrip('/')
         f = os.path.normpath(os.path.join(WEB, rel))
         if not f.startswith(os.path.normpath(WEB)) or not os.path.isfile(f): return self._send(404, b'not found', 'text/plain')
         data = open(f, 'rb').read()
-        ctype = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css'}.get(os.path.splitext(f)[1], 'application/octet-stream')
+        ctype = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.gz': 'application/gzip', '.wasm': 'application/wasm'}.get(os.path.splitext(f)[1], 'application/octet-stream')
         if rel == 'index.html':  # 只有開發用的假伺服器放寬 CSP，讓頁面能連到 localhost
-            data = data.replace(b'connect-src https://*.supabase.co', f'connect-src http://localhost:{PORT} http://127.0.0.1:{PORT} https://*.supabase.co'.encode())
+            data = data.replace(b"connect-src 'self' https://*.supabase.co", f"connect-src 'self' http://localhost:{PORT} http://127.0.0.1:{PORT} https://*.supabase.co".encode())
         self._send(200, data, ctype)
 
 if __name__ == '__main__':
