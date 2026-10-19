@@ -42,4 +42,6 @@ data class HealthRecord(
     val createdAt: Long,
     val updatedAt: Long,
     val deletedAt: Long? = null,
+    /** OCR 拍照紀錄的原始照片（App 私有目錄的絕對路徑），供日後回頭核對。 */
+    val photoPath: String? = null,
 )

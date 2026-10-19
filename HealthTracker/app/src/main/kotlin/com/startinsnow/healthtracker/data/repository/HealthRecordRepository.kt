@@ -5,6 +5,7 @@ import com.startinsnow.healthtracker.data.db.HealthRecordDao
 import com.startinsnow.healthtracker.data.db.RecordSource
 import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.db.SyncState
+import com.startinsnow.healthtracker.ocr.PhotoStore
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -18,6 +19,8 @@ class HealthRecordRepository(private val dao: HealthRecordDao) {
         value2: Double?,
         measuredAt: Long,
         note: String,
+        source: RecordSource = RecordSource.MANUAL,
+        photoPath: String? = null,
         now: Long = System.currentTimeMillis(),
     ): String? {
         RecordValidator.validate(type, value, value2)?.let { return it }
@@ -28,15 +31,20 @@ class HealthRecordRepository(private val dao: HealthRecordDao) {
                 value = value!!,
                 value2 = if (type == RecordType.BLOOD_PRESSURE) value2 else null,
                 measuredAt = measuredAt,
-                source = RecordSource.MANUAL,
+                source = source,
                 note = note.trim(),
                 syncState = SyncState.PENDING,
                 createdAt = now,
                 updatedAt = now,
+                photoPath = photoPath,
             )
         )
         return null
     }
 
-    suspend fun delete(id: String, now: Long = System.currentTimeMillis()) = dao.softDelete(id, now)
+    /** 軟刪除並一併刪掉原始照片檔（同步端只需要知道刪除事件，不需要照片）。 */
+    suspend fun delete(id: String, now: Long = System.currentTimeMillis()) {
+        dao.get(id)?.photoPath?.let { PhotoStore.delete(it) }
+        dao.softDelete(id, now)
+    }
 }

@@ -93,6 +93,10 @@ dependencies {
     // 個人設定
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
+    // 裝置端 OCR（內建模型，不需 Google Play 服務、照片不上傳）
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }

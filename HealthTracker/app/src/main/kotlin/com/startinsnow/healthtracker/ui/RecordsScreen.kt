@@ -80,10 +80,8 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
 
     if (showAdd) {
         AddRecordDialog(
+            records = records,
             onDismiss = { showAdd = false },
-            onSave = { type, v, v2, note ->
-                records.addManual(type, v, v2, System.currentTimeMillis(), note)
-            },
             onSaved = { showAdd = false },
         )
     }
@@ -96,6 +94,8 @@ private fun RecordCard(r: HealthRecord, user: UserSettings, onDelete: () -> Unit
             Column(Modifier.weight(1f)) {
                 val main = if (r.type == RecordType.BLOOD_PRESSURE) {
                     "${r.value.toInt()}/${r.value2?.toInt()} ${r.type.unit}"
+                } else if (r.type == RecordType.BLOOD_GLUCOSE) {
+                    "${r.value.toInt()} ${r.type.unit}"
                 } else {
                     "${"%.1f".format(r.value)} ${r.type.unit}"
                 }
@@ -109,56 +109,4 @@ private fun RecordCard(r: HealthRecord, user: UserSettings, onDelete: () -> Unit
             IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "刪除") }
         }
     }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun AddRecordDialog(
-    onDismiss: () -> Unit,
-    onSave: suspend (RecordType, Double?, Double?, String) -> String?,
-    onSaved: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    var type by remember { mutableStateOf(RecordType.WEIGHT) }
-    var v by remember { mutableStateOf("") }
-    var v2 by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("新增紀錄") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RecordType.entries.forEach { t ->
-                        FilterChip(selected = type == t, onClick = { type = t; error = null }, label = { Text(t.label) })
-                    }
-                }
-                OutlinedTextField(
-                    value = v, onValueChange = { v = it },
-                    label = { Text(if (type == RecordType.BLOOD_PRESSURE) "收縮壓" else "${type.label}（${type.unit}）") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                )
-                if (type == RecordType.BLOOD_PRESSURE) {
-                    OutlinedTextField(
-                        value = v2, onValueChange = { v2 = it }, label = { Text("舒張壓") }, singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    )
-                }
-                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("備註（選填）") })
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                scope.launch {
-                    val msg = onSave(type, v.toDoubleOrNull(), v2.toDoubleOrNull(), note)
-                    if (msg == null) onSaved() else error = msg
-                }
-            }) { Text("儲存") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
 }
