@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- 不含任何內嵌程式；只允許連到 Supabase。金鑰與網址由使用者在瀏覽器輸入，不寫在檔案裡。 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src https://*.supabase.co; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>健康紀錄</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>健康紀錄</h1>
+    <button id="logout" type="button" hidden>登出</button>
+  </header>
+
+  <main>
+    <section id="setup" hidden>
+      <h2>連線設定</h2>
+      <p class="hint">第一次使用：輸入您自己的 Supabase 專案網址與 anon（公開）金鑰。只存在這個瀏覽器，不會上傳到任何地方。切勿使用 service_role 金鑰。</p>
+      <label>專案網址<input id="cfg-url" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off"></label>
+      <label>anon 金鑰<input id="cfg-key" type="password" autocomplete="off"></label>
+      <button id="cfg-save" type="button">儲存</button>
+      <p id="cfg-msg" class="msg" role="alert"></p>
+    </section>
+
+    <section id="login" hidden>
+      <h2>登入</h2>
+      <label>Email<input id="login-email" type="email" autocomplete="username"></label>
+      <label>密碼<input id="login-pass" type="password" autocomplete="current-password"></label>
+      <button id="login-go" type="button">登入</button>
+      <button id="cfg-reset" type="button" class="link">更換連線設定</button>
+      <p id="login-msg" class="msg" role="alert"></p>
+    </section>
+
+    <section id="records" hidden>
+      <div class="toolbar">
+        <div id="type-tabs" class="tabs" role="tablist"></div>
+        <div id="range-tabs" class="tabs" role="tablist"></div>
+        <button id="reload" type="button">重新整理</button>
+      </div>
+      <div id="summary" class="summary"></div>
+      <p id="list-msg" class="msg" role="status"></p>
+      <table>
+        <thead><tr><th>時間（台北）</th><th>數值</th><th>來源</th><th>備註</th><th>照片</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="photo-modal" hidden>
+    <div class="modal-box">
+      <button id="photo-close" type="button">關閉</button>
+      <p id="photo-msg" class="msg"></p>
+      <img id="photo-img" alt="血糖機照片" hidden>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

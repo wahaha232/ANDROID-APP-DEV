@@ -1,0 +1,26 @@
+:root { color-scheme: light dark; font-family: system-ui, "Noto Sans TC", sans-serif; }
+body { margin: 0; background: Canvas; color: CanvasText; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #8884; }
+h1 { font-size: 1.2rem; margin: 0; }
+main { max-width: 860px; margin: 0 auto; padding: 16px; }
+section { display: grid; gap: 12px; }
+label { display: grid; gap: 4px; font-size: .9rem; }
+input { padding: 10px; font-size: 1rem; border: 1px solid #8886; border-radius: 8px; background: Field; color: FieldText; }
+button { padding: 8px 14px; font-size: .95rem; border-radius: 8px; border: 1px solid #8886; background: ButtonFace; color: ButtonText; cursor: pointer; }
+button.link { border: none; background: none; text-decoration: underline; justify-self: start; padding: 0; }
+button[aria-selected="true"] { background: #5b4b9f; color: #fff; border-color: #5b4b9f; }
+.hint { font-size: .85rem; opacity: .8; margin: 0; }
+.msg { min-height: 1.2em; margin: 0; font-size: .9rem; }
+.msg.err { color: #c0392b; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.summary { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .9rem; }
+.summary b { font-size: 1.15rem; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #8883; vertical-align: top; }
+td.val { font-weight: 600; white-space: nowrap; }
+#photo-modal { position: fixed; inset: 0; background: #000a; display: grid; place-items: center; padding: 16px; }
+#photo-modal[hidden] { display: none; }
+.modal-box { background: Canvas; padding: 12px; border-radius: 12px; max-width: 95vw; max-height: 95vh; overflow: auto; display: grid; gap: 8px; }
+.modal-box img { max-width: 100%; max-height: 75vh; }
+[hidden] { display: none !important; }
