@@ -14,6 +14,20 @@ plugins {
 val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
+// 版號自動進版：versionCode 以 git commit 總數（加 gradle.properties 的 ht.versionBase 補差）為序號，
+// 每次提交都會遞增；工作目錄有未提交的修改時 versionName 尾端加「+」，一眼看出這個 APK 含未提交的修改。
+// 搬到新 repo 時（commit 數歸零），把 ht.versionBase 設成「舊最終版號 − 新 repo 的 commit 數」，版號才不會倒退。
+fun gitOutput(vararg args: String): String? = runCatching {
+    providers.exec {
+        workingDir = rootProject.projectDir
+        commandLine("git", *args)
+    }.standardOutput.asText.get().trim()
+}.getOrNull()
+
+val versionBase = (findProperty("ht.versionBase") as String?)?.toIntOrNull() ?: 0
+val gitCommitCount: Int = (gitOutput("rev-list", "--count", "HEAD")?.toIntOrNull() ?: 0) + versionBase
+val gitDirty: Boolean = !gitOutput("status", "--porcelain", "--", ".").isNullOrBlank()
+
 fun localProp(name: String) = localProps.getProperty(name, "").trim().replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
@@ -24,8 +38,8 @@ android {
         applicationId = "com.startinsnow.healthtracker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = gitCommitCount.coerceAtLeast(1)
+        versionName = "1.0.$gitCommitCount" + if (gitDirty) "+" else ""
 
         buildConfigField("String", "SUPABASE_URL", "\"${localProp("supabase.url")}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProp("supabase.anonKey")}\"")

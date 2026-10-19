@@ -1,5 +1,7 @@
 package com.startinsnow.healthtracker.data.repository
 
+import com.startinsnow.healthtracker.backup.RestoreAction
+import com.startinsnow.healthtracker.backup.planRestore
 import com.startinsnow.healthtracker.data.db.HealthRecord
 import com.startinsnow.healthtracker.data.db.HealthRecordDao
 import com.startinsnow.healthtracker.data.db.RecordSource
@@ -10,6 +12,8 @@ import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
 data class ImportResult(val inserted: Int, val skipped: Int)
+
+data class RestoreResult(val inserted: Int, val updated: Int, val skipped: Int)
 
 class HealthRecordRepository(private val dao: HealthRecordDao) {
     private companion object {
@@ -57,6 +61,24 @@ class HealthRecordRepository(private val dao: HealthRecordDao) {
             if (!duplicate && dao.insertIgnore(r) != -1L) inserted++
         }
         return ImportResult(inserted = inserted, skipped = records.size - inserted)
+    }
+
+    suspend fun allForBackup(): List<HealthRecord> = dao.all()
+
+    /** 還原備份：新增沒有的、較新的覆蓋舊的、其餘略過。還原的資料一律標為待同步。 */
+    suspend fun restore(incoming: List<HealthRecord>): RestoreResult {
+        var inserted = 0
+        var updated = 0
+        var skipped = 0
+        for (r in incoming) {
+            val existing = dao.get(r.id)
+            when (planRestore(existing, r)) {
+                RestoreAction.INSERT -> { dao.upsert(r); inserted++ }
+                RestoreAction.UPDATE -> { dao.upsert(r.copy(photoPath = existing?.photoPath)); updated++ }
+                RestoreAction.SKIP -> skipped++
+            }
+        }
+        return RestoreResult(inserted, updated, skipped)
     }
 
     /** 軟刪除並一併刪掉原始照片檔（同步端只需要知道刪除事件，不需要照片）。 */

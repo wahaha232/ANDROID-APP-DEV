@@ -21,6 +21,10 @@ interface HealthRecordDao {
     @Query("SELECT * FROM health_records WHERE deletedAt IS NULL AND type = :type ORDER BY measuredAt DESC")
     fun observeByType(type: RecordType): Flow<List<HealthRecord>>
 
+    /** 備份用：含已刪除（軟刪除）的全部紀錄，還原時才不會讓刪除的資料復活。 */
+    @Query("SELECT * FROM health_records")
+    suspend fun all(): List<HealthRecord>
+
     @Query("SELECT * FROM health_records WHERE id = :id")
     suspend fun get(id: String): HealthRecord?
 

@@ -23,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.startinsnow.healthtracker.BuildConfig
 import com.startinsnow.healthtracker.cloud.CloudSync
 import com.startinsnow.healthtracker.data.prefs.Sex
 import com.startinsnow.healthtracker.data.prefs.UserSettings
@@ -81,6 +82,11 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
         }) { Text("儲存") }
         message?.let { Text(it) }
         ImportSection(records)
+        BackupSection(records)
         CloudSection(cloud)
+        Text(
+            "版本 ${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }

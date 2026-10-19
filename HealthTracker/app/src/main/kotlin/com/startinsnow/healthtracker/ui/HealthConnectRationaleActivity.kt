@@ -18,7 +18,7 @@ class HealthConnectRationaleActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Column(Modifier.padding(24.dp)) {
-                    Text("健康紀錄只會讀取體重與體脂率，匯入到這支 App 的本機資料庫。資料不會傳給第三方；只有您登入並按「立即同步」才會上傳到您自己的雲端。")
+                    Text("這支 App 只會讀取體重與體脂率，匯入到這支 App 的本機資料庫。資料不會傳給第三方；只有您登入並按「立即同步」才會上傳到您自己的雲端。")
                     Button(onClick = { finish() }, modifier = Modifier.padding(top = 16.dp)) { Text("知道了") }
                 }
             }

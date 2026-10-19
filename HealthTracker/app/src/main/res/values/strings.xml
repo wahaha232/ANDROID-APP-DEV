@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">健康紀錄</string>
+    <string name="app_name">血糖記錄</string>
     <string name="mijia_service_description">開啟米家的「體脂計 S400」頁面時，讀取畫面上的體重與體脂率並存入健康紀錄。只對米家有效，不會讀取其他 App 或其他內容。</string>
 </resources>
