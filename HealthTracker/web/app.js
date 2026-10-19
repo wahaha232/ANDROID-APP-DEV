@@ -193,11 +193,15 @@ async function loadRecords() {
     setMsg('list-msg', records.length === 0 ? '這段期間沒有資料' : records.length >= PAGE ? `資料很多，只顯示最近 ${PAGE} 筆` : '');
   } catch (e) {
     if (seq !== state.loadSeq) return;
-    renderSummary([]);
-    renderRows([]);
-    renderChart($('chart'), $('tooltip'), state.type, []);
-    if (e.status === 401) { route(); setMsg('login-msg', e.message, true); return; }
-    setMsg('list-msg', e.message, true);
+    // 離線（status 0）時保留畫面上原本的資料，只提示連不上；其他錯誤才清空，避免看到過期或錯誤的資料
+    if (e.status !== 0) {
+      renderSummary([]);
+      renderRows([]);
+      renderChart($('chart'), $('tooltip'), state.type, []);
+    }
+    // 憑證被清掉（續期失敗）或伺服器說未授權：回到登入畫面並說明原因
+    if (e.status === 401 || !loadSession()) { route(); setMsg('login-msg', '登入已失效，請重新登入', true); return; }
+    setMsg('list-msg', e.status === 0 ? `${e.message}（以下是上次載入的資料）` : e.message, true);
   } finally {
     if (seq === state.loadSeq) $('chart').classList.remove('loading');
   }

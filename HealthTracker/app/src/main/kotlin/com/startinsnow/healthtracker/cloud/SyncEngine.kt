@@ -75,7 +75,7 @@ class SyncEngine(
             if (r.error == null) sessions.setLastSyncAt(clock())
             r
         } catch (e: CloudException) {
-            SyncResult(error = e.message, retryable = e.kind == CloudErrorKind.NETWORK || e.kind == CloudErrorKind.SERVER)
+            SyncResult(error = e.message, retryable = isRetryable(e))
         } catch (e: Exception) {
             SyncResult(error = "同步失敗：${e.message ?: e::class.simpleName}")
         }
@@ -134,6 +134,7 @@ class SyncEngine(
     private suspend fun push(session: Session): SyncResult {
         var pushed = 0
         var failed = 0
+        var anyRetryable = false
         var firstError: String? = null
         for (r in store.pending()) {
             try {
@@ -145,10 +146,11 @@ class SyncEngine(
                     e.kind == CloudErrorKind.AUTH_FAILED
                 ) throw e
                 failed++
+                if (isRetryable(e)) anyRetryable = true
                 if (firstError == null) firstError = e.message
             }
         }
-        return SyncResult(pushed = pushed, failed = failed, error = firstError?.let { "有 $failed 筆上傳失敗：$it" }, retryable = failed > 0)
+        return SyncResult(pushed = pushed, failed = failed, error = firstError?.let { "有 $failed 筆上傳失敗：$it" }, retryable = anyRetryable)
     }
 
     private suspend fun pushOne(session: Session, r: HealthRecord) {
@@ -170,5 +172,15 @@ class SyncEngine(
 
     private companion object {
         const val EXPIRY_MARGIN_MS = 60_000L
+
+        /**
+         * 晚點再試可能就好的失敗：網路中斷、伺服器 5xx、429（太頻繁）、408（逾時）。
+         * 其他 4xx（例如 403 沒權限、404 找不到資料表、400 資料不合規）重試只會白白消耗電量，直接放棄、等使用者處理。
+         */
+        fun isRetryable(e: CloudException): Boolean = when (e.kind) {
+            CloudErrorKind.NETWORK -> true
+            CloudErrorKind.SERVER -> e.httpCode == null || e.httpCode >= 500 || e.httpCode == 429 || e.httpCode == 408
+            else -> false
+        }
     }
 }

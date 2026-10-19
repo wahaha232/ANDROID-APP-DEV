@@ -18,6 +18,28 @@ create table if not exists public.health_records (
   synced_at    timestamptz not null default now()  -- 伺服器時間，供拉取增量用
 );
 
+-- 照片路徑只能指向自己的資料夾（Storage 本身也有 RLS，這裡多一道防線，避免寫入指向別人檔案的路徑）。
+do $$ begin
+  alter table public.health_records
+    add constraint health_records_photo_own_folder
+    check (photo_object is null or photo_object like user_id::text || '/%');
+exception when duplicate_object then null; end $$;
+
+-- 數值合理範圍（與 App 的輸入檢查一致；擋掉單位或小數點打錯造成的離譜資料）。
+do $$ begin
+  alter table public.health_records
+    add constraint health_records_value_range
+    check (
+      case type
+        when 'WEIGHT' then value between 20 and 300
+        when 'BODY_FAT' then value between 2 and 70
+        when 'BLOOD_GLUCOSE' then value between 20 and 800
+        when 'BLOOD_PRESSURE' then value between 50 and 260 and value2 between 30 and 160 and value2 < value
+        else false
+      end
+    );
+exception when duplicate_object then null; end $$;
+
 create index if not exists health_records_user_synced_idx on public.health_records (user_id, synced_at);
 create index if not exists health_records_user_measured_idx on public.health_records (user_id, type, measured_at desc);
 

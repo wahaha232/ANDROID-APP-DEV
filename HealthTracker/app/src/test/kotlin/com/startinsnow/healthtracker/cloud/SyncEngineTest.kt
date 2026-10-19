@@ -279,6 +279,36 @@ class SyncEngineTest {
         assertTrue(engine().sync().retryable)
     }
 
+    @Test fun permissionAndMissingTableErrorsAreNotRetryable() = runTest {
+        for (code in listOf(400, 403, 404, 409)) {
+            store.rows["bad"] = local("bad")
+            api.upsertFailures["bad"] = CloudException(CloudErrorKind.SERVER, "HTTP $code", code)
+            val r = engine().sync()
+            assertFalse("HTTP $code 不該重試", r.retryable)
+            assertEquals(1, r.failed)
+            api.fetchFailure = CloudException(CloudErrorKind.SERVER, "HTTP $code", code)
+            assertFalse("拉取 HTTP $code 不該重試", engine().sync().retryable)
+            api.fetchFailure = null
+        }
+    }
+
+    @Test fun serverOverloadAndRateLimitAreRetryable() = runTest {
+        for (code in listOf(408, 429, 500, 502, 503)) {
+            api.fetchFailure = CloudException(CloudErrorKind.SERVER, "HTTP $code", code)
+            assertTrue("HTTP $code 應該重試", engine().sync().retryable)
+        }
+    }
+
+    @Test fun mixedFailuresAreRetryableIfAnyIs() = runTest {
+        store.rows["a"] = local("a")
+        store.rows["b"] = local("b")
+        api.upsertFailures["a"] = CloudException(CloudErrorKind.SERVER, "HTTP 403", 403)
+        api.upsertFailures["b"] = CloudException(CloudErrorKind.SERVER, "HTTP 503", 503)
+        val r = engine().sync()
+        assertEquals(2, r.failed)
+        assertTrue(r.retryable)
+    }
+
     @Test fun successfulSyncIsNotRetryable() = runTest {
         assertFalse(engine().sync().retryable)
     }
