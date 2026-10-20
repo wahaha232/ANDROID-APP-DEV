@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             GpsTrackerTheme {
                 GpsTrackerNavHost()
+                com.startinsnow.gpstracker.update.AutoUpdatePrompt()
             }
         }
     }

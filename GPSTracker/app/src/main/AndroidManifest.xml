@@ -34,6 +34,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- App 內更新：把下載好的 APK 交給系統安裝器（仍須使用者在系統畫面確認）。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />

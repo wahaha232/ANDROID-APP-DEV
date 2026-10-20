@@ -413,4 +413,20 @@
     <string name="detail_profile_speed_value">%1$.1f km/h</string>
     <string name="detail_profile_range">最低 %1$s ・ 最高 %2$s</string>
     <string name="detail_profile_hint">在圖上左右拖曳或按住，可以查看該處的數值。</string>
+    <string name="update_title">App 更新</string>
+    <string name="update_hint">目前版本 %1$s。從 GitHub 取得新版，簽章相同才會安裝，資料會保留。安裝前系統會請你確認。</string>
+    <string name="update_check">檢查更新</string>
+    <string name="update_checking">檢查中…</string>
+    <string name="update_latest">目前已是最新版（%1$s）</string>
+    <string name="update_found">有新版本 %1$s（目前 %2$s）</string>
+    <string name="update_download">下載新版本</string>
+    <string name="update_downloading">下載中…</string>
+    <string name="update_downloaded">下載完成並通過檢查，可以安裝</string>
+    <string name="update_install">安裝新版本</string>
+    <string name="update_allow">請在接下來的畫面允許「安裝未知應用程式」，回來後再按一次「安裝新版本」</string>
+    <string name="update_failed">更新失敗：%1$s</string>
+    <string name="update_prompt_title">有新版本</string>
+    <string name="update_prompt_message">有新版本 %1$s（目前 %2$s）。要現在下載並安裝嗎？</string>
+    <string name="update_prompt_action">更新</string>
+    <string name="update_prompt_later">稍後</string>
 </resources>

@@ -458,6 +458,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 }
             }
 
+            SettingsSection(title = context.getString(R.string.update_title)) {
+                com.startinsnow.gpstracker.update.UpdateSection()
+            }
+
             SettingsSection(title = context.getString(R.string.diag_title)) {
                 var crashCount by remember { mutableStateOf(com.startinsnow.gpstracker.diagnostics.CrashLogger.count(context)) }
                 Text(
