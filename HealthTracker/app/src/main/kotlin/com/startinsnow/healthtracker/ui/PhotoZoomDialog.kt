@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -54,15 +56,30 @@ fun PhotoZoomDialog(path: String, onCancel: () -> Unit, onConfirm: (PhotoCrop) -
     var boxH by remember { mutableFloatStateOf(0f) }
 
     Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.fillMaxSize().background(Color.Black)) {
+        Column(Modifier.fillMaxSize().background(Color.Black).systemBarsPadding()) {
             Text(
-                "雙指縮放、拖曳照片，讓血糖機螢幕的數字佔滿畫面，再按「辨識此範圍」。",
+                "雙指縮放、拖曳照片，讓血糖機螢幕的數字佔滿畫面（也可連點兩下快速放大），再按「辨識此範圍」。",
                 color = Color.White, style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(16.dp),
             )
+            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End)) {
+                TextButton(onClick = { scale = 1f; tx = 0f; ty = 0f }) { Text("還原") }
+                TextButton(onClick = onCancel) { Text("取消") }
+                Button(enabled = bitmap != null, onClick = {
+                    val b = bitmap ?: return@Button
+                    onConfirm(PhotoOcr.visibleCrop(boxW, boxH, b.width, b.height, scale, tx, ty))
+                }) { Text("辨識此範圍") }
+            }
             Box(
                 Modifier.weight(1f).fillMaxWidth().clipToBounds()
                     .onSizeChanged { boxW = it.width.toFloat(); boxH = it.height.toFloat() }
+                    .pointerInput(Unit) {
+                        // 連點兩下：放大 3 倍到點的位置；再連點一下還原
+                        detectTapGestures(onDoubleTap = { o ->
+                            if (scale > 1.5f) { scale = 1f; tx = 0f; ty = 0f }
+                            else { scale = 3f; tx = -3f * (o.x - boxW / 2); ty = -3f * (o.y - boxH / 2) }
+                        })
+                    }
                     .pointerInput(Unit) {
                         detectTransformGestures { _, pan, zoom, _ ->
                             scale = (scale * zoom).coerceIn(1f, 8f)
@@ -79,14 +96,6 @@ fun PhotoZoomDialog(path: String, onCancel: () -> Unit, onConfirm: (PhotoCrop) -
                         modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = scale, scaleY = scale, translationX = tx, translationY = ty),
                     )
                 }
-            }
-            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End)) {
-                TextButton(onClick = { scale = 1f; tx = 0f; ty = 0f }) { Text("還原") }
-                TextButton(onClick = onCancel) { Text("取消") }
-                Button(enabled = bitmap != null, onClick = {
-                    val b = bitmap ?: return@Button
-                    onConfirm(PhotoOcr.visibleCrop(boxW, boxH, b.width, b.height, scale, tx, ty))
-                }) { Text("辨識此範圍") }
             }
         }
     }

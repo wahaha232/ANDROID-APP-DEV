@@ -3,6 +3,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- App 內更新：下載新版 APK 後交給系統安裝程式（使用者仍需在系統畫面確認） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Health Connect：只讀體重與體脂率（小米體脂計資料若有同步到 Health Connect 才讀得到） -->
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />

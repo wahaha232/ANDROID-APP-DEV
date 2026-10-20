@@ -76,7 +76,9 @@ object PhotoOcr {
         val base = withContext(Dispatchers.IO) { decodeCrop(file, crop) } ?: return emptyList()
         val variants = listOf(base, withContext(Dispatchers.Default) { enhance(base) })
         for (bmp in variants) {
-            val found = GlucoseOcrParser.candidates(OcrEngine.recognize(bmp))
+            val lines = OcrEngine.recognize(bmp)
+            if (com.startinsnow.healthtracker.BuildConfig.DEBUG) android.util.Log.d("PhotoOcr", "${bmp.width}x${bmp.height} lines=" + lines.joinToString(" | ") { "'${it.text}'(${it.height})" })
+            val found = GlucoseOcrParser.candidates(lines)
             if (found.isNotEmpty()) return found
         }
         return emptyList()

@@ -3,4 +3,6 @@
     <files-path name="photos" path="photos/" />
     <!-- 就醫摘要 PDF：只放在快取，每次產生前清掉舊的 -->
     <cache-path name="exports" path="exports/" />
+    <!-- App 內更新下載的新版 APK -->
+    <cache-path name="updates" path="updates/" />
 </paths>

@@ -16,3 +16,4 @@
 /.tools/
 **/.tools/
 *.log
+HealthTracker/tools/update_out/

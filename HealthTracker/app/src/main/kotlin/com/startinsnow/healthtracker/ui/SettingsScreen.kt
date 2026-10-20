@@ -12,6 +12,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -125,6 +126,8 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
             Text("關於", style = MaterialTheme.typography.titleLarge)
             Text("血糖記錄　版本 ${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）", style = MaterialTheme.typography.bodyMedium)
             Text("資料預設只存在這支手機；登入並同步後才會上傳到您自己的雲端。", style = MaterialTheme.typography.bodySmall)
+            HorizontalDivider()
+            UpdateSection(cloud)
         }
     }
 }

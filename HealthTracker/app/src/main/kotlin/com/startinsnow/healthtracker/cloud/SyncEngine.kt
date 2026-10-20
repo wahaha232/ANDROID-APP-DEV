@@ -86,6 +86,9 @@ class SyncEngine(
         result
     }
 
+    /** 給其他需要登入憑證的功能（例如 App 更新）使用：自動續期，過期就重試一次。 */
+    suspend fun <T> withSession(block: suspend (Session) -> T): T = withAuth(block)
+
     private suspend fun <T> withAuth(block: suspend (Session) -> T): T {
         var session = sessions.load() ?: throw CloudException(CloudErrorKind.NOT_SIGNED_IN, "尚未登入雲端")
         if (session.expiresAtMillis - EXPIRY_MARGIN_MS <= clock()) session = refresh(session)
