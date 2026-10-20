@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -103,7 +104,8 @@ fun DailyDistributionChart(records: List<HealthRecord>, rows: Int, zone: ZoneId,
         }
         val picked = sel?.let { dots.getOrNull(it) }?.record
         Text(
-            if (picked != null) "${picked.value.toInt()} mg/dL　" + dotTime.format(Instant.ofEpochMilli(picked.measuredAt).atZone(zone))
+            modifier = Modifier.padding(top = 6.dp),
+            text = if (picked != null) "${picked.value.toInt()} mg/dL　" + dotTime.format(Instant.ofEpochMilli(picked.measuredAt).atZone(zone))
             else "點圓點可看數值與時間；每個點代表一次測量。",
             style = MaterialTheme.typography.bodySmall,
         )
