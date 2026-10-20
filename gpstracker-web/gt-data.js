@@ -45,7 +45,11 @@
     return fetchJson("meta.json", true).then(function (m) { return (m && m.tracks) || {}; }, function () { return {}; });
   }
 
+  // 紀錄編號只允許英數、底線與連字號（UUID 那種）；網址裡的 ?track= 不能夾帶路徑，像 ../x 這樣的值直接拒絕。
+  var SAFE_TRACK_ID = /^[A-Za-z0-9_-]{1,80}$/;
+
   function loadTrack(id) {
+    if (!SAFE_TRACK_ID.test(String(id))) return Promise.reject(new Error("無效的紀錄編號"));
     if (trackCache[id]) return Promise.resolve(trackCache[id]);
     if (trackInflight[id]) return trackInflight[id];
     trackInflight[id] = fetchJson(id + ".json", false).then(function (t) {

@@ -429,4 +429,9 @@
     <string name="update_prompt_message">有新版本 %1$s（目前 %2$s）。要現在下載並安裝嗎？</string>
     <string name="update_prompt_action">更新</string>
     <string name="update_prompt_later">稍後</string>
+    <string name="export_privacy_title">匯出分享檔時套用隱私區域</string>
+    <string name="export_privacy_hint">開啟後，「分享」產生的 ZIP 會裁掉開頭與結尾落在隱私區域內的點，區域內的照片不放進去，起終點也改成裁掉後的位置。Google Drive 備份和手機上的資料仍是完整的。</string>
+    <string name="web_upload_confirm_title">開啟網頁上傳？</string>
+    <string name="web_upload_confirm_message">網頁儀表板放在 GitHub Pages，是公開的：任何知道網址的人都看得到上傳的軌跡座標與時間（隱私區域內的頭尾會先裁掉）。照片縮圖預設不上傳，要另外開啟。確定要開啟嗎？</string>
+    <string name="web_upload_confirm_action">開啟</string>
 </resources>

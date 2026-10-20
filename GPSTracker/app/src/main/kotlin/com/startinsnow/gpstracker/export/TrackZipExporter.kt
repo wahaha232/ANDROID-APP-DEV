@@ -23,9 +23,12 @@ object TrackZipExporter {
         return "GPS TRACKER/${yearFmt.format(date)}/${monthFmt.format(date)}/${folderFmt.format(date)}"
     }
 
-    /** 在 App 私有儲存空間建立完整匯出資料夾（index.html + track.gpx + track.json + photos/）。 */
-    fun buildExportDirectory(baseDir: File, data: ExportTrackData): File {
-        val exportRoot = File(baseDir, "exports/${data.track.trackId}")
+    /**
+     * 在 App 私有儲存空間建立完整匯出資料夾（index.html + track.gpx + track.json + photos/）。
+     * [folder] 預設是給 Drive 備份用的完整版；套用隱私區域的分享版要用不同資料夾，避免混進完整版留下的照片。
+     */
+    fun buildExportDirectory(baseDir: File, data: ExportTrackData, folder: String = "exports/${data.track.trackId}"): File {
+        val exportRoot = File(baseDir, folder)
         exportRoot.mkdirs()
         File(exportRoot, "index.html").writeText(TrackHtmlGenerator.generate(data), Charsets.UTF_8)
         File(exportRoot, "track.gpx").writeText(GpxExporter.generate(data), Charsets.UTF_8)

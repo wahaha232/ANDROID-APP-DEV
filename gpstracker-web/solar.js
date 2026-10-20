@@ -109,7 +109,7 @@
           '<div class="vc-row"><span class="k">距太陽（日心）</span><span>—</span></div>' +
           '<div class="vc-row"><span class="k">距地球（地心）</span><span>—</span></div>' +
           '<div class="vc-row"><span class="k">與你里程差距</span><span>—</span></div>' +
-          '<div class="sync-note err">' + st.label + (st.error ? "（" + st.error + "）" : "") + "</div></div>";
+          '<div class="sync-note err">' + st.label + (st.error ? "（" + GTCore.escapeHtml(st.error) + "）" : "") + "</div></div>";
         return;
       }
       var gap = p.fromSunKm - state.totalKm;
@@ -179,7 +179,7 @@
       renderVoyager();
     }).catch(function (e) {
       $("summary").textContent = "讀取 manifest 失敗：" + e.message;
-      $("bodyGrid").innerHTML = '<div class="solar-empty">無法載入紀錄：' + e.message + "</div>";
+      $("bodyGrid").innerHTML = '<div class="solar-empty">無法載入紀錄：' + GTCore.escapeHtml(e.message) + "</div>";
     });
   }
 

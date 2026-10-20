@@ -183,7 +183,7 @@
   function showTab(id) {
     Array.prototype.forEach.call(document.querySelectorAll(".e-tabs button"), function (b) { b.className = b.dataset.tab === id ? "active" : ""; });
     Array.prototype.forEach.call(document.querySelectorAll(".e-panel"), function (p) { p.className = "e-panel" + (p.id === "panel-" + id ? " active" : ""); });
-    try { RENDERERS[id](); } catch (e) { $("panel-" + id).innerHTML = '<div class="e-empty err">載入失敗：' + e.message + "</div>"; }
+    try { RENDERERS[id](); } catch (e) { $("panel-" + id).innerHTML = '<div class="e-empty err">載入失敗：' + GTCore.escapeHtml(e.message) + "</div>"; }
   }
 
   document.addEventListener("click", function (e) {
@@ -210,7 +210,7 @@
     }).catch(function (e) {
       $("summary").textContent = "讀取 manifest 失敗：" + e.message;
       $("panel-overview").className = "e-panel active";
-      $("panel-overview").innerHTML = '<div class="e-empty err">無法載入紀錄：' + e.message + "</div>";
+      $("panel-overview").innerHTML = '<div class="e-empty err">無法載入紀錄：' + GTCore.escapeHtml(e.message) + "</div>";
     });
   }
 

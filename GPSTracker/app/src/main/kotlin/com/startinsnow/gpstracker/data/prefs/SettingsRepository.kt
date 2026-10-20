@@ -40,6 +40,8 @@ data class AppSettings(
     val webWifiOnly: Boolean = true,
     /** 上傳照片縮圖到（公開的）網頁儀表板。預設關閉：照片會公開在 GitHub 倉庫。 */
     val webUploadPhotos: Boolean = false,
+    /** 匯出分享 ZIP 時套用隱私區域（裁掉頭尾、不含區域內照片）。預設關閉；Drive 備份與本機資料不受影響。 */
+    val exportApplyPrivacy: Boolean = false,
     /** 裝置名稱：上傳紀錄時標記來源手機，網頁可依裝置切換檢視。空白時以手機型號代替。 */
     val deviceName: String = ""
 ) {
@@ -73,6 +75,7 @@ class SettingsRepository(private val context: Context) {
         val GITHUB_TOKEN = stringPreferencesKey("github_token")
         val WEB_WIFI_ONLY = booleanPreferencesKey("web_wifi_only")
         val WEB_UPLOAD_PHOTOS = booleanPreferencesKey("web_upload_photos")
+        val EXPORT_PRIVACY = booleanPreferencesKey("export_apply_privacy")
         val DEVICE_NAME = stringPreferencesKey("device_name")
     }
 
@@ -95,6 +98,7 @@ class SettingsRepository(private val context: Context) {
             githubToken = SecretCipher.decrypt(prefs[Keys.GITHUB_TOKEN] ?: ""),
             webWifiOnly = prefs[Keys.WEB_WIFI_ONLY] ?: true,
             webUploadPhotos = prefs[Keys.WEB_UPLOAD_PHOTOS] ?: false,
+            exportApplyPrivacy = prefs[Keys.EXPORT_PRIVACY] ?: false,
             deviceName = prefs[Keys.DEVICE_NAME] ?: ""
         )
     }.flowOn(Dispatchers.IO) // 解密要呼叫 Keystore，不放在主執行緒做
@@ -128,5 +132,6 @@ class SettingsRepository(private val context: Context) {
     }
     suspend fun setWebWifiOnly(enabled: Boolean) = context.dataStore.edit { it[Keys.WEB_WIFI_ONLY] = enabled }
     suspend fun setWebUploadPhotos(enabled: Boolean) = context.dataStore.edit { it[Keys.WEB_UPLOAD_PHOTOS] = enabled }
+    suspend fun setExportApplyPrivacy(enabled: Boolean) = context.dataStore.edit { it[Keys.EXPORT_PRIVACY] = enabled }
     suspend fun setDeviceName(value: String) = context.dataStore.edit { it[Keys.DEVICE_NAME] = value.trim() }
 }

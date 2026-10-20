@@ -155,7 +155,7 @@
       render();
     } catch (e) {
       setNote("載入失敗：" + e.message, "err");
-      $("tableWrap").innerHTML = '<div class="rec-empty">無法載入紀錄：' + e.message + "</div>";
+      $("tableWrap").innerHTML = '<div class="rec-empty">無法載入紀錄：' + escapeHtml(e.message) + "</div>";
     }
   }
   function setNote(text, cls) { var n = $("statusNote"); n.className = "rec-note " + (cls || ""); n.textContent = text; }
@@ -214,11 +214,11 @@
     list.forEach(function (t) {
       var m = meta.tracks[t.trackId] || {};
       var noteText = [m.title, m.notes].filter(Boolean).join(" · ");
-      html += '<tr data-id="' + t.trackId + '">' +
-        '<td><input type="checkbox" class="rowsel" data-id="' + t.trackId + '"' + (selected[t.trackId] ? " checked" : "") + ' /></td>' +
+      html += '<tr data-id="' + escapeHtml(t.trackId) + '">' +
+        '<td><input type="checkbox" class="rowsel" data-id="' + escapeHtml(t.trackId) + '"' + (selected[t.trackId] ? " checked" : "") + ' /></td>' +
         '<td>' + fmtDate(t.startTimeMs) + '</td>' +
         '<td>' + escapeHtml(GTCore.deviceNameOf(t)) + '</td>' +
-        '<td>' + modeEmoji(effMode(t)) + " " + modeName(effMode(t)) +
+        '<td>' + modeEmoji(effMode(t)) + " " + escapeHtml(modeName(effMode(t))) +
           (m.mode && m.mode !== t.dominantMode ? ' <span class="rec-edited" title="已手動修改；App 原判斷：' + escapeHtml(modeName(t.dominantMode)) + '">✎</span>' : "") + '</td>' +
         '<td class="num">' + fmtKm(kmOf(t)) + '</td>' +
         '<td>' + fmtDur(t.durationMs) + '</td>' +
@@ -229,10 +229,10 @@
         '<td><div class="rec-actions">' +
         '<a class="rec-link" href="' + GT.activityUrl(t.trackId) + '">故事</a>' +
         '<a class="rec-link" href="' + GT.workspaceUrl(t.trackId, 'replay') + '">3D</a>' +
-        '<button data-act="gpx" data-id="' + t.trackId + '">GPX</button>' +
-        '<button data-act="json" data-id="' + t.trackId + '">JSON</button>' +
-        '<button data-act="edit" data-id="' + t.trackId + '"' + (w ? "" : " disabled") + '>編輯</button>' +
-        '<button class="danger" data-act="del" data-id="' + t.trackId + '"' + (w ? "" : " disabled") + '>刪除</button>' +
+        '<button data-act="gpx" data-id="' + escapeHtml(t.trackId) + '">GPX</button>' +
+        '<button data-act="json" data-id="' + escapeHtml(t.trackId) + '">JSON</button>' +
+        '<button data-act="edit" data-id="' + escapeHtml(t.trackId) + '"' + (w ? "" : " disabled") + '>編輯</button>' +
+        '<button class="danger" data-act="del" data-id="' + escapeHtml(t.trackId) + '"' + (w ? "" : " disabled") + '>刪除</button>' +
         '</div></td></tr>';
     });
     html += "</tbody></table></div>";
@@ -314,13 +314,14 @@
 
   // ---- 刪除 ----
   async function deleteOne(id, manifest) {
+    var photoFailures = 0;   // 縮圖是公開的：刪不掉要讓使用者知道，不能默默留下
     // 照片縮圖（若有）：track JSON 的 photos 每筆第 4 欄是相對路徑；縮圖是公開的，刪除紀錄時要一併移除。
     try {
       var tf = await ghGet(readBase() + id + ".json");
       var photos = (tf && JSON.parse(tf.text).photos) || [];
       for (var pi = 0; pi < photos.length; pi++) {
         if (GTCore.isPhotoPath(photos[pi][3])) {
-          try { await deleteFile(readBase() + photos[pi][3], "GPS Tracker: delete photo of " + id); } catch (e) { /* 單張失敗不阻擋刪除紀錄 */ }
+          try { await deleteFile(readBase() + photos[pi][3], "GPS Tracker: delete photo of " + id); } catch (e) { photoFailures++; /* 單張失敗不阻擋刪除紀錄，但最後會提示 */ }
         }
       }
     } catch (e) { /* 讀不到就略過 */ }
@@ -328,6 +329,7 @@
     var i = manifest.tracks.findIndex(function (t) { return t.trackId === id; });
     if (i >= 0) manifest.tracks.splice(i, 1);
     if (meta.tracks[id]) { delete meta.tracks[id]; }
+    return photoFailures;
   }
   async function deleteRecords(ids) {
     if (!ids.length) return;
@@ -337,10 +339,10 @@
       var f = await ghGet(readBase() + "manifest.json");
       var manifest = f ? JSON.parse(f.text) : { tracks: [] };
       if (!manifest.tracks) manifest.tracks = [];
-      var failed = 0, okIds = [];
+      var failed = 0, photoFailed = 0, okIds = [];
       for (var k = 0; k < ids.length; k++) {
         setNote("刪除中… " + (k + 1) + " / " + ids.length, "");
-        try { await deleteOne(ids[k], manifest); selected[ids[k]] = false; okIds.push(ids[k]); } catch (e) { failed++; }
+        try { photoFailed += await deleteOne(ids[k], manifest); selected[ids[k]] = false; okIds.push(ids[k]); } catch (e) { failed++; }
       }
       await updateJsonFile(readBase() + "manifest.json", { tracks: [] }, function (m) {
         m.tracks = (m.tracks || []).filter(function (t) { return okIds.indexOf(t.trackId) < 0; });
@@ -352,7 +354,7 @@
         return m;
       }, "GPS Tracker: prune notes after delete", true);
       meta.tracks = prunedMeta.tracks || {};
-      setNote("已刪除 " + (ids.length - failed) + " 筆" + (failed ? "，失敗 " + failed + " 筆" : "") + "（GitHub Pages 約 1 分鐘後生效）。", failed ? "warn" : "ok");
+      setNote("已刪除 " + (ids.length - failed) + " 筆" + (failed ? "，失敗 " + failed + " 筆" : "") + (photoFailed ? "。有 " + photoFailed + " 張公開的照片縮圖沒刪掉（repo 的 photos 資料夾裡可能還有殘留檔案，請手動刪除或稍後再試）" : "") + "（GitHub Pages 約 1 分鐘後生效）。", (failed || photoFailed) ? "warn" : "ok");
       await load();
     } catch (e) { setNote("刪除失敗：" + e.message, "err"); }
   }

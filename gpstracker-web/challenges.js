@@ -924,7 +924,7 @@
   function showTab(id) {
     Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) { b.className = b.dataset.tab === id ? "active" : ""; });
     Array.prototype.forEach.call(document.querySelectorAll(".panel"), function (p) { p.className = "panel" + (p.id === "panel-" + id ? " active" : ""); });
-    try { RENDERERS[id](); } catch (e) { $("panel-" + id).innerHTML = '<div class="empty-note">載入失敗：' + e.message + "</div>"; }
+    try { RENDERERS[id](); } catch (e) { $("panel-" + id).innerHTML = '<div class="empty-note">載入失敗：' + GTCore.escapeHtml(e.message) + "</div>"; }
   }
 
   function buildTabs() {

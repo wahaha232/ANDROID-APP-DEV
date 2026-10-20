@@ -456,6 +456,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 }
+                SectionDivider()
+                SwitchRow(
+                    title = context.getString(R.string.export_privacy_title),
+                    subtitle = context.getString(R.string.export_privacy_hint),
+                    checked = settings.exportApplyPrivacy
+                ) { viewModel.setExportApplyPrivacy(it) }
             }
 
             SettingsSection(title = context.getString(R.string.update_title)) {
@@ -487,11 +493,31 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
             }
 
             SettingsSection(title = context.getString(R.string.settings_048)) {
+                var confirmWebUpload by remember { mutableStateOf(false) }
                 SwitchRow(
                     title = context.getString(R.string.settings_049),
                     subtitle = context.getString(R.string.settings_050),
                     checked = settings.webUploadEnabled
-                ) { viewModel.setWebUpload(it) }
+                ) { if (it) confirmWebUpload = true else viewModel.setWebUpload(false) }
+                if (confirmWebUpload) {
+                    // 網頁是公開的：開啟前明講會公開什麼，使用者按「開啟」才會真的打開。
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { confirmWebUpload = false },
+                        title = { Text(stringResource(R.string.web_upload_confirm_title)) },
+                        text = { Text(stringResource(R.string.web_upload_confirm_message)) },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                confirmWebUpload = false
+                                viewModel.setWebUpload(true)
+                            }) { Text(stringResource(R.string.web_upload_confirm_action)) }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { confirmWebUpload = false }) {
+                                Text(stringResource(android.R.string.cancel))
+                            }
+                        }
+                    )
+                }
                 SectionDivider()
                 SwitchRow(
                     title = context.getString(R.string.web_photos_title),

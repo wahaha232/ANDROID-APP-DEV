@@ -58,7 +58,8 @@
   }
 
   function modeEmoji(m) { return MODE_EMOJI[m] || "❓"; }
-  function modeName(m) { return MODE_NAME[m] || m || "未知"; }
+  // 沒登記的模式名稱只接受單純的英數字詞；其他（例如被竄改成 HTML 的字串）一律顯示「未知」。
+  function modeName(m) { return MODE_NAME[m] || (/^[A-Za-z0-9_ -]{1,30}$/.test(String(m || "")) ? String(m) : "未知"); }
   function modeNameShort(m) { return MODE_NAME_SHORT[m] || modeName(m); }
   function modeGroup(m) { return MODE_GROUP[m] || "其他/未知"; }
   function pad(n) { return (n < 10 ? "0" : "") + n; }

@@ -21,6 +21,7 @@ import com.startinsnow.gpstracker.sync.StepSourceTag
 import com.startinsnow.gpstracker.sync.WebDashboardSync
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -170,8 +171,17 @@ class TrackDetailViewModel(
 
     /** 產生匯出 ZIP。HTML/GPX/JSON/CSV 產生、照片複製與壓縮都是重 IO，一律在 IO 執行緒做，避免卡住主畫面（ANR）。 */
     suspend fun buildExportZip(): File? = withContext(Dispatchers.IO) {
-        val data = buildExportData() ?: return@withContext null
-        val exportDir = com.startinsnow.gpstracker.export.TrackZipExporter.buildExportDirectory(app.filesDir, data)
+        val fullData = buildExportData() ?: return@withContext null
+        // 分享用 ZIP 可選擇套用隱私區域；Drive 備份（TrackDetailScreen 的上傳）永遠是完整資料。
+        val settings = app.settingsRepository.settings.first()
+        val data = if (settings.exportApplyPrivacy) {
+            com.startinsnow.gpstracker.export.ExportPrivacy.apply(fullData, settings.privacyZones)
+        } else {
+            fullData
+        }
+        val folder = if (settings.exportApplyPrivacy) "exports/share-${trackId}" else "exports/${trackId}"
+        File(app.filesDir, folder).deleteRecursively()
+        val exportDir = com.startinsnow.gpstracker.export.TrackZipExporter.buildExportDirectory(app.filesDir, data, folder)
         val zipFile = File(app.filesDir, "exports/${trackId}.zip")
         com.startinsnow.gpstracker.export.TrackZipExporter.zipDirectory(exportDir, zipFile)
         zipFile
