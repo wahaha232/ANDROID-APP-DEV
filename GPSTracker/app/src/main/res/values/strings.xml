@@ -406,4 +406,11 @@
     <string name="edit_not_on_web">已儲存在手機。這筆紀錄還沒上傳到網站，上傳後會一併同步。</string>
     <string name="edit_sync_failed">已儲存在手機，但同步失敗：%s。稍後開啟 App 會自動重試。</string>
     <string name="recording_mock_warning">⚠ 目前收到的是「模擬位置」（來自其他 App）。這次記錄到的是模擬點，不是你真實所在的位置。要記錄真實位置，請先停止模擬位置 App，再開始記錄。</string>
+    <string name="detail_profile_title">剖面圖</string>
+    <string name="detail_profile_altitude">海拔</string>
+    <string name="detail_profile_speed">速度</string>
+    <string name="detail_profile_altitude_value">%1$.0f m</string>
+    <string name="detail_profile_speed_value">%1$.1f km/h</string>
+    <string name="detail_profile_range">最低 %1$s ・ 最高 %2$s</string>
+    <string name="detail_profile_hint">在圖上左右拖曳或按住，可以查看該處的數值。</string>
 </resources>

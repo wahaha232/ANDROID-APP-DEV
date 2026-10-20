@@ -318,6 +318,12 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                 Text(stringResource(R.string.detail_012))
             }
 
+            if (altitudeAvailable || speedAvailable) {
+                val altitudeSeries = remember(analysisPoints) { com.startinsnow.gpstracker.core.analysis.RouteAnalysis.altitudeSeries(analysisPoints) }
+                val speedSeries = remember(analysisPoints) { com.startinsnow.gpstracker.core.analysis.RouteAnalysis.speedSeriesKmh(analysisPoints) }
+                ProfileChartCard(altitude = altitudeSeries, speedKmh = speedSeries)
+            }
+
             val legendText = remember(analysisPoints, colorMode) {
                 val values = com.startinsnow.gpstracker.core.analysis.RouteAnalysis.series(analysisPoints, colorMode)
                 if (values == null) null else {
