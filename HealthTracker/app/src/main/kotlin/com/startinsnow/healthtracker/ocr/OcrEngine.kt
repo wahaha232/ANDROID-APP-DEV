@@ -23,7 +23,10 @@ object OcrEngine {
                 recognizer.process(image)
                     .addOnSuccessListener { result ->
                         val lines = result.textBlocks.flatMap { it.lines }.map { l ->
-                            OcrLine(l.text, l.boundingBox?.height() ?: 0)
+                            OcrLine(
+                                l.text, l.boundingBox?.height() ?: 0,
+                                l.boundingBox?.left ?: 0, l.boundingBox?.top ?: 0, l.boundingBox?.right ?: 0, l.boundingBox?.bottom ?: 0,
+                            )
                         }
                         cont.resume(lines)
                     }

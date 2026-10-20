@@ -78,9 +78,45 @@ object PhotoOcr {
         for (bmp in variants) {
             val lines = OcrEngine.recognize(bmp)
             if (com.startinsnow.healthtracker.BuildConfig.DEBUG) android.util.Log.d("PhotoOcr", "${bmp.width}x${bmp.height} lines=" + lines.joinToString(" | ") { "'${it.text}'(${it.height})" })
-            val found = GlucoseOcrParser.candidates(lines)
+            // 液晶七段數字一般文字辨識讀不出來：以辨識到的最大字（通常是數字的一部分）為線索，只看螢幕數字那一小塊
+            val seg = withContext(Dispatchers.Default) { sevenSegment(bmp, lines) }
+            val found = (listOfNotNull(seg) + GlucoseOcrParser.candidates(lines)).distinctBy { it.value }
             if (found.isNotEmpty()) return found
         }
         return emptyList()
+    }
+
+    /**
+     * 液晶七段數字：以辨識到的最大字（通常是最後一位數字）當線索，只框出那一排數字來讀，不看整張照片。
+     * 數字高度用線索框高度的幾種比例各試一次；左側範圍也試兩種寬度（數字最多 3 位）。讀到合理血糖值就回傳。
+     */
+    private fun sevenSegment(bmp: Bitmap, lines: List<OcrLine>): GlucoseCandidate? {
+        val anchors = lines.filter { it.bottom > it.top && it.height >= bmp.height * 0.04 }.sortedByDescending { it.height }.take(3)
+        for (a in anchors) {
+            val h = a.bottom - a.top
+            for (leftMul in listOf(2.4, 3.0)) {
+                val x0 = (a.left - leftMul * h).toInt().coerceIn(0, bmp.width - 2)
+                val y0 = (a.top - 0.08 * h).toInt().coerceIn(0, bmp.height - 2)
+                val x1 = (a.right + 0.1 * h).toInt().coerceIn(x0 + 1, bmp.width)
+                val y1 = (a.bottom + 0.08 * h).toInt().coerceIn(y0 + 1, bmp.height)
+                val gray = grayRegion(bmp, x0, y0, x1, y1)
+                for (hintMul in listOf(0.88, 0.8, 0.96)) {
+                    val v = SevenSegmentReader.toGlucose(SevenSegmentReader.read(gray, x1 - x0, y1 - y0, (h * hintMul).toInt())) ?: continue
+                    return GlucoseCandidate(v, 2.0, "七段數字")
+                }
+            }
+        }
+        // 沒有可用的線索（例如使用者已把數字放大框好）：整個影像當成數字區
+        val gray = grayRegion(bmp, 0, 0, bmp.width, bmp.height)
+        val v = SevenSegmentReader.toGlucose(SevenSegmentReader.read(gray, bmp.width, bmp.height)) ?: return null
+        return GlucoseCandidate(v, 2.0, "七段數字")
+    }
+
+    private fun grayRegion(bmp: Bitmap, x0: Int, y0: Int, x1: Int, y1: Int): IntArray {
+        val w = x1 - x0
+        val h = y1 - y0
+        val px = IntArray(w * h)
+        bmp.getPixels(px, 0, w, x0, y0, w, h)
+        return IntArray(w * h) { i -> val c = px[i]; (((c shr 16) and 255) * 299 + ((c shr 8) and 255) * 587 + (c and 255) * 114) / 1000 }
     }
 }

@@ -1,7 +1,12 @@
 package com.startinsnow.healthtracker.ocr
 
 /** OCR 辨識出的一行文字與其高度（像素）。LCD 上最大的數字通常就是量測結果。 */
-data class OcrLine(val text: String, val height: Int)
+data class OcrLine(
+    val text: String,
+    val height: Int,
+    /** 這一行在影像中的位置（像素）；沒有位置資訊時全為 0。 */
+    val left: Int = 0, val top: Int = 0, val right: Int = 0, val bottom: Int = 0,
+)
 
 data class GlucoseCandidate(val value: Double, val score: Double, val lineText: String)
 
