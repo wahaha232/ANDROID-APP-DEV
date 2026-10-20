@@ -405,4 +405,5 @@
     <string name="edit_wifi_only">已儲存在手機。目前不是 Wi-Fi，連上 Wi-Fi 後開啟 App 會自動同步。</string>
     <string name="edit_not_on_web">已儲存在手機。這筆紀錄還沒上傳到網站，上傳後會一併同步。</string>
     <string name="edit_sync_failed">已儲存在手機，但同步失敗：%s。稍後開啟 App 會自動重試。</string>
+    <string name="recording_mock_warning">⚠ 目前收到的是「模擬位置」（來自其他 App）。這次記錄到的是模擬點，不是你真實所在的位置。要記錄真實位置，請先停止模擬位置 App，再開始記錄。</string>
 </resources>

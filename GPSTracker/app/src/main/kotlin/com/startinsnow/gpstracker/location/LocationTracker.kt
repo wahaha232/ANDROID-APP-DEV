@@ -166,7 +166,13 @@ class LocationTracker(private val context: Context) {
                 LocationManager.PASSIVE_PROVIDER -> LocationProvider.PASSIVE
                 else -> LocationProvider.UNKNOWN
             },
-            trackId = trackId
+            trackId = trackId,
+            isMock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                isMock
+            } else {
+                @Suppress("DEPRECATION")
+                isFromMockProvider
+            }
         )
     }
 }

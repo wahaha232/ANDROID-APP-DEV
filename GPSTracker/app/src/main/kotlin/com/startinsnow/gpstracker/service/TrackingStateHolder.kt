@@ -28,6 +28,8 @@ data class RecordingUiState(
     val pointCount: Int = 0,
     /** 是否已收到過至少一個定位。 */
     val hasFix: Boolean = false,
+    /** 最近一個定位是不是「模擬位置」：這種情況下記下來的是模擬點，不是真實位置，畫面要明確提醒。 */
+    val mockLocationDetected: Boolean = false,
     /** 是否有可用的步數感測器。 */
     val isStepSensorAvailable: Boolean = true,
     /** Service 是否正在起步（避免重複建立 Track）。 */

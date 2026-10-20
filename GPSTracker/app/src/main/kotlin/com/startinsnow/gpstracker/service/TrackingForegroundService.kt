@@ -323,6 +323,7 @@ class TrackingForegroundService : LifecycleService() {
                 accuracyLabel = LocationQualityManager.accuracyLabel(quality, filtered.sample.accuracyMeters, filtered.sample.provider),
                 isGpsLost = false,
                 hasFix = true,
+                mockLocationDetected = filtered.sample.isMock,
                 altitudeMeters = filtered.sample.altitudeMeters ?: it.altitudeMeters
             )
         }

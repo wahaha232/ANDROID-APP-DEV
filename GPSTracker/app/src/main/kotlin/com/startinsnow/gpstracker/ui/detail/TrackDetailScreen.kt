@@ -44,6 +44,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -279,6 +280,20 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                     .clip(MaterialTheme.shapes.large)
             ) {
                 GpsMapView(modifier = Modifier.fillMaxSize()) { controller -> mapController = controller }
+                // 縮放按鈕：就算手勢被外層捲動搶走（或無障礙操作），也一定能縮放地圖。
+                Column(
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilledTonalIconButton(
+                        onClick = { mapController?.zoomBy(1.0) },
+                        modifier = Modifier.size(44.dp)
+                    ) { Text("+", style = MaterialTheme.typography.titleLarge) }
+                    FilledTonalIconButton(
+                        onClick = { mapController?.zoomBy(-1.0) },
+                        modifier = Modifier.size(44.dp)
+                    ) { Text("−", style = MaterialTheme.typography.titleLarge) }
+                }
             }
 
             if (gapEstimates.isNotEmpty()) {

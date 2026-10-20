@@ -6,6 +6,9 @@ import androidx.compose.foundation.horizontalScroll
 import com.startinsnow.gpstracker.R
 import androidx.compose.ui.res.stringResource
 import android.Manifest
+import com.startinsnow.gpstracker.location.LocationTracker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -135,6 +138,14 @@ fun RecordingScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val hasLocationPermission = hasFineLocation || hasCoarseLocation
+
+    // 還沒開始記錄時，也看一下手機目前最後一個已知定位是不是模擬位置，開始前就提醒。
+    var prepareMockDetected by remember { mutableStateOf(false) }
+    LaunchedEffect(hasLocationPermission) {
+        prepareMockDetected = hasLocationPermission && withContext(Dispatchers.IO) {
+            runCatching { LocationTracker(context).getLastKnownBestLocation()?.isMock == true }.getOrDefault(false)
+        }
+    }
 
     // 準備階段：還沒開始記錄（也不是在接續未完成記錄）。此時可以拍照、選移動方式，按「開始記錄」才開始。
     val isActiveRecording = state.status == TrackStatus.RECORDING || state.status == TrackStatus.PAUSED || state.isStarting
@@ -375,6 +386,13 @@ fun RecordingScreen(
                     text = stringResource(R.string.recording_prepare_hint),
                     color = MaterialTheme.colorScheme.primary
                 )
+                if (prepareMockDetected) {
+                    InfoBanner(
+                        text = stringResource(R.string.recording_mock_warning),
+                        color = MaterialTheme.colorScheme.error,
+                        icon = Icons.Filled.ErrorOutline
+                    )
+                }
                 ModeSelectorCard(
                     selectedNames = selectedModeNames,
                     onToggle = { name -> selectedModeNames = if (name in selectedModeNames) selectedModeNames - name else selectedModeNames + name },
@@ -399,6 +417,14 @@ fun RecordingScreen(
                 InfoBanner(
                     text = context.getString(R.string.recording_009),
                     color = MaterialTheme.colorScheme.tertiary
+                )
+            }
+            // 錄製期間收到的是模擬位置（例如手機上開著 GPS 模擬 App）：記下來的是模擬點，不是真實位置。
+            if (state.mockLocationDetected && isActiveRecording) {
+                InfoBanner(
+                    text = context.getString(R.string.recording_mock_warning),
+                    color = MaterialTheme.colorScheme.error,
+                    icon = Icons.Filled.ErrorOutline
                 )
             }
             if (!hasLocationPermission) {

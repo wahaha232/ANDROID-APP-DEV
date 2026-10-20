@@ -80,9 +80,22 @@ class GpsMapController {
             }
             return
         }
+        // 所有點幾乎重疊（靜止不動、零距離軌跡）時，newLatLngBounds 會縮到最大層級，地圖變成空白：改用固定縮放。
+        val latSpan = coordinates.maxOf { it.first } - coordinates.minOf { it.first }
+        val lonSpan = coordinates.maxOf { it.second } - coordinates.minOf { it.second }
+        if (maxOf(latSpan, lonSpan) < MIN_FIT_SPAN_DEGREES) {
+            val (lat, lon) = coordinates.first()
+            map?.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), STATIONARY_ZOOM))
+            return
+        }
         val boundsBuilder = LatLngBounds.Builder()
         coordinates.forEach { (lat, lon) -> boundsBuilder.include(LatLng(lat, lon)) }
         runCatching { map?.moveCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 64)) }
+    }
+
+    /** 縮放按鈕用：放大（delta > 0）或縮小（delta < 0）。手勢被外層捲動吃掉時仍可操作地圖。 */
+    fun zoomBy(delta: Double) {
+        map?.animateCamera(CameraUpdateFactory.zoomBy(delta))
     }
 
     fun panTo(lat: Double, lon: Double) {
@@ -111,6 +124,8 @@ class GpsMapController {
 
     companion object {
         const val SOURCE_ROUTE = "route-source"
+        private const val MIN_FIT_SPAN_DEGREES = 0.0004 // 約 40 公尺
+        private const val STATIONARY_ZOOM = 17.0
         const val SOURCE_START = "start-source"
         const val SOURCE_END = "end-source"
         const val SOURCE_PHOTO = "photo-source"
@@ -140,7 +155,7 @@ private fun buildStyleJson(tileProvider: TileProviderConfig, terrain: TerrainPro
     val attribution = tileProvider.attributionHtml.replace("\"", "\\\"")
     val sources = StringBuilder()
     sources.append(
-        """"base-tiles": { "type": "raster", "tiles": ["${tileProvider.tileUrlTemplate}"], "tileSize": 256, "attribution": "$attribution" }"""
+        """"base-tiles": { "type": "raster", "tiles": ["${tileProvider.tileUrlTemplate}"], "tileSize": 256, "maxzoom": ${tileProvider.maxZoom}, "attribution": "$attribution" }"""
     )
     val layers = StringBuilder()
     layers.append("""{ "id": "base-tiles-layer", "type": "raster", "source": "base-tiles" }""")
@@ -208,8 +223,20 @@ fun GpsMapView(
             MapView(context).also { view ->
                 mapViewState.value = view
                 view.onCreate(null)
+                view.setOnTouchListener { v, event ->
+                    when (event.actionMasked) {
+                        android.view.MotionEvent.ACTION_DOWN,
+                        android.view.MotionEvent.ACTION_POINTER_DOWN,
+                        android.view.MotionEvent.ACTION_MOVE -> v.parent?.requestDisallowInterceptTouchEvent(true)
+                        android.view.MotionEvent.ACTION_UP,
+                        android.view.MotionEvent.ACTION_CANCEL -> v.parent?.requestDisallowInterceptTouchEvent(false)
+                    }
+                    false // 不消費事件，地圖照常處理手勢
+                }
                 view.getMapAsync { mapLibreMap ->
                     controller.map = mapLibreMap
+                    // 圖磚來源最高 z=maxZoom（OSM 標準圖磚是 19）；超過的層級用最高層級放大顯示，不再去要不存在的圖磚。
+                    mapLibreMap.setMaxZoomPreference(tileProvider.maxZoom + 1.0)
                     mapLibreMap.setStyle(Style.Builder().fromJson(buildStyleJson(tileProvider, terrain))) { style ->
                         style.addSource(GeoJsonSource(GpsMapController.SOURCE_ROUTE))
                         style.addSource(GeoJsonSource(GpsMapController.SOURCE_START))

@@ -19,7 +19,9 @@ data class LocationSample(
     val bearingAccuracyDegrees: Float?,
     val accuracyMeters: Float,
     val provider: LocationProvider,
-    val trackId: String
+    val trackId: String,
+    /** 這個定位是不是來自「模擬位置」（Android 回報 isMock／isFromMockProvider）；模擬點不是使用者真實所在的位置。 */
+    val isMock: Boolean = false
 )
 
 enum class LocationProvider {
