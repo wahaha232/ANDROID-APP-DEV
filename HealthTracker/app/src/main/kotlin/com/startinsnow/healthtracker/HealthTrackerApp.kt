@@ -9,8 +9,14 @@ import com.startinsnow.healthtracker.reminder.ReminderScheduler
 import com.startinsnow.healthtracker.sync.SyncScheduler
 
 class HealthTrackerApp : Application() {
+    companion object {
+        lateinit var appContext: android.content.Context
+            private set
+    }
+
     override fun onCreate() {
         super.onCreate()
+        appContext = applicationContext
         SyncScheduler.ensureScheduled(this)
         ReminderScheduler.ensureChannel(this)
     }

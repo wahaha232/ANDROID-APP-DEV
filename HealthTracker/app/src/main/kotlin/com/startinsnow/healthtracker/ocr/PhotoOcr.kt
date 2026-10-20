@@ -79,7 +79,8 @@ object PhotoOcr {
             val lines = OcrEngine.recognize(bmp)
             if (com.startinsnow.healthtracker.BuildConfig.DEBUG) android.util.Log.d("PhotoOcr", "${bmp.width}x${bmp.height} lines=" + lines.joinToString(" | ") { "'${it.text}'(${it.height})" })
             // 液晶七段數字一般文字辨識讀不出來：以辨識到的最大字（通常是數字的一部分）為線索，只看螢幕數字那一小塊
-            val seg = withContext(Dispatchers.Default) { sevenSegment(bmp, lines) }
+            // 位置線索可能來自增強對比後的影像，但數字一律從原影像（未增強）讀：增強後的灰階分布會讓七段判讀失準
+            val seg = withContext(Dispatchers.Default) { sevenSegment(base, lines) }
             val found = (listOfNotNull(seg) + GlucoseOcrParser.candidates(lines)).distinctBy { it.value }
             if (found.isNotEmpty()) return found
         }
@@ -94,14 +95,17 @@ object PhotoOcr {
         val anchors = lines.filter { it.bottom > it.top && it.height >= bmp.height * 0.04 }.sortedByDescending { it.height }.take(3)
         for (a in anchors) {
             val h = a.bottom - a.top
-            for (leftMul in listOf(2.4, 3.0)) {
+            for (leftMul in listOf(2.6, 3.0)) {
                 val x0 = (a.left - leftMul * h).toInt().coerceIn(0, bmp.width - 2)
                 val y0 = (a.top - 0.08 * h).toInt().coerceIn(0, bmp.height - 2)
-                val x1 = (a.right + 0.1 * h).toInt().coerceIn(x0 + 1, bmp.width)
+                val x1 = (a.right + 0.3 * h).toInt().coerceIn(x0 + 1, bmp.width) // 文字框常比實際數字偏左，右側要多留
                 val y1 = (a.bottom + 0.08 * h).toInt().coerceIn(y0 + 1, bmp.height)
                 val gray = grayRegion(bmp, x0, y0, x1, y1)
-                for (hintMul in listOf(0.88, 0.8, 0.96)) {
-                    val v = SevenSegmentReader.toGlucose(SevenSegmentReader.read(gray, x1 - x0, y1 - y0, (h * hintMul).toInt())) ?: continue
+                debugDump(bmp, gray, x1 - x0, y1 - y0, h, "a${a.left}_${a.top}_${a.right}_${a.bottom}_m$leftMul")
+                for (hintMul in listOf(0.88, 0.84, 0.92)) { // 文字框比實際數字高約 12%
+                    val raw = SevenSegmentReader.read(gray, x1 - x0, y1 - y0, (h * hintMul).toInt())
+                    if (com.startinsnow.healthtracker.BuildConfig.DEBUG) android.util.Log.d("PhotoOcr", "seg7 anchor=[${a.left},${a.top},${a.right},${a.bottom}] roi=[$x0,$y0,$x1,$y1] hint=${(h * hintMul).toInt()} -> $raw")
+                    val v = SevenSegmentReader.toGlucose(raw) ?: continue
                     return GlucoseCandidate(v, 2.0, "七段數字")
                 }
             }
@@ -110,6 +114,18 @@ object PhotoOcr {
         val gray = grayRegion(bmp, 0, 0, bmp.width, bmp.height)
         val v = SevenSegmentReader.toGlucose(SevenSegmentReader.read(gray, bmp.width, bmp.height)) ?: return null
         return GlucoseCandidate(v, 2.0, "七段數字")
+    }
+
+    /** 除錯版才用：把送去讀的區塊存成檔案，方便拉回電腦分析。 */
+    private fun debugDump(bmp: Bitmap, gray: IntArray, w: Int, h: Int, hint: Int, name: String) {
+        if (!com.startinsnow.healthtracker.BuildConfig.DEBUG) return
+        try {
+            val dir = java.io.File(com.startinsnow.healthtracker.HealthTrackerApp.appContext.filesDir, "dbg").apply { mkdirs() }
+            val bb = java.nio.ByteBuffer.allocate(12 + gray.size).putInt(w).putInt(h).putInt(hint)
+            gray.forEach { bb.put(it.toByte()) }
+            java.io.File(dir, "$name.bin").writeBytes(bb.array())
+        } catch (_: Exception) {
+        }
     }
 
     private fun grayRegion(bmp: Bitmap, x0: Int, y0: Int, x1: Int, y1: Int): IntArray {
