@@ -78,8 +78,9 @@
       var dt = (pts[i].tMs - pts[i - 1].tMs) / 1000;
       var d = hav(pts[i - 1].lon, pts[i - 1].lat, pts[i].lon, pts[i].lat), kmh = d / dt * 3.6;
       if (kmh > SPEED_TRUST_MAX_KMH) continue; // GPS 跳點：不算距離、速度記 0
+      if (dt > ACTIVE_GAP_S) continue;         // 暫停／GPS 遺失／搭捷運：直線跳躍不算距離，與 App 的距離一致
       distM += d; speeds[i] = kmh;
-      if (dt <= ACTIVE_GAP_S) activeSec += dt;
+      activeSec += dt;
       if (kmh > maxKmh) maxKmh = kmh;
     }
     speeds[0] = speeds[1];
