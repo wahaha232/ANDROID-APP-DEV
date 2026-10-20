@@ -66,7 +66,8 @@ import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 import com.startinsnow.healthtracker.ocr.GlucoseCandidate
 import com.startinsnow.healthtracker.ocr.GlucoseOcrParser
-import com.startinsnow.healthtracker.ocr.OcrEngine
+import com.startinsnow.healthtracker.ocr.PhotoCrop
+import com.startinsnow.healthtracker.ocr.PhotoOcr
 import com.startinsnow.healthtracker.ocr.PhotoStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -112,6 +113,7 @@ fun AddRecordDialog(
     var pendingCameraPath by rememberSaveable { mutableStateOf<String?>(null) }
     var ocr by remember { mutableStateOf<OcrState>(OcrState.Idle) }
     var photoTimeUsed by remember { mutableStateOf(false) }
+    var showZoom by remember { mutableStateOf(false) }
 
     fun discardPhoto() {
         PhotoStore.delete(photoPath)
@@ -132,8 +134,22 @@ fun AddRecordDialog(
                     photoTimeUsed = true
                 }
                 withContext(Dispatchers.IO) { PhotoStore.compressInPlace(file) } // 先縮圖：省空間、上傳快，OCR 也更快
-                val lines = OcrEngine.recognize(context, PhotoStore.uriOf(context, file))
-                val candidates = GlucoseOcrParser.candidates(lines)
+                val candidates = PhotoOcr.candidates(file)
+                candidates.firstOrNull()?.let { v = formatValue(it.value) }
+                OcrState.Done(candidates)
+            } catch (e: Exception) {
+                OcrState.Failed("辨識失敗，請對照照片手動輸入")
+            }
+        }
+    }
+
+    /** 對目前這張照片重新辨識；crop 有值就只辨識放大框出的範圍。時間與其他欄位不動。 */
+    fun rerun(crop: PhotoCrop?) {
+        val path = photoPath ?: return
+        ocr = OcrState.Running
+        scope.launch {
+            ocr = try {
+                val candidates = PhotoOcr.candidates(File(path), crop)
                 candidates.firstOrNull()?.let { v = formatValue(it.value) }
                 OcrState.Done(candidates)
             } catch (e: Exception) {
@@ -196,6 +212,13 @@ fun AddRecordDialog(
                         }) { Text("選照片") }
                     }
                     photoPath?.let { PhotoPreview(it) }
+                    if (photoPath != null) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(enabled = ocr != OcrState.Running, onClick = { rerun(null) }) { Text("重新辨識") }
+                            OutlinedButton(enabled = ocr != OcrState.Running, onClick = { showZoom = true }) { Text("縮放辨識") }
+                            TextButton(onClick = { discardPhoto() }) { Text("刪除照片", color = MaterialTheme.colorScheme.error) }
+                        }
+                    }
                     when (val s = ocr) {
                         OcrState.Idle -> {}
                         OcrState.Running -> Text("辨識中…")
@@ -309,6 +332,12 @@ fun AddRecordDialog(
                 dismissButton = { TextButton(onClick = cancel) { Text("取消") } },
             )
         }
+    }
+
+    if (showZoom) {
+        photoPath?.let { p ->
+            PhotoZoomDialog(p, onCancel = { showZoom = false }, onConfirm = { crop -> showZoom = false; rerun(crop) })
+        } ?: run { showZoom = false }
     }
 
     if (showDate) {
