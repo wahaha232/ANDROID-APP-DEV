@@ -191,6 +191,19 @@ private fun isMijiaServiceEnabled(context: android.content.Context): Boolean {
 }
 
 /** 米家畫面讀取（無障礙服務）的狀態與開啟入口；開關一定要使用者自己在系統設定打開。 */
+/** 最近一次從米家畫面讀到的內容（由無障礙服務寫入）。 */
+private fun lastMijiaCapture(context: android.content.Context): String {
+    val raw = context.getSharedPreferences(MijiaAccessibilityService.PREFS, android.content.Context.MODE_PRIVATE)
+        .getString(MijiaAccessibilityService.KEY_LAST, null) ?: return "最近一次讀取：尚未讀取過"
+    val p = raw.split('|')
+    if (p.size < 6) return "最近一次讀取：尚未讀取過"
+    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.TAIWAN)
+    val readAt = fmt.format(java.util.Date(p[0].toLong()))
+    val measured = fmt.format(java.util.Date(p[1].toLong()))
+    val parts = listOfNotNull(p[2].takeIf { it.isNotEmpty() }?.let { "體重 $it kg" }, p[3].takeIf { it.isNotEmpty() }?.let { "體脂率 $it %" })
+    return "最近一次讀取：$readAt　量測時間 $measured　${parts.joinToString("　")}（新增 ${p[4]} 筆，已存在略過 ${p[5]} 筆）"
+}
+
 @Composable
 private fun MijiaCaptureStatus() {
     val context = LocalContext.current
@@ -204,10 +217,12 @@ private fun MijiaCaptureStatus() {
         else "米家畫面讀取：未開啟。開啟後，打開米家的 S400 頁面就會自動擷取體重與體脂率（只對米家有效）。",
         style = MaterialTheme.typography.bodySmall,
     )
+    Text(lastMijiaCapture(context), style = MaterialTheme.typography.bodySmall)
+    Text("想補歷史紀錄：在米家 S400 頁面切到那一天的量測，畫面上出現哪一筆，就會讀哪一筆（已存過的不會重複）。", style = MaterialTheme.typography.bodySmall)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) { Text("開啟無障礙設定") }
         context.packageManager.getLaunchIntentForPackage(MijiaAccessibilityService.MIJIA_PACKAGE)?.let { mijia ->
-            OutlinedButton(onClick = { context.startActivity(mijia) }) { Text("開啟米家") }
+            OutlinedButton(onClick = { context.startActivity(mijia) }) { Text("讀取米家（開啟米家）") }
         }
     }
 }

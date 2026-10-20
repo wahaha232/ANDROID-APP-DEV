@@ -33,7 +33,13 @@ class MijiaAccessibilityService : AccessibilityService() {
         lastSignature = signature
 
         val records = (application as HealthTrackerApp).records
-        scope.launch { records.importRecords(MijiaScreenParser.toRecords(reading)) }
+        scope.launch {
+            val result = records.importRecords(MijiaScreenParser.toRecords(reading))
+            // 記下這次讀到什麼，設定頁會顯示，讓你知道有沒有讀成功
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(KEY_LAST, "${System.currentTimeMillis()}|${reading.measuredAt}|${reading.weightKg ?: ""}|${reading.bodyFatPercent ?: ""}|${result.inserted}|${result.skipped}")
+                .apply()
+        }
     }
 
     private fun collect(node: AccessibilityNodeInfo, out: MutableList<UiText>) {
@@ -58,6 +64,8 @@ class MijiaAccessibilityService : AccessibilityService() {
 
     companion object {
         const val MIJIA_PACKAGE = "com.xiaomi.smarthome"
+        const val PREFS = "mijia_capture"
+        const val KEY_LAST = "last"
         private const val MAX_NODES = 400
     }
 }
