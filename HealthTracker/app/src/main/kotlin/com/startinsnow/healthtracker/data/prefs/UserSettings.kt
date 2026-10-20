@@ -30,6 +30,10 @@ data class UserSettings(
     val reminderSkipIfRecorded: Boolean = true,
     /** 開啟 App 需要指紋 / 臉部 / 手機 PIN。 */
     val appLock: Boolean = false,
+    /** 新增紀錄的樣式：true = 底部面板（預設）、false = 原本的對話框。 */
+    val addAsSheet: Boolean = true,
+    /** 總覽圖表的呈現方式：0 趨勢、1 日曆、2 時段。 */
+    val overviewChart: Int = 0,
 ) {
     /** BMI；身高或體重不合理時回傳 null。 */
     fun bmi(weightKg: Double): Double? {
@@ -55,6 +59,8 @@ class UserSettingsRepository(private val context: Context) {
         val reminderTimes = stringPreferencesKey("reminder_times")
         val reminderSkip = booleanPreferencesKey("reminder_skip_if_recorded")
         val appLock = booleanPreferencesKey("app_lock")
+        val addAsSheet = booleanPreferencesKey("add_as_sheet")
+        val overviewChart = intPreferencesKey("overview_chart")
     }
 
     val settings: Flow<UserSettings> = context.settingsStore.data.map { p ->
@@ -70,7 +76,17 @@ class UserSettingsRepository(private val context: Context) {
             reminderTimes = parseTimes(p[Keys.reminderTimes]),
             reminderSkipIfRecorded = p[Keys.reminderSkip] ?: true,
             appLock = p[Keys.appLock] ?: false,
+            addAsSheet = p[Keys.addAsSheet] ?: true,
+            overviewChart = (p[Keys.overviewChart] ?: 0).coerceIn(0, 2),
         )
+    }
+
+    suspend fun saveAddAsSheet(value: Boolean) {
+        context.settingsStore.edit { it[Keys.addAsSheet] = value }
+    }
+
+    suspend fun saveOverviewChart(mode: Int) {
+        context.settingsStore.edit { it[Keys.overviewChart] = mode.coerceIn(0, 2) }
     }
 
     /** 只改提醒設定，不動個人資料欄位。 */

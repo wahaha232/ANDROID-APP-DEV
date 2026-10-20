@@ -17,6 +17,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.flow.first
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.TimePicker
@@ -71,7 +85,7 @@ private sealed interface OcrState {
 
 private fun formatValue(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddRecordDialog(
     records: HealthRecordRepository,
@@ -145,11 +159,14 @@ fun AddRecordDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = { discardPhoto(); onDismiss() },
-        title = { Text(if (existing == null) "新增紀錄" else "修改紀錄") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val app = context.applicationContext as com.startinsnow.healthtracker.HealthTrackerApp
+    val user by app.settings.settings.collectAsState(initial = null)
+    val useSheet = user?.addAsSheet == true
+    var last by remember { mutableStateOf<HealthRecord?>(null) }
+    LaunchedEffect(type) { last = records.observeAll().first().firstOrNull { it.type == type } }
+
+    val formBody: @Composable (Modifier) -> Unit = { mod ->
+            Column(mod.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RecordType.entries.forEach { t ->
                         FilterChip(
@@ -224,11 +241,19 @@ fun AddRecordDialog(
                     OutlinedButton(onClick = { showTime = true }) { Text("改時間") }
                 }
 
+                if (existing == null) last?.let { l ->
+                    AssistChip(
+                        onClick = { v = formatValue(l.value); l.value2?.let { v2 = formatValue(it) } },
+                        label = { Text("用上一筆：${formatMain(l)}") },
+                    )
+                }
                 OutlinedTextField(
                     value = v, onValueChange = { v = it },
                     label = { Text(if (type == RecordType.BLOOD_PRESSURE) "收縮壓" else "${type.label}（${type.unit}）") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    textStyle = if (useSheet) MaterialTheme.typography.headlineMedium.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center) else LocalTextStyle.current,
+                    modifier = if (useSheet) Modifier.fillMaxWidth() else Modifier,
                 )
                 if (type == RecordType.BLOOD_PRESSURE) {
                     OutlinedTextField(
@@ -239,9 +264,8 @@ fun AddRecordDialog(
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("備註（選填）") })
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
+    }
+    val save: () -> Unit = {
                 scope.launch {
                     val usePhoto = existing == null && type == RecordType.BLOOD_GLUCOSE && photoPath != null
                     val msg = if (existing != null) {
@@ -261,10 +285,31 @@ fun AddRecordDialog(
                         error = msg
                     }
                 }
-            }) { Text("儲存") }
-        },
-        dismissButton = { TextButton(onClick = { discardPhoto(); onDismiss() }) { Text("取消") } },
-    )
+    }
+    val cancel: () -> Unit = { discardPhoto(); onDismiss() }
+    val title = if (existing == null) "新增紀錄" else "修改紀錄"
+    if (user != null) {
+        if (useSheet) {
+            ModalBottomSheet(onDismissRequest = cancel, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+                Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 16.dp).imePadding(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(title, style = MaterialTheme.typography.titleLarge)
+                    formBody(Modifier.weight(1f, fill = false))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End)) {
+                        TextButton(onClick = cancel) { Text("取消") }
+                        Button(onClick = save) { Text("儲存") }
+                    }
+                }
+            }
+        } else {
+            AlertDialog(
+                onDismissRequest = cancel,
+                title = { Text(title) },
+                text = { formBody(Modifier) },
+                confirmButton = { TextButton(onClick = save) { Text("儲存") } },
+                dismissButton = { TextButton(onClick = cancel) { Text("取消") } },
+            )
+        }
+    }
 
     if (showDate) {
         val state = rememberDatePickerState(initialSelectedDateMillis = MeasureTime.utcMidnightOfLocalDate(measuredAt, zone))

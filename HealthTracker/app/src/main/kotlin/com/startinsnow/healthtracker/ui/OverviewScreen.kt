@@ -71,6 +71,7 @@ import com.startinsnow.healthtracker.ui.theme.BrandBlue
 import com.startinsnow.healthtracker.ui.theme.BrandTeal
 import com.startinsnow.healthtracker.ui.theme.recordAccent
 import com.startinsnow.healthtracker.ui.theme.recordIcon
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -132,6 +133,7 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: 
     var days by rememberSaveable { mutableIntStateOf(7) }
     var addType by remember { mutableStateOf<RecordType?>(null) }
     val zone = remember { ZoneId.systemDefault() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val now = System.currentTimeMillis()
     val latestGlucose = OverviewMath.latest(list, RecordType.BLOOD_GLUCOSE)
 
@@ -151,7 +153,7 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: 
             FilledTonalButton(onClick = { addType = RecordType.WEIGHT }, modifier = Modifier.weight(1f)) { Text("記錄其他") }
         }
 
-        TrendCard(list, days, now, zone, ctxName, user.glucoseLow, user.glucoseHigh, onCtx = { ctxName = it }) { days = it }
+        TrendCard(list, days, now, zone, user.overviewChart, { scope.launch { settings.saveOverviewChart(it) } }, ctxName, user.glucoseLow, user.glucoseHigh, onCtx = { ctxName = it }) { days = it }
 
         val others = listOf(RecordType.WEIGHT, RecordType.BODY_FAT, RecordType.BLOOD_PRESSURE)
             .mapNotNull { t -> OverviewMath.latest(list, t) }
@@ -198,7 +200,7 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrendCard(
-    list: List<HealthRecord>, days: Int, now: Long, zone: ZoneId,
+    list: List<HealthRecord>, days: Int, now: Long, zone: ZoneId, mode: Int, onMode: (Int) -> Unit,
     ctxName: String?, low: Double?, high: Double?, onCtx: (String?) -> Unit, onDays: (Int) -> Unit,
 ) {
     val ctx = MeasureContext.entries.firstOrNull { it.name == ctxName }
@@ -206,8 +208,16 @@ private fun TrendCard(
     val stats = OverviewMath.stats(window)
     AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("血糖趨勢（mg/dL）", style = MaterialTheme.typography.titleSmall)
+            Text(listOf("血糖趨勢（mg/dL）", "測量日曆", "測量時段")[mode.coerceIn(0, 2)], style = MaterialTheme.typography.titleSmall)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                listOf("趨勢", "日曆", "時段").forEachIndexed { i, label ->
+                    SegmentedButton(
+                        selected = mode == i, onClick = { onMode(i) },
+                        shape = SegmentedButtonDefaults.itemShape(index = i, count = 3),
+                    ) { Text(label) }
+                }
+            }
+            if (mode != 1) SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 listOf(7 to "近 7 天", 30 to "近 30 天").forEachIndexed { i, (d, label) ->
                     SegmentedButton(
                         selected = days == d, onClick = { onDays(d) },
@@ -221,21 +231,27 @@ private fun TrendCard(
                     FilterChip(selected = ctx == c, onClick = { onCtx(c.name) }, label = { Text(c.label) })
                 }
             }
-            if (window.size < 2) {
+            if (mode == 1) {
+                CalendarHeatmap(OverviewMath.byContext(list.filter { it.type == RecordType.BLOOD_GLUCOSE }, ctx), zone, java.time.LocalDate.now(zone))
+            } else if (window.isEmpty() || (mode == 0 && window.size < 2)) {
                 Text(
                     if (window.isEmpty()) "近 $days 天沒有${ctx?.label ?: ""}血糖紀錄" else "資料不足（近 $days 天只有 1 筆，至少要 2 筆才畫趨勢）",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             } else {
-                TrendChart(window, zone, if (low != null && high != null) low to high else null)
+                if (mode == 2) {
+                    DailyDistributionChart(window, if (days == 7) 7 else 14, zone, java.time.LocalDate.now(zone))
+                } else {
+                    TrendChart(window, zone, if (low != null && high != null) low to high else null)
+                }
             }
-            stats?.let {
+            if (mode != 1) stats?.let {
                 Text(
                     "近 $days 天：${it.count} 筆　平均 ${"%.0f".format(it.avg)}　最低 ${"%.0f".format(it.min)}　最高 ${"%.0f".format(it.max)}",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            OverviewMath.inRange(window, low, high)?.let {
+            if (mode != 1) OverviewMath.inRange(window, low, high)?.let {
                 Text(
                     "落在您設定的範圍（${low?.toInt()}–${high?.toInt()}）內：${it.inRange}/${it.total} 筆（${it.percent}%）",
                     style = MaterialTheme.typography.bodySmall,

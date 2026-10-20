@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -107,6 +108,13 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
             }
         }) { Text("儲存") }
         message?.let { Text(it) }
+        val look by repo.settings.collectAsState(initial = UserSettings())
+        Text("新增紀錄的樣式", style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = look.addAsSheet, onClick = { scope.launch { repo.saveAddAsSheet(true) } }, label = { Text("底部面板") })
+            FilterChip(selected = !look.addAsSheet, onClick = { scope.launch { repo.saveAddAsSheet(false) } }, label = { Text("對話框") })
+        }
+        Text("總覽圖表可在卡片上切換「趨勢／日曆／時段」，會記住你上次選的。", style = MaterialTheme.typography.bodySmall)
         }
         if (group == 1) ImportSection(records, cloud)
         if (group == 2) CloudSection(cloud)
