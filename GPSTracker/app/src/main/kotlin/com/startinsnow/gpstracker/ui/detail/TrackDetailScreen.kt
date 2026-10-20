@@ -212,6 +212,10 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
         }
     }
 
+    // 只有「第一次拿到軌跡」時才把鏡頭縮放到整條路線；之後資料更新（步數補同步、上傳狀態、改顏色模式…）只重畫圖層，
+    // 不能再把鏡頭拉回去，否則使用者縮放、拖曳後地圖又被強制復位。要回到全覽用地圖上的按鈕。
+    var fittedController by remember { mutableStateOf<GpsMapController?>(null) }
+    var routeCoords by remember { mutableStateOf<List<Pair<Double, Double>>>(emptyList()) }
     LaunchedEffect(points, photos, outages, mapController, colorMode) {
         val controller = mapController ?: return@LaunchedEffect
         val trusted = points.filter { it.reliability == "TRUSTED" }.sortedBy { it.timestampMs }
@@ -239,7 +243,11 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                 trusted.lastOrNull { it.timestampMs <= outage.startTimestampMs } ?: trusted.firstOrNull()
             }.map { it.latitude to it.longitude }
         )
-        controller.fitBounds(coords)
+        routeCoords = coords
+        if (coords.isNotEmpty() && fittedController !== controller) {
+            controller.fitBounds(coords)
+            fittedController = controller
+        }
     }
 
     LaunchedEffect(gapEstimates, mapController) {
@@ -293,6 +301,11 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                         onClick = { mapController?.zoomBy(-1.0) },
                         modifier = Modifier.size(44.dp)
                     ) { Text("−", style = MaterialTheme.typography.titleLarge) }
+                    // 縮放或拖曳之後，一鍵回到整條路線的全覽。
+                    FilledTonalIconButton(
+                        onClick = { mapController?.fitBounds(routeCoords) },
+                        modifier = Modifier.size(44.dp)
+                    ) { Text("⤢", style = MaterialTheme.typography.titleLarge) }
                 }
             }
 
@@ -546,7 +559,7 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                         uploadStatusText = context.getString(R.string.detail_028)
                         val payload = withContext(Dispatchers.IO) {
                             val st = app.settingsRepository.settings.first()
-                            WebDashboardUploader.buildPayload(data, st.privacyZones, st.webUploadPhotos)
+                            WebDashboardUploader.buildPayload(data, st.privacyZones, st.webUploadPhotos, st.deviceName.ifBlank { android.os.Build.MODEL.orEmpty() })
                         }
                         val webResult = WebDashboardUploader().uploadTrack(
                             token = currentSettings.githubToken,

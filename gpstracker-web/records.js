@@ -238,6 +238,7 @@
     html += "</tbody></table></div>";
     $("tableWrap").innerHTML = html;
     $("deleteSel").disabled = !w;
+    $("deviceSel").disabled = !w;
     updateSelCount();
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -271,6 +272,43 @@
     saveBlob(id + ".gpx", gpx, "application/gpx+xml");
   }
 
+  // ---- 裝置名稱 ----
+  function deviceNames() {
+    var set = {};
+    tracks.forEach(function (t) { if (t.deviceName) set[t.deviceName] = true; });
+    return Object.keys(set).sort();
+  }
+  // 改的是 manifest.json 裡該筆的 deviceName（首頁與挑戰的「裝置切換」都讀這個）；原始 GPS 紀錄檔不動。
+  // 名稱留空＝移除，會顯示成「未命名裝置」。
+  async function setDevice(ids, name) {
+    await updateJsonFile(readBase() + "manifest.json", { tracks: [] }, function (m) {
+      (m.tracks || []).forEach(function (e) {
+        if (ids.indexOf(e.trackId) < 0) return;
+        if (name) e.deviceName = name; else delete e.deviceName;
+      });
+      m.updatedAt = Date.now();
+      return m;
+    }, "GPS Tracker: set device for " + ids.length + " track(s)", false);
+    tracks.forEach(function (t) {
+      if (ids.indexOf(t.trackId) < 0) return;
+      if (name) t.deviceName = name; else delete t.deviceName;
+    });
+    buildDeviceFilter();
+  }
+  async function setDeviceForSelected() {
+    var ids = selectedIds();
+    if (!ids.length) { setNote("先勾選要設定裝置的紀錄。", "warn"); return; }
+    var name = prompt("把選取的 " + ids.length + " 筆紀錄的裝置設為（留空＝未命名裝置）：\n現有：" + (deviceNames().join("、") || "（無）"), "");
+    if (name === null) return;
+    name = name.trim().slice(0, 40);
+    setNote("設定中…", "");
+    try {
+      await setDevice(ids, name);
+      setNote("已把 " + ids.length + " 筆紀錄的裝置設為「" + (name || "未命名裝置") + "」（GitHub Pages 約 1 分鐘後生效）。", "ok");
+      render();
+    } catch (e) { setNote("設定失敗：" + e.message, "err"); }
+  }
+
   // ---- 編輯（備註 overlay） ----
   function openEdit(id) {
     editingId = id;
@@ -280,6 +318,8 @@
     back.className = "modal-back"; back.id = "editModal";
     back.innerHTML = '<div class="modal"><h3>編輯備註</h3>' +
       '<label>標題<input id="editTitle" value="' + escapeHtml(m.title || "") + '" /></label>' +
+      '<label>裝置<input id="editDevice" list="deviceList" value="' + escapeHtml(orig.deviceName || "") + '" placeholder="例如 SONY XZ1（留空＝未命名裝置）" /></label>' +
+      '<datalist id="deviceList">' + deviceNames().map(function (n) { return '<option value="' + escapeHtml(n) + '">'; }).join("") + '</datalist>' +
       '<label>移動方式<select id="editMode"><option value="">維持 App 判斷（' + escapeHtml(modeName(orig.dominantMode)) + '）</option>' +
       EDITABLE_MODES.map(function (k) { return '<option value="' + k + '"' + (m.mode === k ? " selected" : "") + '>' + modeEmoji(k) + " " + modeName(k) + "</option>"; }).join("") +
       '</select></label>' +
@@ -305,9 +345,12 @@
         return m;
       }, "GPS Tracker: update notes for " + id, true);
       meta.tracks = saved.tracks || {};   // 以遠端合併後的內容為準（可能包含 App 剛同步的編輯）
+      var newDevice = $("editDevice").value.trim();
+      var oldDevice = ((tracks.filter(function (t) { return t.trackId === id; })[0] || {}).deviceName) || "";
+      if (newDevice !== oldDevice) await setDevice([id], newDevice);
       var back = $("editModal"); if (back) document.body.removeChild(back);
       editingId = null;
-      setNote("已儲存備註（GitHub Pages 約 1 分鐘後生效）。", "ok");
+      setNote("已儲存（GitHub Pages 約 1 分鐘後生效）。", "ok");
       render();
     } catch (e) { setNote("儲存失敗：" + e.message, "err"); }
   }
@@ -443,6 +486,7 @@
     setNote("已下載 " + ids.length + " 筆 JSON。", "ok");
   });
   $("deleteSel").addEventListener("click", function () { deleteRecords(selectedIds()); });
+  $("deviceSel").addEventListener("click", setDeviceForSelected);
   $("refresh").addEventListener("click", load);
   $("saveCfg").addEventListener("click", saveCfg);
   $("clearCfg").addEventListener("click", function () { try { localStorage.removeItem(LS.token); } catch (e) {} try { sessionStorage.removeItem(LS.token); } catch (e) {} cfg.token = ""; applyCfgToForm(); render(); setNote("已清除 Token。", "ok"); });
