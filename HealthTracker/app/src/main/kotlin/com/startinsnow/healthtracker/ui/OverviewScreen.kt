@@ -1,6 +1,15 @@
 package com.startinsnow.healthtracker.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.abs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -67,7 +76,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @Composable
-private fun GlucoseHero(latest: HealthRecord?, now: Long, zone: ZoneId, avg7: Double?) {
+private fun GlucoseHero(latest: HealthRecord?, now: Long, zone: ZoneId, avg7: Double?, onAdd: () -> Unit) {
     val brush = Brush.linearGradient(listOf(BrandBlue, BrandTeal))
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(brush).padding(20.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -79,7 +88,8 @@ private fun GlucoseHero(latest: HealthRecord?, now: Long, zone: ZoneId, avg7: Do
             }
             if (latest == null) {
                 Text("還沒有血糖紀錄", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                Text("按下面的「記錄血糖」新增第一筆，可用拍照辨識。", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.9f))
+                Text("新增第一筆，可用拍照辨識數值。", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.9f))
+                Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = BrandBlue)) { Text("記錄第一筆血糖") }
             } else {
                 Row(verticalAlignment = androidx.compose.ui.Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${latest.value.toInt()}", style = MaterialTheme.typography.displayLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = Color.White)
@@ -99,13 +109,25 @@ private fun GlucoseHero(latest: HealthRecord?, now: Long, zone: ZoneId, avg7: Do
 
 private val dateTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 private val monthDay = DateTimeFormatter.ofPattern("MM/dd")
+private val bubbleTime = DateTimeFormatter.ofPattern("MM/dd HH:mm")
+
+/** 觸點 px 最近的資料點索引（版面常數與 TrendChart 的繪圖範圍一致）。 */
+private fun nearestIndex(points: List<HealthRecord>, px: Float, widthPx: Float, leftPx: Float, rightPx: Float): Int {
+    val w = widthPx - leftPx - rightPx
+    val t0 = points.first().measuredAt
+    val t1 = points.last().measuredAt
+    fun x(t: Long) = leftPx + if (t1 == t0) w / 2 else (t - t0).toFloat() / (t1 - t0) * w
+    return points.indices.minByOrNull { abs(x(points[it].measuredAt) - px) } ?: 0
+}
 
 /** 總覽：最新血糖、快速新增、近 7／30 天趨勢、其他類型最新值、最近紀錄、待同步提示。沒有資料就顯示空狀態，不補假資料。 */
 @Composable
 fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: UserSettingsRepository, onSeeAll: () -> Unit) {
     val user by settings.settings.collectAsState(initial = UserSettings())
     var ctxName by rememberSaveable { mutableStateOf<String?>(null) }
-    val list by records.observeAll().collectAsState(initial = emptyList())
+    // null = 資料庫還沒回來：先不畫內容，避免第一幀閃出「還沒有紀錄」
+    val loaded by records.observeAll().collectAsState(initial = null)
+    val list = loaded.orEmpty()
     val pending by cloud.pendingCount.collectAsState(initial = 0)
     var days by rememberSaveable { mutableIntStateOf(7) }
     var addType by remember { mutableStateOf<RecordType?>(null) }
@@ -113,11 +135,16 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: 
     val now = System.currentTimeMillis()
     val latestGlucose = OverviewMath.latest(list, RecordType.BLOOD_GLUCOSE)
 
+    if (loaded == null) {
+        Box(Modifier.fillMaxSize())
+        return
+    }
+
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        GlucoseHero(latestGlucose, now, zone, OverviewMath.stats(OverviewMath.window(list, RecordType.BLOOD_GLUCOSE, 7, now))?.avg)
+        GlucoseHero(latestGlucose, now, zone, OverviewMath.stats(OverviewMath.window(list, RecordType.BLOOD_GLUCOSE, 7, now))?.avg) { addType = RecordType.BLOOD_GLUCOSE }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { addType = RecordType.BLOOD_GLUCOSE }, modifier = Modifier.weight(1f)) { Text("記錄血糖") }
@@ -168,6 +195,7 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: 
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrendCard(
     list: List<HealthRecord>, days: Int, now: Long, zone: ZoneId,
@@ -179,9 +207,13 @@ private fun TrendCard(
     AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("血糖趨勢（mg/dL）", style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = days == 7, onClick = { onDays(7) }, label = { Text("近 7 天") })
-                FilterChip(selected = days == 30, onClick = { onDays(30) }, label = { Text("近 30 天") })
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                listOf(7 to "近 7 天", 30 to "近 30 天").forEachIndexed { i, (d, label) ->
+                    SegmentedButton(
+                        selected = days == d, onClick = { onDays(d) },
+                        shape = SegmentedButtonDefaults.itemShape(index = i, count = 2),
+                    ) { Text(label) }
+                }
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = ctx == null, onClick = { onCtx(null) }, label = { Text("全部情境") })
@@ -228,9 +260,24 @@ private fun TrendChart(points: List<HealthRecord>, zone: ZoneId, band: Pair<Doub
         minOf(points.minOf { it.value }, band?.first ?: Double.MAX_VALUE),
         maxOf(points.maxOf { it.value }, band?.second ?: -Double.MAX_VALUE),
     )
-    val description = "血糖趨勢圖，${points.size} 筆，最新 ${points.last().value.toInt()} mg/dL"
+    val description = "血糖趨勢圖，${points.size} 筆，最新 ${points.last().value.toInt()} mg/dL；點選或左右拖曳可查看每一筆"
+    var sel by remember(points) { mutableStateOf<Int?>(null) } // 目前點選的資料點
+    val bubbleBg = MaterialTheme.colorScheme.inverseSurface
+    val bubbleText = MaterialTheme.colorScheme.inverseOnSurface
 
-    Canvas(Modifier.fillMaxWidth().height(180.dp).semantics { contentDescription = description }) {
+    Canvas(
+        Modifier.fillMaxWidth().height(180.dp)
+            .semantics { contentDescription = description }
+            .pointerInput(points) {
+                detectTapGestures(onTap = { o -> sel = nearestIndex(points, o.x, size.width.toFloat(), 34.dp.toPx(), 8.dp.toPx()) })
+            }
+            .pointerInput(points) {
+                detectHorizontalDragGestures(
+                    onDragStart = { o -> sel = nearestIndex(points, o.x, size.width.toFloat(), 34.dp.toPx(), 8.dp.toPx()) },
+                    onHorizontalDrag = { change, _ -> sel = nearestIndex(points, change.position.x, size.width.toFloat(), 34.dp.toPx(), 8.dp.toPx()) },
+                )
+            },
+    ) {
         val left = 34.dp.toPx()
         val right = 8.dp.toPx()
         val top = 8.dp.toPx()
@@ -269,7 +316,26 @@ private fun TrendChart(points: List<HealthRecord>, zone: ZoneId, band: Pair<Doub
             drawCircle(lineColor, radius = 4.dp.toPx(), center = Offset(x(p.measuredAt), y(p.value)))
         }
         val last = points.last()
-        val lastText = measurer.measure("${last.value.toInt()}", TextStyle(fontSize = 11.sp, color = textColor))
-        drawText(lastText, topLeft = Offset((x(last.measuredAt) - lastText.size.width / 2f).coerceIn(left, left + w - lastText.size.width), y(last.value) - lastText.size.height - 8.dp.toPx()))
+        val picked = sel?.let { points.getOrNull(it) }
+        if (picked == null) {
+            val lastText = measurer.measure("${last.value.toInt()}", TextStyle(fontSize = 11.sp, color = textColor))
+            drawText(lastText, topLeft = Offset((x(last.measuredAt) - lastText.size.width / 2f).coerceIn(left, left + w - lastText.size.width), y(last.value) - lastText.size.height - 8.dp.toPx()))
+        } else {
+            val px = x(picked.measuredAt)
+            val py = y(picked.value)
+            drawLine(textColor.copy(alpha = 0.6f), Offset(px, top), Offset(px, top + h), strokeWidth = 1.dp.toPx())
+            drawCircle(ringColor, radius = 8.dp.toPx(), center = Offset(px, py))
+            drawCircle(lineColor, radius = 6.dp.toPx(), center = Offset(px, py))
+            val text = "${picked.value.toInt()} mg/dL\n" + bubbleTime.format(Instant.ofEpochMilli(picked.measuredAt).atZone(zone))
+            val m = measurer.measure(text, TextStyle(fontSize = 12.sp, color = bubbleText))
+            val padX = 8.dp.toPx()
+            val padY = 5.dp.toPx()
+            val bw = m.size.width + padX * 2
+            val bh = m.size.height + padY * 2
+            val bx = (px - bw / 2).coerceIn(left, left + w - bw)
+            val by = if (py - bh - 12.dp.toPx() >= 0f) py - bh - 12.dp.toPx() else py + 12.dp.toPx() // 上方放不下就放下面
+            drawRoundRect(bubbleBg, topLeft = Offset(bx, by), size = androidx.compose.ui.geometry.Size(bw, bh), cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
+            drawText(m, topLeft = Offset(bx + padX, by + padY))
+        }
     }
 }

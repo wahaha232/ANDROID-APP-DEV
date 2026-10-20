@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AlertDialog
@@ -57,7 +58,8 @@ private val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.TAIWAN)
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsRepository) {
-    val list by records.observeAll().collectAsState(initial = emptyList())
+    val loaded by records.observeAll().collectAsState(initial = null) // null = 還沒載入，先不顯示空狀態
+    val list = loaded.orEmpty()
     val user by settings.settings.collectAsState(initial = UserSettings())
     val scope = rememberCoroutineScope()
     var showAdd by remember { mutableStateOf(false) }
@@ -86,14 +88,12 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
                     }
                 }
             }
-            if (list.isEmpty()) {
-                Text(
-                    "尚無紀錄，點右下角「＋」新增第一筆。",
-                    Modifier.padding(24.dp),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+            if (loaded == null) {
+                // 載入中：留白
+            } else if (list.isEmpty()) {
+                EmptyState(Icons.Filled.WaterDrop, "還沒有紀錄", "新增第一筆血糖、體重或血壓，之後就能在這裡查看與編輯。", "新增紀錄") { showAdd = true }
             } else if (shown.isEmpty()) {
-                Text("這個類型還沒有紀錄。", Modifier.padding(24.dp), style = MaterialTheme.typography.bodyLarge)
+                EmptyState(recordIcon(filter!!), "這個類型還沒有紀錄", "切換上方篩選，或新增一筆${filter!!.label}。")
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
