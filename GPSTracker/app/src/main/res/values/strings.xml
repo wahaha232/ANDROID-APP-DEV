@@ -435,4 +435,12 @@
     <string name="web_upload_confirm_message">網頁儀表板放在 GitHub Pages，是公開的：任何知道網址的人都看得到上傳的軌跡座標與時間（隱私區域內的頭尾會先裁掉）。照片縮圖預設不上傳，要另外開啟。確定要開啟嗎？</string>
     <string name="web_upload_confirm_action">開啟</string>
     <string name="splits_count">共 %d 段</string>
+    <string name="update_interval_title">自動檢查更新的間隔</string>
+    <string name="update_interval_launch">每次開啟 App</string>
+    <string name="update_interval_6h">每 6 小時</string>
+    <string name="update_interval_daily">每天</string>
+    <string name="update_interval_3d">每 3 天</string>
+    <string name="update_interval_weekly">每週</string>
+    <string name="update_interval_never">不自動檢查</string>
+    <string name="update_interval_hint">啟動 App 時依這個間隔自動檢查；有新版才會跳出提示，沒有就不打擾。選「不自動檢查」就只能手動按「檢查更新」。</string>
 </resources>

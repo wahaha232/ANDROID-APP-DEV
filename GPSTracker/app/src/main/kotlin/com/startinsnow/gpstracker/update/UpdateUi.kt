@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -103,7 +106,21 @@ class UpdateController(private val context: Context, private val scope: Coroutin
     }
 }
 
+private const val KEY_INTERVAL_HOURS = "interval_hours"
+private const val DEFAULT_INTERVAL_HOURS = 24
+
+/** 自動檢查的間隔選項（小時）：0＝每次開啟、負數＝不自動檢查。 */
+private val INTERVAL_OPTIONS = listOf(
+    0 to R.string.update_interval_launch,
+    6 to R.string.update_interval_6h,
+    24 to R.string.update_interval_daily,
+    72 to R.string.update_interval_3d,
+    168 to R.string.update_interval_weekly,
+    -1 to R.string.update_interval_never,
+)
+
 /** 設定頁的「App 更新」區塊。 */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun UpdateSection() {
     val context = LocalContext.current
@@ -121,6 +138,27 @@ fun UpdateSection() {
         OutlinedButton(enabled = !controller.busy, onClick = { controller.check(silent = false) }) {
             Text(androidx.compose.ui.res.stringResource(R.string.update_check))
         }
+        // 自動檢查的間隔：啟動 App 時依這個間隔檢查，有新版才跳提示。
+        val prefs = remember { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
+        var intervalHours by remember { mutableStateOf(prefs.getInt(KEY_INTERVAL_HOURS, DEFAULT_INTERVAL_HOURS)) }
+        Text(androidx.compose.ui.res.stringResource(R.string.update_interval_title), style = MaterialTheme.typography.titleSmall)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            INTERVAL_OPTIONS.forEach { (hours, label) ->
+                FilterChip(
+                    selected = intervalHours == hours,
+                    onClick = {
+                        intervalHours = hours
+                        prefs.edit().putInt(KEY_INTERVAL_HOURS, hours).apply()
+                    },
+                    label = { Text(androidx.compose.ui.res.stringResource(label)) },
+                )
+            }
+        }
+        Text(
+            androidx.compose.ui.res.stringResource(R.string.update_interval_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         if (controller.hasNew()) {
             if (!controller.downloaded) {
                 Button(enabled = !controller.busy, onClick = { controller.download(autoInstall = false) }) {
@@ -139,9 +177,8 @@ fun UpdateSection() {
 
 private const val PREFS = "app_update"
 private const val KEY_LAST_CHECK = "last_check"
-private const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
 
-/** 啟動時每天最多自動查一次；沒有新版完全不打擾，有新版才跳出提示。 */
+/** 啟動時依設定的間隔自動查（預設每天）；沒有新版完全不打擾，有新版才跳出提示。 */
 @Composable
 fun AutoUpdatePrompt() {
     val context = LocalContext.current
@@ -151,7 +188,8 @@ fun AutoUpdatePrompt() {
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
-        if (now - prefs.getLong(KEY_LAST_CHECK, 0L) >= CHECK_INTERVAL_MS) {
+        val hours = prefs.getInt(KEY_INTERVAL_HOURS, DEFAULT_INTERVAL_HOURS)
+        if (hours >= 0 && (hours == 0 || now - prefs.getLong(KEY_LAST_CHECK, 0L) >= hours * 60 * 60 * 1000L)) {
             prefs.edit().putLong(KEY_LAST_CHECK, now).apply()
             controller.check(silent = true) { found = it }
         }
