@@ -119,7 +119,17 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.settings_013), style = MaterialTheme.typography.titleLarge) },
+                title = {
+                    Column {
+                        Text(stringResource(R.string.settings_013), style = MaterialTheme.typography.titleLarge)
+                        // 版本號一直顯示在設定頁頂端，回報問題或確認有沒有更新時不用再翻。
+                        Text(
+                            stringResource(R.string.settings_version, com.startinsnow.gpstracker.BuildConfig.VERSION_NAME),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }

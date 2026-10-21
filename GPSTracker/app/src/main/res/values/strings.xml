@@ -443,4 +443,5 @@
     <string name="update_interval_weekly">每週</string>
     <string name="update_interval_never">不自動檢查</string>
     <string name="update_interval_hint">啟動 App 時依這個間隔自動檢查；有新版才會跳出提示，沒有就不打擾。選「不自動檢查」就只能手動按「檢查更新」。</string>
+    <string name="settings_version">版本 %1$s</string>
 </resources>
