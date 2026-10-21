@@ -5,8 +5,7 @@ import android.net.Uri
 import android.provider.MediaStore
 import com.startinsnow.healthtracker.data.repository.AddOutcome
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
-import com.startinsnow.healthtracker.ocr.GlucoseOcrParser
-import com.startinsnow.healthtracker.ocr.OcrEngine
+import com.startinsnow.healthtracker.ocr.PhotoOcr
 import com.startinsnow.healthtracker.ocr.PhotoStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -58,8 +57,8 @@ class PhotoBatchImporter(private val context: Context, private val records: Heal
             val taken = withContext(Dispatchers.IO) { PhotoStore.captureTime(file) ?: mediaStoreTime(uri) }
             if (taken == null || taken > now) return r.copy(noTime = r.noTime + 1)
             withContext(Dispatchers.IO) { PhotoStore.compressInPlace(file) }
-            val lines = OcrEngine.recognize(context, PhotoStore.uriOf(context, file))
-            val value = GlucoseOcrParser.candidates(lines).firstOrNull()?.value ?: return r.copy(noValue = r.noValue + 1)
+            // 與新增紀錄用同一套辨識（含液晶七段數字讀取），不只一般文字辨識
+            val value = PhotoOcr.candidates(file).firstOrNull()?.value ?: return r.copy(noValue = r.noValue + 1)
             return when (records.addFromPhoto(value, taken, file.absolutePath, now)) {
                 AddOutcome.ADDED -> { keep = true; r.copy(saved = r.saved + 1) }
                 AddOutcome.DUPLICATE -> r.copy(duplicate = r.duplicate + 1)
