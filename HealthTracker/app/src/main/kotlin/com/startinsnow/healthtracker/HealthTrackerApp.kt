@@ -7,6 +7,10 @@ import com.startinsnow.healthtracker.data.prefs.UserSettingsRepository
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 import com.startinsnow.healthtracker.reminder.ReminderScheduler
 import com.startinsnow.healthtracker.sync.SyncScheduler
+import com.startinsnow.healthtracker.update.UpdateScheduler
+import androidx.work.ExistingPeriodicWorkPolicy
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class HealthTrackerApp : Application() {
     companion object {
@@ -19,6 +23,11 @@ class HealthTrackerApp : Application() {
         appContext = applicationContext
         SyncScheduler.ensureScheduled(this)
         ReminderScheduler.ensureChannel(this)
+        UpdateScheduler.ensureChannel(this)
+        // 依設定確保自動檢查更新的排程存在（已排好就保留，不重排）
+        kotlinx.coroutines.MainScope().launch {
+            UpdateScheduler.apply(this@HealthTrackerApp, settings.settings.first().updateIntervalHours, ExistingPeriodicWorkPolicy.KEEP)
+        }
     }
 
     val database: AppDatabase by lazy { AppDatabase.create(this) }

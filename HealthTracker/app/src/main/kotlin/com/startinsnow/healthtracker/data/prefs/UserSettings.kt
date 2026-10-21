@@ -34,6 +34,8 @@ data class UserSettings(
     val addAsSheet: Boolean = true,
     /** 總覽圖表的呈現方式：0 趨勢、1 日曆、2 時段。 */
     val overviewChart: Int = 0,
+    /** App 自動檢查更新的間隔（小時）；0 = 只手動檢查。 */
+    val updateIntervalHours: Int = 0,
 ) {
     /** BMI；身高或體重不合理時回傳 null。 */
     fun bmi(weightKg: Double): Double? {
@@ -61,6 +63,7 @@ class UserSettingsRepository(private val context: Context) {
         val appLock = booleanPreferencesKey("app_lock")
         val addAsSheet = booleanPreferencesKey("add_as_sheet")
         val overviewChart = intPreferencesKey("overview_chart")
+        val updateInterval = intPreferencesKey("update_interval_hours")
     }
 
     val settings: Flow<UserSettings> = context.settingsStore.data.map { p ->
@@ -78,7 +81,12 @@ class UserSettingsRepository(private val context: Context) {
             appLock = p[Keys.appLock] ?: false,
             addAsSheet = p[Keys.addAsSheet] ?: true,
             overviewChart = (p[Keys.overviewChart] ?: 0).coerceIn(0, 2),
+            updateIntervalHours = p[Keys.updateInterval] ?: 0,
         )
+    }
+
+    suspend fun saveUpdateInterval(hours: Int) {
+        context.settingsStore.edit { it[Keys.updateInterval] = hours }
     }
 
     suspend fun saveAddAsSheet(value: Boolean) {

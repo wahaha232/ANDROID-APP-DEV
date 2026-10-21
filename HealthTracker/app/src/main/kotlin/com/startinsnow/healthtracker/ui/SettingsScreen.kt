@@ -50,6 +50,12 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
     var gHigh by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var group by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(com.startinsnow.healthtracker.update.UpdateNav.openUpdate) {
+        if (com.startinsnow.healthtracker.update.UpdateNav.openUpdate) {
+            group = 6 // 關於（App 更新在這裡）
+            com.startinsnow.healthtracker.update.UpdateNav.openUpdate = false
+        }
+    }
 
     // 只在進入畫面時載入一次，之後以輸入框內容為準。
     LaunchedEffect(Unit) {
@@ -127,7 +133,7 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
             Text("血糖記錄　版本 ${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）", style = MaterialTheme.typography.bodyMedium)
             Text("資料預設只存在這支手機；登入並同步後才會上傳到您自己的雲端。", style = MaterialTheme.typography.bodySmall)
             HorizontalDivider()
-            UpdateSection(cloud)
+            UpdateSection(cloud, repo)
         }
     }
 }

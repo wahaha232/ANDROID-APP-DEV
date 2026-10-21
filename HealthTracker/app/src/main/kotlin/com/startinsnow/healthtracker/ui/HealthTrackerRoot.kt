@@ -11,6 +11,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import com.startinsnow.healthtracker.update.UpdateNav
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -31,6 +33,17 @@ fun HealthTrackerRoot(records: HealthRecordRepository, settings: UserSettingsRep
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination
+
+    // 從「新版本已下載」的通知進來：切到設定頁（設定頁會再切到「關於」）
+    LaunchedEffect(UpdateNav.openUpdate) {
+        if (UpdateNav.openUpdate) {
+            nav.navigate(ROUTE_SETTINGS) {
+                launchSingleTop = true
+                restoreState = true
+                popUpTo(ROUTE_OVERVIEW) { saveState = true }
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {

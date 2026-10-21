@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.startinsnow.healthtracker.security.AppLock
+import com.startinsnow.healthtracker.update.UpdateNav
 import com.startinsnow.healthtracker.ui.HealthTrackerRoot
 import com.startinsnow.healthtracker.ui.LockScreen
 import com.startinsnow.healthtracker.ui.theme.HealthTrackerTheme
@@ -26,6 +27,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as HealthTrackerApp
+        if (intent?.getBooleanExtra(UpdateNav.EXTRA, false) == true) UpdateNav.openUpdate = true
         // 冷啟動先讀一次設定，第一個畫面就上鎖，不會先閃出內容
         lockEnabled = runBlocking { app.settings.settings.first().appLock }
         locked = lockEnabled
@@ -43,6 +45,11 @@ class MainActivity : FragmentActivity() {
                 else HealthTrackerRoot(app.records, app.settings, app.cloud)
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(UpdateNav.EXTRA, false)) UpdateNav.openUpdate = true
     }
 
     /** 開啟鎖時隱藏最近工作畫面的縮圖與截圖。 */
