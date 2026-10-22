@@ -1,4 +1,4 @@
-// 預設挑戰裝置的選擇規則：沒指定時排除 PC。
+// 預設裝置的選擇規則：沒指定時排除「只有模擬紀錄」的裝置。
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const G = require("../gt-core.js");
@@ -26,32 +26,50 @@ function withDeviceEnv(search, stored, run) {
   }
 }
 
-test("沒有指定裝置時挑選 PC 以外的最新一筆", () => {
+test("沒有指定裝置時排除只有模擬紀錄的 PC 與 NB", () => {
   withDeviceEnv("", "", () => {
     const tracks = [
-      { trackId: "phone", deviceName: "POCO X6 Pro 5G", startTimeMs: 1000 },
-      { trackId: "pc", deviceName: "PC", startTimeMs: 9000 },
-      { trackId: "old-phone", deviceName: "SONY XZ1", startTimeMs: 5000 },
+      { trackId: "phone-old", deviceName: "POCO X6 Pro 5G", startTimeMs: 1000 },
+      { trackId: "phone", deviceName: "SONY XZ1", startTimeMs: 5000 },
+      { trackId: "pc", deviceName: "PC", source: "simulated", startTimeMs: 9000 },
+      { trackId: "nb", deviceName: "NB", source: "simulated", startTimeMs: 10000 },
     ];
 
-    // PC 雖然最新，但預設要挑 PC 以外最新的一筆（SONY XZ1）。
     assert.equal(G.chooseDevice(tracks), "SONY XZ1");
   });
 });
 
-test("只有 PC 一台裝置時才退回 PC", () => {
+test("有非模擬紀錄的裝置優先，即使模擬紀錄更新", () => {
   withDeviceEnv("", "", () => {
-    const tracks = [{ trackId: "pc", deviceName: "PC", startTimeMs: 9000 }];
+    const tracks = [
+      { trackId: "phone", deviceName: "POCO X6 Pro 5G", startTimeMs: 5000 },
+      { trackId: "phone-sim", deviceName: "POCO X6 Pro 5G", source: "simulated", startTimeMs: 12000 },
+      { trackId: "pc", deviceName: "PC", source: "simulated", startTimeMs: 9000 },
+      { trackId: "nb", deviceName: "NB", source: "simulated", startTimeMs: 10000 },
+    ];
 
-    assert.equal(G.chooseDevice(tracks), "PC");
+    // POCO 有非模擬紀錄，所以它在候選名單內；NB 只有模擬紀錄，不搶預設。
+    assert.equal(G.chooseDevice(tracks), "POCO X6 Pro 5G");
+  });
+});
+
+test("全部都是模擬裝置時退回最新一筆", () => {
+  withDeviceEnv("", "", () => {
+    const tracks = [
+      { trackId: "pc", deviceName: "PC", source: "simulated", startTimeMs: 9000 },
+      { trackId: "nb", deviceName: "NB", source: "simulated", startTimeMs: 10000 },
+    ];
+
+    assert.equal(G.chooseDevice(tracks), "NB");
   });
 });
 
 test("網址明確指定 PC 時照常顯示 PC", () => {
   withDeviceEnv("?device=PC", "", () => {
     const tracks = [
-      { trackId: "phone", deviceName: "POCO X6 Pro 5G", startTimeMs: 1000 },
-      { trackId: "pc", deviceName: "PC", startTimeMs: 9000 },
+      { trackId: "phone", deviceName: "POCO X6 Pro 5G", startTimeMs: 5000 },
+      { trackId: "pc", deviceName: "PC", source: "simulated", startTimeMs: 9000 },
+      { trackId: "nb", deviceName: "NB", source: "simulated", startTimeMs: 10000 },
     ];
 
     assert.equal(G.chooseDevice(tracks), "PC");
@@ -61,19 +79,31 @@ test("網址明確指定 PC 時照常顯示 PC", () => {
 test("localStorage 已選 PC 時照常顯示 PC", () => {
   withDeviceEnv("", "PC", () => {
     const tracks = [
-      { trackId: "phone", deviceName: "POCO X6 Pro 5G", startTimeMs: 1000 },
-      { trackId: "pc", deviceName: "PC", startTimeMs: 9000 },
+      { trackId: "phone", deviceName: "POCO X6 Pro 5G", startTimeMs: 5000 },
+      { trackId: "pc", deviceName: "PC", source: "simulated", startTimeMs: 9000 },
     ];
 
     assert.equal(G.chooseDevice(tracks), "PC");
   });
 });
 
-test("指定不存在的裝置時仍排除 PC", () => {
+test("localStorage 已選 NB 時照常顯示 NB", () => {
+  withDeviceEnv("", "NB", () => {
+    const tracks = [
+      { trackId: "pc", deviceName: "PC", source: "simulated", startTimeMs: 9000 },
+      { trackId: "nb", deviceName: "NB", source: "simulated", startTimeMs: 10000 },
+    ];
+
+    assert.equal(G.chooseDevice(tracks), "NB");
+  });
+});
+
+test("指定不存在的裝置時仍排除只有模擬紀錄的裝置", () => {
   withDeviceEnv("?device=NotExist", "", () => {
     const tracks = [
       { trackId: "phone", deviceName: "POCO X6 Pro 5G", startTimeMs: 1000 },
-      { trackId: "pc", deviceName: "PC", startTimeMs: 9000 },
+      { trackId: "pc", deviceName: "PC", source: "simulated", startTimeMs: 9000 },
+      { trackId: "nb", deviceName: "NB", source: "simulated", startTimeMs: 10000 },
     ];
 
     assert.equal(G.chooseDevice(tracks), "POCO X6 Pro 5G");

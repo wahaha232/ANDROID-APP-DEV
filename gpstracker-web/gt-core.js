@@ -127,17 +127,21 @@
   function chooseDevice(tracks) {
     var names = deviceNames(tracks), want = getRequestedDevice();
     if (want && names.indexOf(want) >= 0) { setSelectedDevice(want); return want; }
-    // 沒有指定裝置時，預設挑「PC 以外」的最新一筆；PC 模擬紀錄不搶手機的預設視圖。
-    // 只有 PC 一台裝置時才退回 PC；使用者用 ?device=PC 或選單切到 PC 仍照常顯示。
-    var newestNonPc = null, newestAny = null;
+    // 沒有指定裝置時，預設排除「只有模擬紀錄」的裝置（PC、NB…）。
+    // 判斷依據是紀錄的 source === "simulated"，不是名稱；手機如果有非模擬紀錄就優先。
+    // 全部裝置都只有模擬紀錄時，才退回最新一筆。
+    var realDevices = {};
     (tracks || []).forEach(function (t) {
-      var start = +t.startTimeMs || 0;
-      if (!newestAny || start > (+newestAny.startTimeMs || 0)) newestAny = t;
-      if (deviceNameOf(t) !== "PC" && (!newestNonPc || start > (+newestNonPc.startTimeMs || 0))) newestNonPc = t;
+      if ((t.source || "") !== "simulated") realDevices[deviceNameOf(t)] = true;
     });
-    var fallback = newestNonPc ? deviceNameOf(newestNonPc)
-      : newestAny ? deviceNameOf(newestAny)
-      : (names[0] || "");
+    var hasRealDevice = Object.keys(realDevices).length > 0;
+    var newest = null;
+    (tracks || []).forEach(function (t) {
+      var name = deviceNameOf(t);
+      if (hasRealDevice && !realDevices[name]) return;
+      if (!newest || (+t.startTimeMs || 0) > (+newest.startTimeMs || 0)) newest = t;
+    });
+    var fallback = newest ? deviceNameOf(newest) : (names[0] || "");
     if (fallback) setSelectedDevice(fallback);
     return fallback;
   }
