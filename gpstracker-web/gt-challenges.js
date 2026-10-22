@@ -6,6 +6,7 @@
   "use strict";
 
   var W = typeof window !== "undefined" ? window : this;
+  var FEATURES = W.GT_FEATURES || {};
 
   // 挑戰名稱必須與 progress-core.js 的 buildGoals 使用的名稱一致。
   var NAME = { solar: "太陽系征服計畫", earth: "地球征服計畫", taiwan: "台灣征服計畫", voyager: "NASA 航海家追逐賽" };
@@ -154,7 +155,7 @@
     var conq = plans.slice(0, 3), dn = 0, tot = 0;
     conq.forEach(function (p) { dn += p.goalsDone; tot += p.goalsTotal; });
     plans.push({ id: "achievements", kind: "achievements", name: "共享成就中心", icon: "🏆", href: "challenges.html",
-      desc: "競賽中心：成就徽章、個人最佳、期間挑戰、里程王、虛擬環遊、步數統計", goalsDone: dn, goalsTotal: tot, current: t.totalKm, dataInfo: info });
+      desc: "競賽中心：成就徽章、個人最佳、期間挑戰、里程王、虛擬環遊" + (FEATURES.steps !== false ? "、步數統計" : ""), goalsDone: dn, goalsTotal: tot, current: t.totalKm, dataInfo: info });
     return { totals: t, plans: plans, goals: goals, grouped: grouped };
   }
 

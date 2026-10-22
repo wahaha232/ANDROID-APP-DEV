@@ -4,6 +4,8 @@
 
   var CONFIG = GPST.resolveConfig();
   var DATA_BASE = CONFIG.dataBase;
+  var FEATURES = window.GT_FEATURES || {};
+  function featureOn(name) { return FEATURES[name] !== false; }
 
   // ===== 門檻集中設定（方便未來調整） =====
   var T = {
@@ -43,14 +45,16 @@
     { t: "單次活動 5 張照片", f: function (c) { return c.maxPhotosSingle; }, target: 5 },
     { t: "累積 1 次單車活動", f: function (c) { return c.cycleCount; }, target: 1 },
     { t: "在 3 個不同日子活動", f: function (c) { return c.days; }, target: 3 }
-  ];
+  ].filter(function (item) { return featureOn("photos") || item.t.indexOf("照片") < 0; });
 
   var TABS = [
     ["overview", "🏆 總覽"], ["badges", "🎖️ 成就徽章"], ["best", "🥇 個人最佳"],
     ["period", "🎯 期間挑戰"], ["steps", "👣 步數統計"], ["king", "📊 里程王"], ["tour", "🌏 虛擬環遊"],
     ["history", "📅 歷史上的今天"], ["photos", "📸 攝影挑戰"], ["bingo", "🎲 距離賓果"],
     ["art", "🗺️ 軌跡藝術"]
-  ];
+  ].filter(function (item) {
+    return (item[0] !== "steps" || featureOn("steps")) && (item[0] !== "photos" || featureOn("photos"));
+  });
 
   var manifest = { tracks: [] };
   var detailCache = {};
@@ -154,7 +158,7 @@
     var bestWeekDays = maxDistinctDaysPerWeek(core.list);
     var bestMonthDays = maxDistinctDaysPerMonth(core.list);
     function single(target) { return { cur: core.maxDist, target: target }; }
-    return [
+    var badges = [
       { ic: "🚩", name: "初次出發", desc: "完成第一筆有效活動", m: { cur: core.count, target: 1 } },
       { ic: "🥉", name: "五公里新手", desc: "單次活動達 " + d.fiveKm + " km", m: single(d.fiveKm) },
       { ic: "🥈", name: "十公里挑戰者", desc: "單次活動達 " + d.tenKm + " km", m: single(d.tenKm) },
@@ -164,14 +168,19 @@
       { ic: "🧭", name: "持續探索", desc: "累積 " + a.ten + " 次有效活動", m: { cur: core.count, target: a.ten } },
       { ic: "🎯", name: "活動達人", desc: "累積 " + a.fifty + " 次有效活動", m: { cur: core.count, target: a.fifty } },
       { ic: "📅", name: "每週探索者", desc: "一週內有 " + a.weekDays + " 天完成活動", m: { cur: bestWeekDays, target: a.weekDays } },
-      { ic: "🗓️", name: "月度挑戰者", desc: "一個月內有 " + a.monthDays + " 天完成活動", m: { cur: bestMonthDays, target: a.monthDays } },
+      { ic: "🗓️", name: "月度挑戰者", desc: "一個月內有 " + a.monthDays + " 天完成活動", m: { cur: bestMonthDays, target: a.monthDays } }
+    ];
+    var photoBadges = featureOn("photos") ? [
       { ic: "📷", name: "第一張旅程照片", desc: "活動中拍到第一張照片", m: { cur: core.totalPhotos, target: p.first } },
       { ic: "🖼️", name: "單趟十張", desc: "單次活動拍攝 " + p.singleTen + " 張照片", m: { cur: core.maxPhotosSingle, target: p.singleTen } },
-      { ic: "📸", name: "百張收藏", desc: "累積拍攝 " + p.totalHundred + " 張照片", m: { cur: core.totalPhotos, target: p.totalHundred } },
+      { ic: "📸", name: "百張收藏", desc: "累積拍攝 " + p.totalHundred + " 張照片", m: { cur: core.totalPhotos, target: p.totalHundred } }
+    ] : [];
+    var rest = [
       { ic: "🏔️", name: "制高點", desc: "單次活動最高海拔 ≥ 500 m（需軌跡資料）", m: { cur: (explore && explore.maxAlt) || 0, target: 500 }, pending: !explore },
       { ic: "🧭", name: "跨區域旅程", desc: "單次軌跡經緯跨度 ≥ " + T.explore.crossRegionDeg + "°", m: { cur: (explore && explore.maxSpan) || 0, target: T.explore.crossRegionDeg }, pending: !explore },
       { ic: "🎨", name: "軌跡藝術家（本機瀏覽器紀錄）", desc: "在軌跡藝術頁匯出一次作品", m: { cur: artExported() ? 1 : 0, target: 1 } }
     ];
+    return badges.concat(photoBadges, rest);
   }
 
   function longestTrack() {
@@ -234,8 +243,8 @@
     html += card(fmtKm(c.totalKm) + " km", "累積總距離");
     html += card(fmtInt(c.count), "有效活動數");
     html += card(fmtDur(c.totalDur), "累積活動時間");
-    if (c.totalSteps > 0) html += card(fmtInt(c.totalSteps), "累積步數");
-    if (c.totalPhotos > 0) html += card(fmtInt(c.totalPhotos), "累積照片數");
+    if (featureOn("steps") && c.totalSteps > 0) html += card(fmtInt(c.totalSteps), "累積步數");
+    if (featureOn("photos") && c.totalPhotos > 0) html += card(fmtInt(c.totalPhotos), "累積照片數");
     html += card(fmtInt(c.days), "活動天數");
     html += "</div>";
 
@@ -300,9 +309,9 @@
     items.push(["最長單次距離", bestBy(function (t) { return kmOf(t); }), function (t) { return fmtKm(kmOf(t)) + " km"; }]);
     items.push(["最長單次時間", bestBy(function (t) { return t.durationMs || 0; }), function (t) { return fmtDur(t.durationMs); }]);
     items.push(["最高可信速度", bestBy(function (t) { return trustSpeedKmh(t); }), function (t) { return trustSpeedKmh(t).toFixed(1) + " km/h"; }]);
-    if (list.some(function (t) { return (t.stepCount || 0) > 0; }))
+    if (featureOn("steps") && list.some(function (t) { return (t.stepCount || 0) > 0; }))
       items.push(["最多步數活動", bestBy(function (t) { return t.stepCount || 0; }), function (t) { return fmtInt(t.stepCount) + " 步"; }]);
-    if (list.some(function (t) { return (t.photoCount || 0) > 0; }))
+    if (featureOn("photos") && list.some(function (t) { return (t.photoCount || 0) > 0; }))
       items.push(["單次最多照片", bestBy(function (t) { return t.photoCount || 0; }), function (t) { return fmtInt(t.photoCount) + " 張"; }]);
     items.push(["最大累積爬升", bestBy(function (t) { return t.totalAscentMeters || 0; }), function (t) { return fmtInt(t.totalAscentMeters) + " m"; }]);
     var streak = longestStreak(list);
@@ -377,7 +386,9 @@
       ["累積步數", g.steps, T.period.steps, "步"],
       ["照片收集", g.photos, T.period.photos, "張"],
       ["單車距離", g.modes["單車"] || 0, T.period.cycleKm, "km"]
-    ];
+    ].filter(function (r) {
+      return (featureOn("steps") || r[0] !== "累積步數") && (featureOn("photos") || r[0] !== "照片收集");
+    });
     var html = '<div class="muted" style="margin-bottom:8px">' + fmtDay(a) + " – " + fmtDay(b - 1) + "（共 " + g.count + " 筆）</div>";
     rows.forEach(function (r) {
       var target = r[2];
@@ -598,6 +609,7 @@
 
   // 分頁進入點：先載入 steps.json；有逐日資料就顯示逐日，沒有就退回「每趟活動」的步數。
   function renderSteps() {
+    if (!featureOn("steps")) return;
     var panel = $("panel-steps");
     if (dailySteps === undefined) {
       panel.innerHTML = '<div class="empty-note">載入步數資料中…</div>';
@@ -738,6 +750,7 @@
   }
 
   function renderPhotos() {
+    if (!featureOn("photos")) return;
     var all = validTracks();
     var total = all.reduce(function (a, t) { return a + (t.photoCount || 0); }, 0);
     var ranking = all.filter(function (t) { return (t.photoCount || 0) > 0; }).sort(function (a, b) { return (b.photoCount || 0) - (a.photoCount || 0); });

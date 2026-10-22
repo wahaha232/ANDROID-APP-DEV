@@ -475,6 +475,13 @@
     return { show: show, next: next, reset: false };
   }
 
+  // 桌面版可以注入 GT_FEATURES 關閉特定功能；沒有注入時（手機、GitHub Pages）全部維持啟用。
+  // 這裡不依賴 window，讓 node 單元測試可以直接 require。
+  function featureEnabled(name) {
+    var features = typeof window !== "undefined" ? window.GT_FEATURES : null;
+    return !features || features[name] !== false;
+  }
+
   // 只列「實際有資料」的欄位，沒資料的不顯示（不以 0 或假資料填充）。
   function trackFields(t) {
     var f = [];
@@ -483,7 +490,7 @@
     if (num(t.durationMs) > 0) add("duration", "活動時間", fmtDur(t.durationMs));
     if (num(t.avgSpeedMps) > 0) add("avgSpeed", "平均速度", kmh(t.avgSpeedMps).toFixed(1), "km/h");
     if (num(t.maxSpeedMps) > 0) add("maxSpeed", "最高速度", kmh(t.maxSpeedMps).toFixed(1), "km/h");
-    if (num(t.stepCount) > 0) {
+    if (featureEnabled("steps") && num(t.stepCount) > 0) {
       var src = stepSourceLabel(t.stepSource);
       add("steps", "步數" + (src ? "（" + src + "）" : ""), fmtInt(t.stepCount), "步");
     }
@@ -491,7 +498,7 @@
     if (num(t.totalDescentMeters) > 0) add("descent", "總下降", fmtInt(t.totalDescentMeters), "m");
     if (hasAltitude(t.points) && isFinite(t.maxAltitudeMeters)) add("maxAlt", "最高海拔", fmtInt(t.maxAltitudeMeters), "m");
     if (num(t.gpsPointCount) > 0) add("points", "定位點", fmtInt(t.gpsPointCount));
-    if (num(t.photoCount) > 0) add("photos", "照片", fmtInt(t.photoCount), "張");
+    if (featureEnabled("photos") && num(t.photoCount) > 0) add("photos", "照片", fmtInt(t.photoCount), "張");
     return f;
   }
 

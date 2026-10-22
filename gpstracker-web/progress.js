@@ -6,6 +6,8 @@
   var CONFIG = GPST.resolveConfig();
   var DATA_BASE = CONFIG.dataBase;
   var CORE = window.PROGRESS_CORE;
+  var FEATURES = window.GT_FEATURES || {};
+  function featureOn(name) { return FEATURES[name] !== false; }
 
   var state = { totalKm: 0, count: 0, updatedAt: null, goals: [], voyager: null, voyagerStatus: null };
 
@@ -67,7 +69,7 @@
     $("cards").innerHTML =
       card(fmtKm(state.totalKm) + " km", "此裝置有效累計里程（計一次）") +
       card(state.count + " 筆", "有效活動數") +
-      (state.totalSteps > 0 ? card(state.totalSteps.toLocaleString("zh-Hant") + " 步", "累積步數（詳見競賽中心「步數統計」）") : "") +
+      (featureOn("steps") && state.totalSteps > 0 ? card(state.totalSteps.toLocaleString("zh-Hant") + " 步", "累積步數（詳見競賽中心「步數統計」）") : "") +
       card(done + " / " + g.length, "已達成目標") +
       card(fmtDate(state.updatedAt), "紀錄資料更新時間");
 

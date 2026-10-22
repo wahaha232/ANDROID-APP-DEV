@@ -5,6 +5,8 @@
   "use strict";
 
   var C = GTCore, esc = C.escapeHtml;
+  var FEATURES = window.GT_FEATURES || {};
+  function featureOn(name) { return FEATURES[name] !== false; }
   var TIMELINE_MAX = 8;
 
   function $(id) { return document.getElementById(id); }
@@ -20,7 +22,9 @@
 
   function renderHero(e, meta) {
     var fields = C.trackFields(e);
-    var pick = fields.filter(function (f) { return ["distance", "duration", "steps", "ascent"].indexOf(f.key) >= 0; });
+    var pick = fields.filter(function (f) {
+      return ["distance", "duration", "ascent"].indexOf(f.key) >= 0 || (f.key === "steps" && featureOn("steps"));
+    });
     var title = C.activityTitle(e, meta);
     var note = meta[e.trackId] && meta[e.trackId].notes;
     $("hero").innerHTML =
@@ -58,8 +62,8 @@
       stat(updatedAt ? G.fmtDateTime(updatedAt) : "未知", "", "資料最後更新", age != null ? G.fmtAge(age) : "");
     if (dur > 0) html += stat(C.fmtDur(dur), "", "累積時間");
     if (asc > 0) html += stat(C.fmtInt(asc), "m", "累積爬升");
-    if (steps > 0) html += stat(C.fmtInt(steps), "步", "活動步數", "各筆活動記錄的步數合計");
-    if (daily) html += stat(C.fmtInt(daily.total), "步", "每日步數累計", daily.days + " 天（Health Connect／Google Fit）");
+    if (featureOn("steps") && steps > 0) html += stat(C.fmtInt(steps), "步", "活動步數", "各筆活動記錄的步數合計");
+    if (featureOn("steps") && daily) html += stat(C.fmtInt(daily.total), "步", "每日步數累計", daily.days + " 天（Health Connect／Google Fit）");
     $("stats").innerHTML = html;
     var ds = $("dataStatus");
     if (!totals.recordCount) { ds.textContent = "尚無活動資料"; ds.className = "gt-status warn"; }
@@ -82,7 +86,9 @@
   function renderTimeline(tracks, meta) {
     var list = tracks.slice(0, TIMELINE_MAX);
     $("timeline").innerHTML = list.map(function (t) {
-      var f = C.trackFields(t).filter(function (x) { return ["distance", "duration", "steps"].indexOf(x.key) >= 0; });
+      var f = C.trackFields(t).filter(function (x) {
+        return ["distance", "duration"].indexOf(x.key) >= 0 || (x.key === "steps" && featureOn("steps"));
+      });
       return '<li><a class="gt-tl-item" href="' + GT.activityUrl(t.trackId) + '" data-id="' + esc(t.trackId) + '">' +
         '<div class="gt-tl-thumb gt-mini" aria-hidden="true"></div>' +
         "<div><div class=\"gt-tl-title\">" + C.modeEmoji(C.modeOf(t, meta)) + " " + esc(C.activityTitle(t, meta)) + "</div>" +
@@ -117,8 +123,9 @@
     $("retry").onclick = load;
   }
 
-  // 每日步數（steps.json）：選用，失敗就不顯示該統計。
+  // 每日步數（steps.json）：選用，失敗就不顯示該統計；桌面版關閉步數時完全不讀。
   function loadDaily() {
+    if (!featureOn("steps")) return Promise.resolve(null);
     return GT.fetchJson("steps.json", true).then(function (s) {
       var days = (s && s.days) || [], total = 0;
       days.forEach(function (d) { total += d.total || 0; });

@@ -18,7 +18,10 @@
     { href: "progress.html", label: "📈 全挑戰進度" },
     { href: "recap.html", label: "📅 回顧" },
     { href: "steps-journey.html", label: "👟 步數環遊" }
-  ];
+  ].filter(function (item) {
+    // 桌面版隱藏步數功能時，連帶移除「步數環遊」入口。
+    return item.href !== "steps-journey.html" || !window.GTFeature || window.GTFeature("steps");
+  });
   var SECTION = {
     "index.html": "home", "": "home",
     "history.html": "history", "activity.html": "history",

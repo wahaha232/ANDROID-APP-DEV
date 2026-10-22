@@ -4,6 +4,8 @@
 (function () {
   "use strict";
 
+  var FEATURES = window.GT_FEATURES || {};
+  function featureOn(name) { return FEATURES[name] !== false; }
   var GPST_CONF = GPST.resolveConfig();
   var LS = { repo: "gpst_gh_repo", branch: "gpst_gh_branch", data: "gpst_gh_data", token: "gpst_gh_token" };
   var DEFAULTS = { repo: "wahaha232/ANDROID-APP-DEV", branch: "main", data: "gpstracker-web/data", token: "" };
@@ -205,11 +207,14 @@
   function render() {
     var list = filteredSorted();
     var w = canWrite();
+    var showSteps = featureOn("steps"), showPhotos = featureOn("photos");
+    var columns = 9 + (showSteps ? 1 : 0) + (showPhotos ? 1 : 0);
     var html = '<div class="rec-table-wrap"><table class="rec-table"><thead><tr>' +
       '<th><input type="checkbox" id="chkHead" /></th><th>日期</th><th>裝置</th><th>模式</th><th>距離 (km)</th><th>時間</th>' +
-      '<th>步數</th><th>照片</th><th>定位點</th><th>備註</th><th>操作</th></tr></thead><tbody>';
+      (showSteps ? '<th>步數</th>' : "") + (showPhotos ? '<th>照片</th>' : "") +
+      '<th>定位點</th><th>備註</th><th>操作</th></tr></thead><tbody>';
     if (!list.length) {
-      html += '<tr><td colspan="11"><div class="rec-empty">沒有符合條件的紀錄。</div></td></tr>';
+      html += '<tr><td colspan="' + columns + '"><div class="rec-empty">沒有符合條件的紀錄。</div></td></tr>';
     }
     list.forEach(function (t) {
       var m = meta.tracks[t.trackId] || {};
@@ -222,8 +227,8 @@
           (m.mode && m.mode !== t.dominantMode ? ' <span class="rec-edited" title="已手動修改；App 原判斷：' + escapeHtml(modeName(t.dominantMode)) + '">✎</span>' : "") + '</td>' +
         '<td class="num">' + fmtKm(kmOf(t)) + '</td>' +
         '<td>' + fmtDur(t.durationMs) + '</td>' +
-        '<td class="num">' + (t.stepCount || 0) + '</td>' +
-        '<td class="num">' + (t.photoCount || 0) + '</td>' +
+        (showSteps ? '<td class="num">' + (t.stepCount || 0) + '</td>' : "") +
+        (showPhotos ? '<td class="num">' + (t.photoCount || 0) + '</td>' : "") +
         '<td class="num">' + (t.gpsPointCount || 0) + '</td>' +
         '<td class="note">' + (noteText ? escapeHtml(noteText) : "") + '</td>' +
         '<td><div class="rec-actions">' +

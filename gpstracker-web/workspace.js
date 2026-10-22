@@ -5,6 +5,8 @@
   "use strict";
 
   var C = GTCore, esc = C.escapeHtml;
+  var FEATURES = window.GT_FEATURES || {};
+  function featureOn(name) { return FEATURES[name] !== false; }
   var params = new URLSearchParams(location.search);
   var trackId = params.get("track");
   var MODES = ["explore", "replay", "data"];
@@ -153,7 +155,7 @@
       }).join("");
     }
     var photos = track.photos || [];
-    if (photos.length) {
+    if (photos.length && featureOn("photos")) {
       $("blkPhotos").hidden = false;
       $("photoNote").textContent = "共 " + photos.length + " 個拍照點，已在地圖上以黃點標示。網站只保存拍攝位置，照片檔案留在手機。";
     }
@@ -166,7 +168,9 @@
       $("blkGaps").hidden = false;
       $("gapBody").innerHTML = GT.gapSummaryHtml(gapInfo.gaps, gapInfo.usedMetro, track.distanceMeters);
     }
-    $("aShare").onclick = function () { GT.share(GT.url("activity.html", { track: trackId }), title).then(toast); };
+    if (featureOn("share")) {
+      $("aShare").onclick = function () { GT.share(GT.url("activity.html", { track: trackId }), title).then(toast); };
+    }
   }
 
   // ===== 地圖 =====
@@ -310,8 +314,10 @@
     map.addSource("gaps", { type: "geojson", data: GT.gapFeatures(gapInfo.gaps) });
     map.addLayer({ id: "gaps-casing", type: "line", source: "gaps", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#04121f", "line-width": 9, "line-opacity": 0.55 } });
     map.addLayer({ id: "gaps-line", type: "line", source: "gaps", layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 5, "line-dasharray": [1.4, 1.2] } });
-    map.addSource("photos", { type: "geojson", data: emptyFC() });
-    map.addLayer({ id: "photos-dot", type: "circle", source: "photos", paint: { "circle-radius": 6, "circle-color": "#FFB300", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
+    if (featureOn("photos")) {
+      map.addSource("photos", { type: "geojson", data: emptyFC() });
+      map.addLayer({ id: "photos-dot", type: "circle", source: "photos", paint: { "circle-radius": 6, "circle-color": "#FFB300", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
+    }
     map.addSource("marker", { type: "geojson", data: emptyFC() });
     map.addLayer({ id: "marker-dot", type: "circle", source: "marker", paint: { "circle-radius": 9, "circle-color": "#FF3D00", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
 
@@ -321,12 +327,14 @@
       el.className = "gt-gap-label"; el.textContent = GT.gapLabel(g);
       new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(GT.mid(g.kind === "metro" ? g.coords : [g.from, g.to])).addTo(map);
     });
-    map.getSource("photos").setData({ type: "FeatureCollection", features: (track.photos || []).map(function (p) {
-      return { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [p[0], p[1]] } };
-    }) });
+    if (featureOn("photos")) {
+      map.getSource("photos").setData({ type: "FeatureCollection", features: (track.photos || []).map(function (p) {
+        return { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [p[0], p[1]] } };
+      }) });
+    }
     new maplibregl.Marker({ element: pinEl("起點", "#00C853"), anchor: "bottom" }).setLngLat(coords[0]).addTo(map);
     new maplibregl.Marker({ element: pinEl("終點", "#FF3D00"), anchor: "bottom" }).setLngLat(coords[coords.length - 1]).addTo(map);
-    addPhotoBubbles();
+    if (featureOn("photos")) addPhotoBubbles();
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
     map.addControl(new ViewControl(), "top-right");
 
@@ -582,7 +590,7 @@
       });
     }).then(function () {
       prepareTrack(track);
-      buildPhotoMarks(track);
+      if (featureOn("photos")) buildPhotoMarks(track);
       buildDispGap();
       if (coords.length < 2) {
         showStatus('<div>這筆活動沒有足夠的路線資料，無法顯示 3D 路線。</div><a class="btn gt-btn" href="' + GT.activityUrl(trackId) + '">回活動故事</a>', true);

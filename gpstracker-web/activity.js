@@ -4,6 +4,8 @@
   "use strict";
 
   var C = GTCore, esc = C.escapeHtml;
+  var FEATURES = window.GT_FEATURES || {};
+  function featureOn(name) { return FEATURES[name] !== false; }
   var params = new URLSearchParams(location.search);
   var trackId = params.get("track");
   var reduceMotion = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -77,10 +79,12 @@
         var el = document.createElement("div"); el.className = "gt-gap-label"; el.textContent = GT.gapLabel(g);
         new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(GT.mid(g.kind === "metro" ? g.coords : [g.from, g.to])).addTo(map);
       });
-      map.addSource("photos", { type: "geojson", data: { type: "FeatureCollection", features: (track.photos || []).map(function (p) {
-        return { type: "Feature", properties: { url: (C.isPhotoPath(p[3])) ? GT.cfg.dataBase + p[3] : "" }, geometry: { type: "Point", coordinates: [p[0], p[1]] } };
-      }) } });
-      map.addLayer({ id: "photos-dot", type: "circle", source: "photos", paint: { "circle-radius": 6, "circle-color": "#FFB300", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
+      if (featureOn("photos")) {
+        map.addSource("photos", { type: "geojson", data: { type: "FeatureCollection", features: (track.photos || []).map(function (p) {
+          return { type: "Feature", properties: { url: (C.isPhotoPath(p[3])) ? GT.cfg.dataBase + p[3] : "" }, geometry: { type: "Point", coordinates: [p[0], p[1]] } };
+        }) } });
+        map.addLayer({ id: "photos-dot", type: "circle", source: "photos", paint: { "circle-radius": 6, "circle-color": "#FFB300", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5 } });
+      }
       map.addSource("cursor", { type: "geojson", data: GPST.emptyFC() });
       map.addLayer({ id: "cursor-dot", type: "circle", source: "cursor", paint: { "circle-radius": 8, "circle-color": "#FF3D00", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
       function pin(cls, txt, label, at) {
@@ -88,14 +92,16 @@
         el.setAttribute("role", "img"); el.setAttribute("aria-label", label);
         new maplibregl.Marker({ element: el }).setLngLat(at).addTo(map);
       }
-      map.on("click", "photos-dot", function (e) {
-        var f = e.features && e.features[0];
-        if (!f || !f.properties.url) return;
-        new maplibregl.Popup({ maxWidth: "260px" }).setLngLat(f.geometry.coordinates)
-          .setHTML('<a href="' + esc(f.properties.url) + '" target="_blank" rel="noopener"><img src="' + esc(f.properties.url) + '" alt="拍照點" style="width:240px;border-radius:8px;display:block" /></a>').addTo(map);
-      });
-      map.on("mouseenter", "photos-dot", function () { map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", "photos-dot", function () { map.getCanvas().style.cursor = ""; });
+      if (featureOn("photos")) {
+        map.on("click", "photos-dot", function (e) {
+          var f = e.features && e.features[0];
+          if (!f || !f.properties.url) return;
+          new maplibregl.Popup({ maxWidth: "260px" }).setLngLat(f.geometry.coordinates)
+            .setHTML('<a href="' + esc(f.properties.url) + '" target="_blank" rel="noopener"><img src="' + esc(f.properties.url) + '" alt="拍照點" style="width:240px;border-radius:8px;display:block" /></a>').addTo(map);
+        });
+        map.on("mouseenter", "photos-dot", function () { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", "photos-dot", function () { map.getCanvas().style.cursor = ""; });
+      }
       map.addSource("hl", { type: "geojson", data: { type: "FeatureCollection", features: highlights.map(function (h) {
         return { type: "Feature", properties: { key: h.key }, geometry: { type: "Point", coordinates: [h.lon, h.lat] } };
       }) } });
@@ -262,7 +268,7 @@
       $("gapBody").innerHTML = GT.gapSummaryHtml(gapInfo.gaps, gapInfo.usedMetro, track.distanceMeters);
     }
     var photos = track.photos || [];
-    if (photos.length) {
+    if (photos.length && featureOn("photos")) {
       $("pnlPhotos").hidden = false;
       var thumbs = photoThumbs(photos);
       if (thumbs.length) {
@@ -292,16 +298,18 @@
     // 匯出一律用原始軌跡（估算路徑只用於顯示）。
     $("aGpx").onclick = function () { GT.saveBlob(trackId + ".gpx", C.gpx(rawTrack || track), "application/gpx+xml"); };
     $("aJson").onclick = function () { GT.saveBlob(trackId + ".json", JSON.stringify(rawTrack || track), "application/json"); };
-    $("aShare").onclick = function () { GT.share(GT.url("activity.html", { track: trackId }), title).then(toast); };
-    // 分享圖片：用原始軌跡（不含估算路徑）與目前選的路線顏色；圖片只在本機產生。
-    $("aCard").onclick = function () {
-      var raw = rawTrack || track, mode = C.modeOf(track, meta);
-      var picks = C.trackFields(raw).filter(function (f) { return ["distance", "duration", "avgSpeed", "steps", "ascent"].indexOf(f.key) >= 0; });
-      GTShare.shareCard({
-        points: raw.points, title: title, whenText: C.fmtDate(raw.startTimeMs), modeText: C.modeEmoji(mode) + " " + C.modeName(mode),
-        fields: picks, colorMode: colorMode
-      }, "gps-tracker-" + trackId.slice(0, 8) + ".png").then(function (msg) { if (msg) toast(msg); });
-    };
+    if (featureOn("share")) {
+      $("aShare").onclick = function () { GT.share(GT.url("activity.html", { track: trackId }), title).then(toast); };
+      // 分享圖片：用原始軌跡（不含估算路徑）與目前選的路線顏色；圖片只在本機產生。
+      $("aCard").onclick = function () {
+        var raw = rawTrack || track, mode = C.modeOf(track, meta);
+        var picks = C.trackFields(raw).filter(function (f) { return ["distance", "duration", "avgSpeed", "steps", "ascent"].indexOf(f.key) >= 0; });
+        GTShare.shareCard({
+          points: raw.points, title: title, whenText: C.fmtDate(raw.startTimeMs), modeText: C.modeEmoji(mode) + " " + C.modeName(mode),
+          fields: picks, colorMode: colorMode
+        }, "gps-tracker-" + trackId.slice(0, 8) + ".png").then(function (msg) { if (msg) toast(msg); });
+      };
+    }
     $("grid").hidden = false;
   }
 

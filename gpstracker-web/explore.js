@@ -5,6 +5,8 @@
   "use strict";
 
   var C = GTCore, esc = C.escapeHtml, G = GTCH;
+  var FEATURES = window.GT_FEATURES || {};
+  function featureOn(name) { return FEATURES[name] !== false; }
 
   function $(id) { return document.getElementById(id); }
   function fmtKm(v) { return G.fmtKm(v); }
@@ -43,15 +45,20 @@
       $("doneSec").hidden = true;
     }
 
-    var stepsExtra = daily ? '<div class="gt-ch-line"><span>每日步數累計</span><b>' + C.fmtInt(daily.total) + " 步</b></div><div class=\"gt-ch-line\"><span>統計天數</span><b>" + daily.days + " 天</b></div>" : "";
-    $("more").innerHTML = staticCard("👟", "步數環遊里程", "把每日步數換算成距離，看看能走到哪裡（獨立計算，與上面的 GPS 里程分開）", "steps-journey.html", stepsExtra);
+    if (featureOn("steps")) {
+      var stepsExtra = daily ? '<div class="gt-ch-line"><span>每日步數累計</span><b>' + C.fmtInt(daily.total) + " 步</b></div><div class=\"gt-ch-line\"><span>統計天數</span><b>" + daily.days + " 天</b></div>" : "";
+      $("more").innerHTML = staticCard("👟", "步數環遊里程", "把每日步數換算成距離，看看能走到哪裡（獨立計算，與上面的 GPS 里程分開）", "steps-journey.html", stepsExtra);
+    } else {
+      $("more").innerHTML = "";
+    }
   }
 
   function loadOptional(name) { return GT.fetchJson(name, true).then(function (j) { return j; }, function () { return null; }); }
 
   function load() {
     var voy = G.loadVoyager(function (n) { return GT.fetchJson(n, true); }); // 失敗時保留最後一次有效值，不會歸零
-    Promise.all([GT.loadManifest(), voy, loadOptional("steps.json")]).then(function (r) {
+    var stepsP = featureOn("steps") ? loadOptional("steps.json") : Promise.resolve(null);
+    Promise.all([GT.loadManifest(), voy, stepsP]).then(function (r) {
       var m = r[0];
       var device = C.initDeviceBar("deviceBar", m.tracks || [], null, m.devices || []);
       var view = { tracks: C.filterByDevice(m.tracks || [], device), updatedAt: m.updatedAt };

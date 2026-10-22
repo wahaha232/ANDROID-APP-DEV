@@ -2,11 +2,29 @@
 (function () {
   "use strict";
 
+  // 桌面版由 WebView2 在頁面建立前注入 GT_FEATURES；沒有注入時（手機、GitHub Pages）功能全部維持啟用。
+  function featureEnabled(name) {
+    var features = typeof window !== "undefined" ? window.GT_FEATURES : null;
+    return !features || features[name] !== false;
+  }
+
+  // 依 GT_FEATURES 隱藏標了 data-gt-feature 的靜態元素（例如分享按鈕、步數欄位）。
+  function applyFeatureVisibility() {
+    if (typeof document === "undefined") return;
+    var nodes = document.querySelectorAll("[data-gt-feature]");
+    for (var i = 0; i < nodes.length; i++) {
+      var name = nodes[i].getAttribute("data-gt-feature");
+      if (!featureEnabled(name)) nodes[i].hidden = true;
+    }
+  }
+
   // 解析 ?repo=/?branch=/?data= 參數。
   // 預設走「同源相對路徑」data/（在 GitHub Pages 上即 ./data/），可用 CDN 與瀏覽器快取；
   // 只有明確指定 ?repo= 時才改用 raw.githubusercontent.com（相容舊連結／跨網域）。
   function resolveConfig(search) {
-    var params = new URLSearchParams(search || location.search);
+    // 桌面版的資料來源改由 App 設定畫面指定；有 GT_FEATURES 時忽略網址參數，避免被 ?repo= 帶去讀其他位置。
+    var desktop = typeof window !== "undefined" && window.GT_FEATURES;
+    var params = new URLSearchParams(desktop ? "" : (search || location.search));
     // 只接受正常格式的值；格式不對就退回預設（同源 data/），避免被帶去讀其他路徑或其他網址。
     var repo = params.get("repo") || "";
     var branch = params.get("branch") || "main";
@@ -37,5 +55,11 @@
     return url + (url.indexOf("?") >= 0 ? "&" : "?") + "t=" + t;
   }
 
+  window.GTFeature = featureEnabled;
   window.GPST = { resolveConfig: resolveConfig, emptyLine: emptyLine, emptyFC: emptyFC, bust: bust };
+
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", applyFeatureVisibility);
+    else applyFeatureVisibility();
+  }
 })();

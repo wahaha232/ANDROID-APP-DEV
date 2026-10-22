@@ -4,6 +4,8 @@
   "use strict";
 
   var C = GTCore, R = GTRecap, esc = C.escapeHtml;
+  var FEATURES = window.GT_FEATURES || {};
+  function featureOn(name) { return FEATURES[name] !== false; }
   var state = { tracks: [], meta: {}, year: null, month: 0, excluded: 0 };
 
   function $(id) { return document.getElementById(id); }
@@ -36,7 +38,7 @@
       stat(String(t.activeDays), "天", "活動天數", res.streak > 1 ? "最長連續 " + res.streak + " 天" : "") +
       stat(C.fmtDur(t.durMs), "", "活動時間") +
       (t.ascent > 0 ? stat(C.fmtInt(t.ascent), "m", "累積爬升") : "") +
-      (t.steps > 0 ? stat(C.fmtInt(t.steps), "步", "活動步數", "各筆活動記錄的步數合計") : "") + "</div>";
+      (featureOn("steps") && t.steps > 0 ? stat(C.fmtInt(t.steps), "步", "活動步數", "各筆活動記錄的步數合計") : "") + "</div>";
 
     // 長條圖：整年看每月、單月看每天（純 CSS，每根都有文字標籤與 title）。
     var max = 0; res.buckets.forEach(function (b) { if (b.km > max) max = b.km; });

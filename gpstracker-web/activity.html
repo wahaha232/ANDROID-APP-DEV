@@ -24,7 +24,7 @@
   <link href="vendor/maplibre-gl.css" rel="stylesheet" />
   <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
   <link href="gt-ui.css?v=dev4" rel="stylesheet" />
-  <script src="common.js?v=16aa2b38"></script>
+  <script src="common.js?v=08303bce"></script>
   <script src="gt-core.js?v=dev20261018"></script>
   <script src="gt-metro.js?v=5a9943d5"></script>
   <script src="gt-data.js?v=17579721"></script>
@@ -38,7 +38,7 @@
   <script defer src="vendor/maplibre-gl.js"></script>
   <script defer src="gt-profile.js?v=db85fdec"></script>
   <script defer src="gt-share.js?v=dcd169cb"></script>
-  <script defer src="gt-nav.js?v=0a18e836"></script>
+  <script defer src="gt-nav.js?v=27eb0560"></script>
   <script defer src="activity.js?v=dev20261018"></script>
 </head>
 <body>
@@ -125,13 +125,13 @@
               <a class="btn gt-btn secondary" id="aData" href="flythrough.html">📊 在 3D 工作區看數據</a>
               <button class="btn gt-btn secondary" type="button" id="aGpx">⬇ 下載 GPX</button>
               <button class="btn gt-btn secondary" type="button" id="aJson">⬇ 下載 JSON</button>
-              <button class="btn gt-btn secondary" type="button" id="aShare">分享連結</button>
-              <button class="btn gt-btn secondary" type="button" id="aCard">🖼 分享圖片</button>
+              <button class="btn gt-btn secondary" type="button" id="aShare" data-gt-feature="share">分享連結</button>
+              <button class="btn gt-btn secondary" type="button" id="aCard" data-gt-feature="share">🖼 分享圖片</button>
               <a class="btn gt-btn secondary" id="aEdit" href="records.html">✎ 編輯標題／備註</a>
             </div>
             <p class="gt-note">編輯需要在「紀錄管理」設定 GitHub Token；這裡只顯示、不修改任何資料。</p>
           </section>
-          <section class="gt-panel" id="pnlPhotos" aria-labelledby="h-photos" hidden>
+          <section class="gt-panel" id="pnlPhotos" aria-labelledby="h-photos" data-gt-feature="photos" hidden>
             <h3 id="h-photos">拍照點</h3>
             <div class="gt-photos" id="photoGrid"></div>
             <p class="gt-note" id="photoNote" style="margin:0"></p>

@@ -26,7 +26,7 @@
   <link href="gt-ui.css?v=dev4" rel="stylesheet" />
   <link href="workspace.css?v=75675676" rel="stylesheet" />
   <!-- 小型同源腳本不 defer：軌跡 JSON 在頁面一解析就開始下載，與 1 MB 的 MapLibre 並行（沿用原本的載入策略）。 -->
-  <script src="common.js?v=16aa2b38"></script>
+  <script src="common.js?v=08303bce"></script>
   <script src="gt-core.js?v=dev4"></script>
   <script src="gt-metro.js?v=5a9943d5"></script>
   <script src="gt-data.js?v=17579721"></script>
@@ -38,7 +38,7 @@
   </script>
   <script defer src="vendor/maplibre-gl.js"></script>
   <script defer src="gt-profile.js?v=db85fdec"></script>
-  <script defer src="workspace.js?v=49546515"></script>
+  <script defer src="workspace.js?v=1f7e678a"></script>
 </head>
 <body class="ws" data-mode="replay">
 <div class="ws-app" id="app">
@@ -68,7 +68,7 @@
       <div class="row hud-gap" id="hud-gap" hidden>GPS 中斷・估算路徑</div>
     </div>
 
-    <div class="ws-photo" id="photoPop" hidden aria-live="polite"><img id="photoImg" alt="" /><div id="photoCap"></div></div>
+    <div class="ws-photo" id="photoPop" data-gt-feature="photos" hidden aria-live="polite"><img id="photoImg" alt="" /><div id="photoCap"></div></div>
 
     <div class="ws-hint" id="exploreHint">拖曳旋轉・滾輪／雙指縮放・按住右鍵或雙指上下拖曳傾斜</div>
 
@@ -117,7 +117,7 @@
           <div class="gt-modes" id="modeBar"></div>
           <ul class="gt-mode-legend" id="modeLegend"></ul>
         </section>
-        <section class="ws-block data-only" id="blkPhotos" hidden>
+        <section class="ws-block data-only" id="blkPhotos" data-gt-feature="photos" hidden>
           <h2>拍照點</h2>
           <p class="gt-note" id="photoNote"></p>
         </section>
@@ -130,7 +130,7 @@
         <div class="ws-actions">
           <a class="btn gt-btn secondary" id="aStory" href="activity.html">活動故事</a>
           <button type="button" class="btn gt-btn secondary" id="aGpx">⬇ GPX</button>
-          <button type="button" class="btn gt-btn secondary" id="aShare">分享連結</button>
+          <button type="button" class="btn gt-btn secondary" id="aShare" data-gt-feature="share">分享連結</button>
           <a class="btn gt-btn secondary" id="aEdit" href="records.html">編輯備註</a>
         </div>
         <button type="button" class="btn gt-btn ws-backmap" id="backToMap">↑ 回到地圖</button>
