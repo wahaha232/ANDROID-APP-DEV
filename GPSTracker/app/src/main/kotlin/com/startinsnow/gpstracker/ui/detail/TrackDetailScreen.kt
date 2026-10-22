@@ -116,6 +116,9 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
     val photos by viewModel.photos.collectAsStateWithLifecycle()
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val outages by viewModel.outages.collectAsStateWithLifecycle()
+    val appSettings by app.settingsRepository.settings.collectAsStateWithLifecycle(
+        initialValue = com.startinsnow.gpstracker.data.prefs.AppSettings()
+    )
 
     var mapController by remember { mutableStateOf<GpsMapController?>(null) }
     // GPS 中斷（搭捷運）：沿捷運路線估算的路徑，只用於顯示（距離、均速等統計仍用原始資料）。
@@ -287,7 +290,13 @@ fun TrackDetailScreen(trackId: String, onBack: () -> Unit, onOpenFlythrough: (St
                     .height(300.dp)
                     .clip(MaterialTheme.shapes.large)
             ) {
-                GpsMapView(modifier = Modifier.fillMaxSize()) { controller -> mapController = controller }
+                // 底圖設定改變時重建地圖，讓新的 style 與所有軌跡圖層一起重新載入。
+                androidx.compose.runtime.key(appSettings.baseMapType) {
+                    GpsMapView(
+                        modifier = Modifier.fillMaxSize(),
+                        baseMapType = appSettings.baseMapType
+                    ) { controller -> mapController = controller }
+                }
                 // 縮放按鈕：就算手勢被外層捲動搶走（或無障礙操作），也一定能縮放地圖。
                 Column(
                     modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),

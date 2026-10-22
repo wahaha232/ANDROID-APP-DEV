@@ -444,4 +444,13 @@
     <string name="update_interval_never">不自動檢查</string>
     <string name="update_interval_hint">啟動 App 時依這個間隔自動檢查；有新版才會跳出提示，沒有就不打擾。選「不自動檢查」就只能手動按「檢查更新」。</string>
     <string name="settings_version">版本 %1$s</string>
+    <string name="map_base_title">地圖底圖</string>
+    <string name="map_base_hint">簡易地圖使用 OpenFreeMap 向量圖資，載入快、省流量；街道圖是 OpenStreetMap 圖片圖磚；衛星是 Esri World Imagery。</string>
+    <string name="map_base_simple">簡易地圖</string>
+    <string name="map_base_streets">街道圖</string>
+    <string name="map_base_satellite">衛星</string>
+    <string name="settings_offline_base_hint">離線地圖會依目前底圖下載：簡易地圖使用 OpenFreeMap 向量圖資，街道圖使用 OpenStreetMap 圖磚，衛星使用 Esri 影像。簡易地圖以向量方式下載；若下載失敗，可切換街道圖再試一次。</string>
+    <string name="flythrough_base_title">底圖</string>
+    <string name="flythrough_base_satellite">衛星 3D</string>
+    <string name="flythrough_base_simple">簡易地圖</string>
 </resources>

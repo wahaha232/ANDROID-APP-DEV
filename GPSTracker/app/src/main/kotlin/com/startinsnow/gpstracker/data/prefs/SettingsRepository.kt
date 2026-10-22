@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.startinsnow.gpstracker.export.BaseMapType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
@@ -30,6 +31,8 @@ data class AppSettings(
     val wifiOnlySync: Boolean = true,
     val dataRetentionDays: Int = 0, // 0 = 永久保留
     val deleteLocalAfterUploadEnabled: Boolean = false,
+    /** 地圖底圖：預設為載入快、省流量的向量簡易地圖。 */
+    val baseMapType: BaseMapType = BaseMapType.DEFAULT,
     val offlineMapEnabled: Boolean = false,
     // 網頁儀表板（GitHub Pages）：記錄結束後自動上傳 JSON。
     val webUploadEnabled: Boolean = false,
@@ -49,7 +52,7 @@ data class AppSettings(
     override fun toString(): String =
         "AppSettings(gpsMode=$gpsMode, autoPauseEnabled=$autoPauseEnabled, autoPauseSeconds=$autoPauseSeconds, stepSource=$stepSource, " +
             "driveSyncEnabled=$driveSyncEnabled, wifiOnlySync=$wifiOnlySync, dataRetentionDays=$dataRetentionDays, " +
-            "deleteLocalAfterUploadEnabled=$deleteLocalAfterUploadEnabled, offlineMapEnabled=$offlineMapEnabled, " +
+            "deleteLocalAfterUploadEnabled=$deleteLocalAfterUploadEnabled, baseMapType=$baseMapType, offlineMapEnabled=$offlineMapEnabled, " +
             "webUploadEnabled=$webUploadEnabled, webRepo=$webRepo, webBranch=$webBranch, webDataPath=$webDataPath, " +
             "githubToken=${if (githubToken.isEmpty()) "<empty>" else "<redacted>"}, webWifiOnly=$webWifiOnly, deviceName=$deviceName)"
 }
@@ -67,6 +70,7 @@ class SettingsRepository(private val context: Context) {
         val WIFI_ONLY = booleanPreferencesKey("wifi_only_sync")
         val RETENTION_DAYS = intPreferencesKey("data_retention_days")
         val DELETE_AFTER_UPLOAD = booleanPreferencesKey("delete_local_after_upload")
+        val BASE_MAP_TYPE = stringPreferencesKey("base_map_type")
         val OFFLINE_MAP = booleanPreferencesKey("offline_map_enabled")
         val WEB_UPLOAD = booleanPreferencesKey("web_upload_enabled")
         val WEB_REPO = stringPreferencesKey("web_repo")
@@ -90,6 +94,7 @@ class SettingsRepository(private val context: Context) {
             wifiOnlySync = prefs[Keys.WIFI_ONLY] ?: true,
             dataRetentionDays = prefs[Keys.RETENTION_DAYS] ?: 0,
             deleteLocalAfterUploadEnabled = prefs[Keys.DELETE_AFTER_UPLOAD] ?: false,
+            baseMapType = BaseMapType.fromStoredValue(prefs[Keys.BASE_MAP_TYPE]),
             offlineMapEnabled = prefs[Keys.OFFLINE_MAP] ?: false,
             webUploadEnabled = prefs[Keys.WEB_UPLOAD] ?: false,
             webRepo = prefs[Keys.WEB_REPO] ?: "wahaha232/ANDROID-APP-DEV",
@@ -113,6 +118,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setWifiOnlySync(enabled: Boolean) = context.dataStore.edit { it[Keys.WIFI_ONLY] = enabled }
     suspend fun setDataRetentionDays(days: Int) = context.dataStore.edit { it[Keys.RETENTION_DAYS] = days }
     suspend fun setDeleteLocalAfterUpload(enabled: Boolean) = context.dataStore.edit { it[Keys.DELETE_AFTER_UPLOAD] = enabled }
+    suspend fun setBaseMapType(type: BaseMapType) = context.dataStore.edit { it[Keys.BASE_MAP_TYPE] = type.storedValue }
     suspend fun setOfflineMapEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.OFFLINE_MAP] = enabled }
 
     suspend fun setWebUploadEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.WEB_UPLOAD] = enabled }

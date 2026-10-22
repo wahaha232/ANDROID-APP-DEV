@@ -10,8 +10,9 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.startinsnow.gpstracker.export.BaseMapStyles
+import com.startinsnow.gpstracker.export.BaseMapType
 import com.startinsnow.gpstracker.export.TerrainProviderConfig
-import com.startinsnow.gpstracker.export.TileProviderConfig
 import org.json.JSONArray
 import org.json.JSONObject
 import org.maplibre.android.camera.CameraPosition
@@ -151,39 +152,87 @@ class GpsMapController {
     }
 }
 
-private fun buildStyleJson(tileProvider: TileProviderConfig, terrain: TerrainProviderConfig?): String {
-    val attribution = tileProvider.attributionHtml.replace("\"", "\\\"")
-    val sources = StringBuilder()
-    sources.append(
-        """"base-tiles": { "type": "raster", "tiles": ["${tileProvider.tileUrlTemplate}"], "tileSize": 256, "maxzoom": ${tileProvider.maxZoom}, "attribution": "$attribution" }"""
-    )
-    val layers = StringBuilder()
-    layers.append("""{ "id": "base-tiles-layer", "type": "raster", "source": "base-tiles" }""")
+/** 底圖載入完成後才加上的軌跡圖層；向量與圖片圖磚底圖共用同一份，避免漏掉任何一層。 */
+private fun addTrackLayers(style: Style) {
+    style.addSource(GeoJsonSource(GpsMapController.SOURCE_ROUTE))
+    style.addSource(GeoJsonSource(GpsMapController.SOURCE_START))
+    style.addSource(GeoJsonSource(GpsMapController.SOURCE_END))
+    style.addSource(GeoJsonSource(GpsMapController.SOURCE_PHOTO))
+    style.addSource(GeoJsonSource(GpsMapController.SOURCE_OUTAGE))
+    style.addSource(GeoJsonSource(GpsMapController.SOURCE_GAP))
+    style.addSource(GeoJsonSource(GpsMapController.SOURCE_PLAYBACK))
 
-    var terrainBlock = ""
-    if (terrain != null) {
-        val terrainAttribution = terrain.attributionHtml.replace("\"", "\\\"")
-        sources.append(
-            """, "terrain-dem": { "type": "raster-dem", "tiles": ["${terrain.demUrlTemplate}"], "encoding": "${terrain.encoding}", "tileSize": 256, "attribution": "$terrainAttribution" }"""
+    style.addLayer(
+        LineLayer("route-layer", GpsMapController.SOURCE_ROUTE).withProperties(
+            PropertyFactory.lineColor(
+                org.maplibre.android.style.expressions.Expression.toColor(
+                    org.maplibre.android.style.expressions.Expression.coalesce(
+                        org.maplibre.android.style.expressions.Expression.get("color"),
+                        org.maplibre.android.style.expressions.Expression.literal("#00C853")
+                    )
+                )
+            ),
+            PropertyFactory.lineWidth(4f)
         )
-        // 山體陰影讓 3D 地形更有立體感。
-        layers.append(""", { "id": "hillshade-layer", "type": "hillshade", "source": "terrain-dem" }""")
-        terrainBlock = """, "terrain": { "source": "terrain-dem", "exaggeration": 1.3 }"""
-    }
-
-    return """
-    {
-      "version": 8,
-      "sources": { $sources },
-      "layers": [ $layers ]$terrainBlock
-    }
-    """.trimIndent()
+    )
+    // 估算的捷運路徑：深色描邊 + 路線色虛線，畫在實際路線之上。
+    style.addLayer(
+        LineLayer("gap-casing-layer", GpsMapController.SOURCE_GAP).withProperties(
+            PropertyFactory.lineColor("#04121F"),
+            PropertyFactory.lineWidth(7f),
+            PropertyFactory.lineOpacity(0.55f)
+        )
+    )
+    style.addLayer(
+        LineLayer("gap-layer", GpsMapController.SOURCE_GAP).withProperties(
+            PropertyFactory.lineColor(
+                org.maplibre.android.style.expressions.Expression.toColor(
+                    org.maplibre.android.style.expressions.Expression.coalesce(
+                        org.maplibre.android.style.expressions.Expression.get("color"),
+                        org.maplibre.android.style.expressions.Expression.literal("#888888")
+                    )
+                )
+            ),
+            PropertyFactory.lineWidth(4f),
+            PropertyFactory.lineDasharray(arrayOf(1.4f, 1.2f))
+        )
+    )
+    style.addLayer(
+        CircleLayer("start-layer", GpsMapController.SOURCE_START).withProperties(
+            PropertyFactory.circleColor("#00C853"),
+            PropertyFactory.circleRadius(7f)
+        )
+    )
+    style.addLayer(
+        CircleLayer("end-layer", GpsMapController.SOURCE_END).withProperties(
+            PropertyFactory.circleColor("#E53935"),
+            PropertyFactory.circleRadius(7f)
+        )
+    )
+    style.addLayer(
+        CircleLayer("photo-layer", GpsMapController.SOURCE_PHOTO).withProperties(
+            PropertyFactory.circleColor("#FFB300"),
+            PropertyFactory.circleRadius(5f)
+        )
+    )
+    style.addLayer(
+        CircleLayer("outage-layer", GpsMapController.SOURCE_OUTAGE).withProperties(
+            PropertyFactory.circleColor("#9E9E9E"),
+            PropertyFactory.circleRadius(5f)
+        )
+    )
+    style.addLayer(
+        CircleLayer("playback-layer", GpsMapController.SOURCE_PLAYBACK).withProperties(
+            PropertyFactory.circleColor("#1565C0"),
+            PropertyFactory.circleRadius(9f)
+        )
+    )
 }
 
 @Composable
 fun GpsMapView(
     modifier: Modifier = Modifier,
-    tileProvider: TileProviderConfig = TileProviderConfig.DEFAULT_OSM,
+    baseMapType: BaseMapType = BaseMapType.DEFAULT,
     terrain: TerrainProviderConfig? = null,
     onMapReady: (GpsMapController) -> Unit = {}
 ) {
@@ -236,81 +285,20 @@ fun GpsMapView(
                 view.getMapAsync { mapLibreMap ->
                     controller.map = mapLibreMap
                     // 圖磚來源最高 z=maxZoom（OSM 標準圖磚是 19）；超過的層級用最高層級放大顯示，不再去要不存在的圖磚。
-                    mapLibreMap.setMaxZoomPreference(tileProvider.maxZoom + 1.0)
-                    mapLibreMap.setStyle(Style.Builder().fromJson(buildStyleJson(tileProvider, terrain))) { style ->
-                        style.addSource(GeoJsonSource(GpsMapController.SOURCE_ROUTE))
-                        style.addSource(GeoJsonSource(GpsMapController.SOURCE_START))
-                        style.addSource(GeoJsonSource(GpsMapController.SOURCE_END))
-                        style.addSource(GeoJsonSource(GpsMapController.SOURCE_PHOTO))
-                        style.addSource(GeoJsonSource(GpsMapController.SOURCE_OUTAGE))
-                        style.addSource(GeoJsonSource(GpsMapController.SOURCE_GAP))
-                        style.addSource(GeoJsonSource(GpsMapController.SOURCE_PLAYBACK))
-
-                        style.addLayer(
-                            LineLayer("route-layer", GpsMapController.SOURCE_ROUTE).withProperties(
-                                PropertyFactory.lineColor(
-                                    org.maplibre.android.style.expressions.Expression.toColor(
-                                        org.maplibre.android.style.expressions.Expression.coalesce(
-                                            org.maplibre.android.style.expressions.Expression.get("color"),
-                                            org.maplibre.android.style.expressions.Expression.literal("#00C853")
-                                        )
-                                    )
-                                ),
-                                PropertyFactory.lineWidth(4f)
-                            )
+                    mapLibreMap.setMaxZoomPreference(baseMapType.maxZoom + 1.0)
+                    val styleBuilder = if (baseMapType.vectorStyleUrl != null) {
+                        // 簡易地圖：MapLibre 直接載入 OpenFreeMap 向量樣式，圖資來源標註由樣式／TileJSON 提供。
+                        Style.Builder().fromUri(baseMapType.vectorStyleUrl)
+                    } else {
+                        Style.Builder().fromJson(
+                            requireNotNull(BaseMapStyles.rasterStyleJson(baseMapType, terrain)) {
+                                "圖片圖磚底圖必須有圖磚設定"
+                            }
                         )
-                        // 估算的捷運路徑：深色描邊 + 路線色虛線，畫在實際路線之上。
-                        style.addLayer(
-                            LineLayer("gap-casing-layer", GpsMapController.SOURCE_GAP).withProperties(
-                                PropertyFactory.lineColor("#04121F"),
-                                PropertyFactory.lineWidth(7f),
-                                PropertyFactory.lineOpacity(0.55f)
-                            )
-                        )
-                        style.addLayer(
-                            LineLayer("gap-layer", GpsMapController.SOURCE_GAP).withProperties(
-                                PropertyFactory.lineColor(
-                                    org.maplibre.android.style.expressions.Expression.toColor(
-                                        org.maplibre.android.style.expressions.Expression.coalesce(
-                                            org.maplibre.android.style.expressions.Expression.get("color"),
-                                            org.maplibre.android.style.expressions.Expression.literal("#888888")
-                                        )
-                                    )
-                                ),
-                                PropertyFactory.lineWidth(4f),
-                                PropertyFactory.lineDasharray(arrayOf(1.4f, 1.2f))
-                            )
-                        )
-                        style.addLayer(
-                            CircleLayer("start-layer", GpsMapController.SOURCE_START).withProperties(
-                                PropertyFactory.circleColor("#00C853"),
-                                PropertyFactory.circleRadius(7f)
-                            )
-                        )
-                        style.addLayer(
-                            CircleLayer("end-layer", GpsMapController.SOURCE_END).withProperties(
-                                PropertyFactory.circleColor("#E53935"),
-                                PropertyFactory.circleRadius(7f)
-                            )
-                        )
-                        style.addLayer(
-                            CircleLayer("photo-layer", GpsMapController.SOURCE_PHOTO).withProperties(
-                                PropertyFactory.circleColor("#FFB300"),
-                                PropertyFactory.circleRadius(5f)
-                            )
-                        )
-                        style.addLayer(
-                            CircleLayer("outage-layer", GpsMapController.SOURCE_OUTAGE).withProperties(
-                                PropertyFactory.circleColor("#9E9E9E"),
-                                PropertyFactory.circleRadius(5f)
-                            )
-                        )
-                        style.addLayer(
-                            CircleLayer("playback-layer", GpsMapController.SOURCE_PLAYBACK).withProperties(
-                                PropertyFactory.circleColor("#1565C0"),
-                                PropertyFactory.circleRadius(9f)
-                            )
-                        )
+                    }
+                    mapLibreMap.setStyle(styleBuilder) { style ->
+                        // 向量樣式載入後才加軌跡圖層；圖片圖磚底圖同樣走這裡，確保兩種底圖的圖層完全一致。
+                        addTrackLayers(style)
                         controller.style = style
                         onMapReady(controller)
                     }

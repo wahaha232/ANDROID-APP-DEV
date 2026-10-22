@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.startinsnow.gpstracker.data.prefs.GpsMode
 import com.startinsnow.gpstracker.data.prefs.AutoPauseDelay
+import com.startinsnow.gpstracker.export.BaseMapType
 import com.startinsnow.gpstracker.ui.components.SectionHeader
 import com.startinsnow.gpstracker.ui.map.OfflineDownloadProgress
 import com.startinsnow.gpstracker.ui.map.OfflineMapManager
@@ -113,6 +114,21 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
     // 離開設定畫面時取消仍在進行的離線地圖下載，避免背景 collector 洩漏。
     DisposableEffect(Unit) {
         onDispose { offlineDownloadJob?.cancel() }
+    }
+
+    // 依目前選到的底圖下載；切換底圖時先取消舊的下載，避免同時跑多個 collector。
+    fun startOfflineDownload(type: BaseMapType) {
+        offlineDownloadJob?.cancel()
+        offlineMapStatus = context.getString(R.string.settings_038)
+        offlineDownloadJob = scope.launch {
+            OfflineMapManager.downloadDefaultRegion(context, type).collect { progress ->
+                offlineMapStatus = when (progress) {
+                    is OfflineDownloadProgress.InProgress -> context.getString(R.string.settings_039, progress.percent)
+                    is OfflineDownloadProgress.Completed -> context.getString(R.string.settings_040)
+                    is OfflineDownloadProgress.Failed -> context.getString(R.string.settings_041, progress.reason)
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -274,6 +290,47 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 ) { viewModel.setDeleteAfterUpload(it) }
             }
 
+            SettingsSection(title = context.getString(R.string.map_base_title)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.map_base_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BaseMapType.entries.forEach { type ->
+                            FilterChip(
+                                selected = settings.baseMapType == type,
+                                onClick = {
+                                    viewModel.setBaseMapType(type)
+                                    // 已開啟離線地圖時，立刻改用新底圖重新下載。
+                                    if (settings.offlineMapEnabled) startOfflineDownload(type)
+                                },
+                                label = {
+                                    Text(
+                                        stringResource(
+                                            when (type) {
+                                                BaseMapType.SIMPLE -> R.string.map_base_simple
+                                                BaseMapType.STREETS -> R.string.map_base_streets
+                                                BaseMapType.SATELLITE -> R.string.map_base_satellite
+                                            }
+                                        )
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    Text(
+                        settings.baseMapType.attributionText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             SettingsSection(title = context.getString(R.string.settings_035)) {
                 SwitchRow(
                     title = context.getString(R.string.settings_036),
@@ -281,29 +338,25 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     checked = settings.offlineMapEnabled
                 ) { enabled ->
                     viewModel.setOfflineMap(enabled)
-                    // 先取消舊的下載，避免反覆開關時同時跑多個 collector 而重複下載。
-                    offlineDownloadJob?.cancel()
                     if (enabled) {
-                        offlineMapStatus = context.getString(R.string.settings_038)
-                        offlineDownloadJob = scope.launch {
-                            OfflineMapManager.downloadDefaultRegion(context).collect { progress ->
-                                offlineMapStatus = when (progress) {
-                                    is OfflineDownloadProgress.InProgress -> context.getString(R.string.settings_039, progress.percent)
-                                    is OfflineDownloadProgress.Completed -> context.getString(R.string.settings_040)
-                                    is OfflineDownloadProgress.Failed -> context.getString(R.string.settings_041, progress.reason)
-                                }
-                            }
-                        }
+                        startOfflineDownload(settings.baseMapType)
                     } else {
+                        offlineDownloadJob?.cancel()
                         offlineMapStatus = null
                     }
                 }
+                Text(
+                    stringResource(R.string.settings_offline_base_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
                 offlineMapStatus?.let {
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 8.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
             }

@@ -71,8 +71,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.startinsnow.gpstracker.GpsTrackerApplication
+import com.startinsnow.gpstracker.export.BaseMapType
 import com.startinsnow.gpstracker.export.TerrainProviderConfig
-import com.startinsnow.gpstracker.export.TileProviderConfig
 import com.startinsnow.gpstracker.service.FlyoverRecorderState
 import com.startinsnow.gpstracker.service.FlyoverRecordingService
 import com.startinsnow.gpstracker.ui.detail.TrackDetailViewModel
@@ -133,21 +133,28 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
     val finishedCount by bridge.finishedCount.collectAsStateWithLifecycle()
     val hudValues by bridge.hud.collectAsStateWithLifecycle()
     var showShareMenu by remember { mutableStateOf(false) }
-
-    val baseConfig = TileProviderConfig.FREE_ESRI_SATELLITE
-    val terrainConfig = TerrainProviderConfig.AWS_TERRARIUM
+    // 預設維持衛星 + 3D 地形；可切換成不載入地形的向量簡易地圖。
+    var baseMapType by remember { mutableStateOf(BaseMapType.SATELLITE) }
 
     fun js(code: String) {
         webView?.evaluateJavascript(code, null)
     }
 
-    // 地圖就緒後：帶入免費圖資來源。
-    LaunchedEffect(mapReady) {
-        if (mapReady) {
+    // 地圖就緒或切換底圖時：帶入對應的圖資來源與（衛星才有的）3D 地形。
+    LaunchedEffect(mapReady, baseMapType) {
+        if (!mapReady) return@LaunchedEffect
+        if (baseMapType == BaseMapType.SIMPLE) {
             js(
-                "initSources(${JSONObject.quote(baseConfig.tileUrlTemplate)}, " +
-                    "${JSONObject.quote(terrainConfig.demUrlTemplate)}, " +
-                    "${JSONObject.quote(terrainConfig.encoding)})"
+                "applyBaseMap('vector', ${JSONObject.quote(baseMapType.vectorStyleUrl ?: "")}, '', '', " +
+                    "${JSONObject.quote(baseMapType.attributionText)})"
+            )
+        } else {
+            val tile = BaseMapType.SATELLITE.tileProvider ?: return@LaunchedEffect
+            val terrain = TerrainProviderConfig.AWS_TERRARIUM
+            js(
+                "applyBaseMap('raster', ${JSONObject.quote(tile.tileUrlTemplate)}, " +
+                    "${JSONObject.quote(terrain.demUrlTemplate)}, ${JSONObject.quote(terrain.encoding)}, " +
+                    "${JSONObject.quote(tile.attributionHtml)})"
             )
         }
     }
@@ -337,6 +344,8 @@ fun FlythroughScreen(trackId: String, onBack: () -> Unit) {
                     onSpeed = { speed = it; js("setSpeed($it)") },
                     onSnapshot = { js("snapshot()") },
                     onRecord = { captureLauncher.launch(projectionManager.createScreenCaptureIntent()) },
+                    baseMapType = baseMapType,
+                    onBaseMapChange = { baseMapType = it },
                     sharedFile = lastFile,
                     onShareVideo = { showShareMenu = true }
                 )
@@ -420,6 +429,8 @@ private fun FlythroughControls(
     onSpeed: (Double) -> Unit,
     onSnapshot: () -> Unit,
     onRecord: () -> Unit,
+    baseMapType: BaseMapType,
+    onBaseMapChange: (BaseMapType) -> Unit,
     sharedFile: java.io.File?,
     onShareVideo: () -> Unit
 ) {
@@ -429,6 +440,27 @@ private fun FlythroughControls(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.flythrough_base_title),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                listOf(BaseMapType.SATELLITE, BaseMapType.SIMPLE).forEach { type ->
+                    FilterChip(
+                        selected = baseMapType == type,
+                        onClick = { onBaseMapChange(type) },
+                        label = {
+                            Text(
+                                stringResource(
+                                    if (type == BaseMapType.SIMPLE) R.string.flythrough_base_simple
+                                    else R.string.flythrough_base_satellite
+                                )
+                            )
+                        }
+                    )
+                }
+            }
             Slider(
                 value = progress,
                 onValueChange = onSeek,

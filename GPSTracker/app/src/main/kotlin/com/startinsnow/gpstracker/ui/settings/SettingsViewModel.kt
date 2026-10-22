@@ -8,6 +8,7 @@ import com.startinsnow.gpstracker.GpsTrackerApplication
 import com.startinsnow.gpstracker.data.prefs.AppSettings
 import com.startinsnow.gpstracker.data.prefs.GpsMode
 import com.startinsnow.gpstracker.data.prefs.StepSource
+import com.startinsnow.gpstracker.export.BaseMapType
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -45,6 +46,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setWifiOnly(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setWifiOnlySync(enabled) }
     fun setRetentionDays(days: Int) = viewModelScope.launch { app.settingsRepository.setDataRetentionDays(days) }
     fun setDeleteAfterUpload(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setDeleteLocalAfterUpload(enabled) }
+    fun setBaseMapType(type: BaseMapType) = viewModelScope.launch { app.settingsRepository.setBaseMapType(type) }
     fun setOfflineMap(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setOfflineMapEnabled(enabled) }
 
     fun setWebUpload(enabled: Boolean) = viewModelScope.launch { app.settingsRepository.setWebUploadEnabled(enabled) }

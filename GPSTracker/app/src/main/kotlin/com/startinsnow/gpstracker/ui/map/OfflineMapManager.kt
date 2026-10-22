@@ -1,7 +1,8 @@
 package com.startinsnow.gpstracker.ui.map
 
 import android.content.Context
-import com.startinsnow.gpstracker.export.TileProviderConfig
+import com.startinsnow.gpstracker.export.BaseMapStyles
+import com.startinsnow.gpstracker.export.BaseMapType
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
@@ -31,25 +32,27 @@ sealed class OfflineDownloadProgress {
  */
 object OfflineMapManager {
     private val TAIWAN_BOUNDS = LatLngBounds.from(25.5, 122.1, 21.8, 119.9)
-    private const val METADATA = "gps_tracker_default_region"
 
     fun downloadDefaultRegion(
         context: Context,
-        tileProvider: TileProviderConfig = TileProviderConfig.DEFAULT_OSM,
+        baseMapType: BaseMapType = BaseMapType.DEFAULT,
         bounds: LatLngBounds = TAIWAN_BOUNDS,
         minZoom: Double = 0.0,
         maxZoom: Double = 10.0
     ): Flow<OfflineDownloadProgress> = callbackFlow {
-        val styleJson =
-            """{"version":8,"sources":{"base-tiles":{"type":"raster","tiles":["${tileProvider.tileUrlTemplate}"],"tileSize":256}},"layers":[{"id":"base-tiles-layer","type":"raster","source":"base-tiles"}]}"""
+        // 向量底圖直接把 style 網址交給 OfflineManager，它會一併下載向量圖磚、sprite 與字型；
+        // 圖片圖磚底圖則照原本的 raster style JSON 下載。
+        val styleSource = baseMapType.vectorStyleUrl
+            ?: requireNotNull(BaseMapStyles.rasterStyleJson(baseMapType, null)) { "圖片圖磚底圖必須有圖磚設定" }
         val definition: OfflineRegionDefinition = OfflineTilePyramidRegionDefinition(
-            styleJson,
+            styleSource,
             bounds,
             minZoom,
             maxZoom,
             context.resources.displayMetrics.density
         )
-        val metadata = METADATA.toByteArray()
+        // 不同底圖分開儲存，切換底圖時才不會誤用另一種格式的離線資料。
+        val metadata = "gps_tracker_default_region_${baseMapType.storedValue}".toByteArray()
         val offlineManager = OfflineManager.getInstance(context)
         val submitted = AtomicBoolean(false)
 
