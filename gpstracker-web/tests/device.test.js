@@ -109,3 +109,20 @@ test("指定不存在的裝置時仍排除只有模擬紀錄的裝置", () => {
     assert.equal(G.chooseDevice(tracks), "POCO X6 Pro 5G");
   });
 });
+
+test("累積活動摘要依裝置分組：不同裝置的紀錄不會混在同一組", () => {
+  const tracks = [
+    { trackId: "poco-1", deviceName: "POCO X6 Pro 5G", startTimeMs: 1000, distanceMeters: 1000 },
+    { trackId: "sony-1", deviceName: "SONY XZ1", startTimeMs: 3000, distanceMeters: 2000 },
+    { trackId: "poco-2", deviceName: "POCO X6 Pro 5G", startTimeMs: 5000, distanceMeters: 3000 },
+    { trackId: "legacy", startTimeMs: 2000, distanceMeters: 500 },
+  ];
+
+  const groups = G.groupTracksByDevice(tracks);
+
+  assert.deepEqual(groups.map((g) => g.device), ["POCO X6 Pro 5G", "SONY XZ1", "未命名裝置"]);
+  assert.deepEqual(groups.map((g) => g.tracks.length), [2, 1, 1]);
+  assert.deepEqual(groups[0].tracks.map((t) => t.trackId), ["poco-1", "poco-2"]);
+  assert.equal(groups[0].tracks.reduce((sum, t) => sum + t.distanceMeters, 0), 4000);
+  assert.equal(groups[1].tracks.reduce((sum, t) => sum + t.distanceMeters, 0), 2000);
+});

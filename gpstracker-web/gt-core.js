@@ -151,6 +151,24 @@
     return (tracks || []).filter(function (t) { return deviceNameOf(t) === device; });
   }
 
+  // 依裝置分組，供首頁「累積活動摘要」使用：每個裝置各自一組，不把不同裝置的里程混合。
+  // 回傳順序依最近活動時間由新到舊；同名裝置的最後活動時間相同時才用名稱排序。
+  function groupTracksByDevice(tracks) {
+    var groups = {}, order = [], latest = {};
+    (tracks || []).forEach(function (t) {
+      var name = deviceNameOf(t);
+      if (!groups[name]) { groups[name] = []; order.push(name); latest[name] = 0; }
+      groups[name].push(t);
+      var ms = +t.startTimeMs || 0;
+      if (ms > latest[name]) latest[name] = ms;
+    });
+    return order.map(function (name) {
+      return { device: name, tracks: groups[name] };
+    }).sort(function (a, b) {
+      return latest[b.device] - latest[a.device] || a.device.localeCompare(b.device, "zh-Hant");
+    });
+  }
+
   // 在指定容器建立裝置切換列；切換後把裝置寫入網址並重新載入，讓所有挑戰同步重算。
   // knownDevices 可包含尚無紀錄的裝置（例如新手機），讓它先以 0 進度出現在選單中。
   function initDeviceBar(bar, tracks, selected, knownDevices) {
@@ -568,7 +586,7 @@
     kmh: kmh, stepSourceLabel: stepSourceLabel, escapeHtml: escapeHtml,
     deviceNameOf: deviceNameOf, DEVICE_KEY: DEVICE_KEY, deviceNames: deviceNames,
     getRequestedDevice: getRequestedDevice, setSelectedDevice: setSelectedDevice, chooseDevice: chooseDevice,
-    filterByDevice: filterByDevice, initDeviceBar: initDeviceBar,
+    filterByDevice: filterByDevice, initDeviceBar: initDeviceBar, groupTracksByDevice: groupTracksByDevice,
     activityTitle: activityTitle, filterTracks: filterTracks, sortTracks: sortTracks, groupByMonth: groupByMonth,
     downsample: downsample, routeProject: routeProject, routePath: routePath, routeTiles: routeTiles,
     isPhotoPath: isPhotoPath, photoMarks: photoMarks, photoStep: photoStep,

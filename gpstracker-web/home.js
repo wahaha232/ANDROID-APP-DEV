@@ -52,25 +52,49 @@
     });
   }
 
-  function renderStats(totals, valid, updatedAt, daily) {
-    var G = GTCH, dur = 0, asc = 0, steps = 0;
-    valid.forEach(function (t) { dur += t.durationMs || 0; asc += t.totalAscentMeters || 0; steps += t.stepCount || 0; });
-    var age = updatedAt ? Date.now() - updatedAt : null;
-    var html = stat(G.fmtKm(totals.totalKm), "km", "累積總里程", "有效活動合計，每筆只計一次") +
-      stat(C.fmtInt(totals.validCount), "筆", "活動紀錄數量", totals.excluded > 0 ? "另有 " + totals.excluded + " 筆因資料異常未計入" : "") +
-      stat(totals.lastActivityMs ? G.fmtDay(totals.lastActivityMs) : "—", "", "最近活動日期") +
-      stat(updatedAt ? G.fmtDateTime(updatedAt) : "未知", "", "資料最後更新", age != null ? G.fmtAge(age) : "");
-    if (dur > 0) html += stat(C.fmtDur(dur), "", "累積時間");
-    if (asc > 0) html += stat(C.fmtInt(asc), "m", "累積爬升");
-    if (featureOn("steps") && steps > 0) html += stat(C.fmtInt(steps), "步", "活動步數", "各筆活動記錄的步數合計");
-    if (featureOn("steps") && daily) html += stat(C.fmtInt(daily.total), "步", "每日步數累計", daily.days + " 天（Health Connect／Google Fit）");
+  // 依裝置分開累計：每個裝置各自去重／排除異常後再加總，不同裝置的里程不混合。
+  function deviceSummaries(tracks) {
+    return C.groupTracksByDevice(tracks).map(function (g) {
+      return {
+        device: g.device,
+        tracks: g.tracks,
+        totals: GTCH.computeTotals(g.tracks),
+        valid: SOLAR_CORE.validTracks(g.tracks)
+      };
+    });
+  }
+
+  function renderStats(summaries, updatedAt, daily) {
+    var G = GTCH, recordCount = 0, excluded = 0;
+    var html = summaries.map(function (s) {
+      var dur = 0, asc = 0, steps = 0;
+      s.valid.forEach(function (t) { dur += t.durationMs || 0; asc += t.totalAscentMeters || 0; steps += t.stepCount || 0; });
+      recordCount += s.totals.recordCount;
+      excluded += s.totals.excluded;
+      var cards = stat(G.fmtKm(s.totals.totalKm), "km", "累積總里程", "有效活動合計，每筆只計一次") +
+        stat(C.fmtInt(s.totals.validCount), "筆", "活動紀錄數量", s.totals.excluded > 0 ? "另有 " + s.totals.excluded + " 筆因資料異常未計入" : "") +
+        stat(s.totals.lastActivityMs ? G.fmtDay(s.totals.lastActivityMs) : "—", "", "最近活動日期");
+      if (dur > 0) cards += stat(C.fmtDur(dur), "", "累積時間");
+      if (asc > 0) cards += stat(C.fmtInt(asc), "m", "累積爬升");
+      if (featureOn("steps") && steps > 0) cards += stat(C.fmtInt(steps), "步", "活動步數", "各筆活動記錄的步數合計");
+      return '<div class="gt-device-summary"><div class="gt-device-head"><h3>' + esc(s.device) + "</h3>" +
+        '<span class="gt-device-count">' + s.totals.recordCount + " 筆紀錄</span></div>" +
+        '<div class="gt-stats">' + cards + "</div></div>";
+    }).join("");
+    html += '<p class="gt-note gt-stats-updated">資料最後更新：' + (updatedAt ? G.fmtDateTime(updatedAt) : "未知") +
+      (updatedAt ? "（" + G.fmtAge(Date.now() - updatedAt) + "）" : "") + "</p>";
+    // 每日步數是 Health Connect／Google Fit 的全站資料，沒有裝置別，單獨標示避免和上面的裝置里程混合。
+    if (featureOn("steps") && daily) {
+      html += '<p class="gt-note">每日步數累計（Health Connect／Google Fit，未分裝置）：' +
+        C.fmtInt(daily.total) + " 步／" + daily.days + " 天</p>";
+    }
     $("stats").innerHTML = html;
     var ds = $("dataStatus");
-    if (!totals.recordCount) { ds.textContent = "尚無活動資料"; ds.className = "gt-status warn"; }
-    else if (age != null && age > G.MANIFEST_STALE_MS) { ds.textContent = "⚠️ 資料可能非最新（" + G.fmtAge(age) + "更新）"; ds.className = "gt-status warn"; }
+    if (!recordCount) { ds.textContent = "尚無活動資料"; ds.className = "gt-status warn"; }
+    else if (updatedAt && Date.now() - updatedAt > G.MANIFEST_STALE_MS) { ds.textContent = "⚠️ 資料可能非最新（" + G.fmtAge(Date.now() - updatedAt) + "更新）"; ds.className = "gt-status warn"; }
     else { ds.textContent = "✅ 資料已載入"; ds.className = "gt-status ok"; }
     var note = $("statsNote");
-    if (totals.excluded > 0) { note.textContent = "有 " + totals.excluded + " 筆紀錄因重複或 GPS 異常（距離／時間缺漏、均速過高）未計入里程；它們仍會出現在歷史紀錄。"; note.hidden = false; }
+    if (excluded > 0) { note.textContent = "有 " + excluded + " 筆紀錄因重複或 GPS 異常（距離／時間缺漏、均速過高）未計入里程；它們仍會出現在歷史紀錄。"; note.hidden = false; }
     else note.hidden = true;
   }
 
@@ -145,17 +169,22 @@
 
     main.then(function (r) {
       var m = r[0], tracks = m.tracks, meta = r[1];
-      var totals = GTCH.computeTotals(tracks), valid = SOLAR_CORE.validTracks(tracks);
-      $("summary").textContent = totals.validCount + " 筆活動 · 累積 " + GTCH.fmtKm(totals.totalKm) + " km";
+      var summaries = deviceSummaries(tracks);
+      $("summary").textContent = summaries.length > 1
+        ? summaries.length + " 台裝置 · 各裝置分開累積（" + summaries.map(function (s) { return s.device; }).join("、") + "）"
+        : summaries.length === 1
+          ? summaries[0].device + " · " + summaries[0].totals.validCount + " 筆活動 · 累積 " + GTCH.fmtKm(summaries[0].totals.totalKm) + " km"
+          : "尚無紀錄";
       // 統計卡只畫一次，避免「先 7 張、後 8 張」造成版面跳動；steps.json 最多等 300 ms，太慢才事後補畫。
       var TIMEOUT = {};
       return Promise.race([dailyP, new Promise(function (res) { setTimeout(function () { res(TIMEOUT); }, 300); })]).then(function (d) {
-        renderStats(totals, valid, m.updatedAt, d === TIMEOUT ? null : d);
+        renderStats(summaries, m.updatedAt, d === TIMEOUT ? null : d);
         if (!tracks.length) { renderEmpty(); return; }
+        var valid = SOLAR_CORE.validTracks(tracks);
         // 精選卡優先顯示最新一筆「有效」活動（0 公尺誤觸、GPS 異常漂移的紀錄不要放在最顯眼處）。
         renderHero(valid[0] || tracks[0], meta);
         renderTimeline(tracks, meta);
-        if (d === TIMEOUT) dailyP.then(function (late) { if (late) renderStats(totals, valid, m.updatedAt, late); });
+        if (d === TIMEOUT) dailyP.then(function (late) { if (late) renderStats(summaries, m.updatedAt, late); });
       });
     }, function (e) { renderError(e.message); });
 

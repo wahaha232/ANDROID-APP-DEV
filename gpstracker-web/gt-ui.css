@@ -90,6 +90,14 @@ main:focus { outline: none; }
 .gt-stat .l { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .gt-stat .s { font-size: 11.5px; color: var(--muted); opacity: .8; margin-top: 4px; }
 
+/* 累積活動摘要：每個裝置一組，裝置之間分開累計、不混合。 */
+.gt-device-summary { margin-top: 18px; }
+.gt-device-summary:first-child { margin-top: 0; }
+.gt-device-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px; }
+.gt-device-head h3 { margin: 0; font-size: 15px; }
+.gt-device-count { color: var(--muted); font-size: 12.5px; }
+.gt-stats-updated { margin: 16px 0 0; }
+
 /* ───── 時間軸 ───── */
 .gt-timeline { list-style: none; margin: 0; padding: 0 0 0 18px; position: relative; display: flex; flex-direction: column; gap: 10px; }
 .gt-timeline::before { content: ""; position: absolute; left: 4px; top: 10px; bottom: 10px; width: 2px; background: linear-gradient(var(--primary), var(--border) 80%); border-radius: 2px; }
