@@ -1,23 +1,31 @@
 package com.startinsnow.gpstracker.ui.home
 
+import android.Manifest
 import android.app.Application
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.startinsnow.gpstracker.GpsTrackerApplication
+import com.startinsnow.gpstracker.data.prefs.AppSettings
 import com.startinsnow.gpstracker.data.prefs.StepSource
+import com.startinsnow.gpstracker.location.LocationTracker
 import com.startinsnow.gpstracker.service.TrackingStateHolder
 import com.startinsnow.gpstracker.sync.HealthConnectStepReader
 import com.startinsnow.gpstracker.sync.StepResolver
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** 首頁「今日步數」卡片的狀態。 */
 sealed interface TodaySteps {
@@ -45,10 +53,25 @@ sealed interface TodaySteps {
     data class Error(val message: String) : TodaySteps
 }
 
+/** 首頁「目前位置」地圖的狀態。 */
+sealed interface HomeLocationState {
+    data object NoPermission : HomeLocationState
+    data object Locating : HomeLocationState
+    data class Available(val latitude: Double, val longitude: Double, val accuracyMeters: Float) : HomeLocationState
+    data object Unavailable : HomeLocationState
+}
+
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val app get() = getApplication<GpsTrackerApplication>()
 
     val recordingState = TrackingStateHolder.state
+    /** 首頁地圖沿用設定的底圖；預設是省流量的向量簡易地圖。 */
+    val settings: StateFlow<AppSettings> = app.settingsRepository.settings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
+
+    private val _homeLocation = MutableStateFlow<HomeLocationState>(HomeLocationState.Locating)
+    val homeLocation: StateFlow<HomeLocationState> = _homeLocation.asStateFlow()
+    private var locationJob: Job? = null
     val pendingRecovery = TrackingStateHolder.pendingRecovery
     /** null = 還在載入（此時不顯示「還沒有紀錄」的空狀態，避免冷啟動先閃一下）。 */
     val recentTracks = app.trackRepository.observeTracks()
@@ -61,6 +84,58 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     init {
         // 先前儲存的編輯若因離線等原因還沒同步到記錄網頁，開啟 App 時重試。
         viewModelScope.launch { com.startinsnow.gpstracker.sync.TrackEditsSync.flushAllDirty(app) }
+    }
+
+    /**
+     * 首頁一開啟就定位：先顯示上次已知位置讓地圖立刻有內容，再等一次新的定位（最多 15 秒）。
+     * 只訂閱到第一個新定位就停止，首頁不需要持續耗電追蹤；開始記錄後由前景服務負責。
+     */
+    fun refreshHomeLocation() {
+        val context = getApplication<Application>()
+        val hasPermission =
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!hasPermission) {
+            locationJob?.cancel()
+            _homeLocation.value = HomeLocationState.NoPermission
+            return
+        }
+        locationJob?.cancel()
+        locationJob = viewModelScope.launch {
+            if (_homeLocation.value !is HomeLocationState.Available) {
+                _homeLocation.value = HomeLocationState.Locating
+            }
+            val lastKnown = withContext(Dispatchers.IO) {
+                runCatching { LocationTracker(context).getLastKnownBestLocation() }.getOrNull()
+            }
+            if (lastKnown != null) {
+                _homeLocation.value = HomeLocationState.Available(
+                    lastKnown.latitude,
+                    lastKnown.longitude,
+                    lastKnown.accuracyMeters
+                )
+            }
+            val fresh = withContext(Dispatchers.IO) {
+                try {
+                    withTimeoutOrNull(LOCATION_TIMEOUT_MS) {
+                        LocationTracker(context).observe(trackId = "home-location-preview").first()
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            if (fresh != null) {
+                _homeLocation.value = HomeLocationState.Available(
+                    fresh.sample.latitude,
+                    fresh.sample.longitude,
+                    fresh.sample.accuracyMeters
+                )
+            } else if (_homeLocation.value !is HomeLocationState.Available) {
+                _homeLocation.value = HomeLocationState.Unavailable
+            }
+        }
     }
 
     /** 回到首頁時檢查網站上是否有紀錄被刪除（節流：10 分鐘內不重複查）。只提示，不自動刪除。 */
@@ -180,5 +255,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { app.trackRepository.abandonTrack(candidate.trackId) }
             TrackingStateHolder.setPendingRecovery(null)
         }
+    }
+
+    companion object {
+        private const val LOCATION_TIMEOUT_MS = 15_000L
     }
 }

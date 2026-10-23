@@ -1,6 +1,11 @@
 package com.startinsnow.gpstracker.ui.home
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import com.startinsnow.gpstracker.R
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -36,9 +41,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,18 +56,26 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.startinsnow.gpstracker.core.model.TrackStatus
 import com.startinsnow.gpstracker.data.db.TrackEntity
+import com.startinsnow.gpstracker.export.BaseMapType
 import com.startinsnow.gpstracker.service.RecordingUiState
 import com.startinsnow.gpstracker.ui.components.EmptyState
 import com.startinsnow.gpstracker.ui.components.InfoBanner
 import com.startinsnow.gpstracker.ui.components.SectionHeader
 import com.startinsnow.gpstracker.ui.components.formatDuration
 import com.startinsnow.gpstracker.ui.components.formatDurationShort
+import com.startinsnow.gpstracker.ui.map.GpsMapController
+import com.startinsnow.gpstracker.ui.map.GpsMapView
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private fun locationPermissionGranted(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
 @Composable
 fun HomeScreen(
@@ -78,12 +95,37 @@ fun HomeScreen(
     val todaySteps by viewModel.todaySteps.collectAsStateWithLifecycle()
     val stepsSyncMessage by viewModel.stepsSyncMessage.collectAsStateWithLifecycle()
     val deletedOnWeb by viewModel.deletedOnWeb.collectAsStateWithLifecycle()
+    val homeLocation by viewModel.homeLocation.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
 
-    // 回到前景（含從設定頁授權 Health Connect 回來）就重新讀取今日步數。
+    // 首頁地圖：有權限就自動定位；第一次開啟時主動要一次權限，之後被拒絕則由地圖上的按鈕再要。
+    var hasLocationPermission by remember { mutableStateOf(locationPermissionGranted(context)) }
+    var askedLocationPermission by rememberSaveable { mutableStateOf(false) }
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        hasLocationPermission = locationPermissionGranted(context)
+        viewModel.refreshHomeLocation()
+    }
+    LaunchedEffect(Unit) {
+        if (hasLocationPermission) {
+            viewModel.refreshHomeLocation()
+        } else if (!askedLocationPermission) {
+            askedLocationPermission = true
+            locationPermissionLauncher.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            )
+        }
+    }
+
+    // 回到前景（含從設定頁授權 Health Connect 回來）就重新讀取今日步數與目前位置。
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val granted = locationPermissionGranted(context)
+                hasLocationPermission = granted
+                if (granted) viewModel.refreshHomeLocation()
                 viewModel.refreshTodaySteps()
                 viewModel.checkDeletedOnWeb()
             }
@@ -108,6 +150,19 @@ fun HomeScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                CurrentLocationCard(
+                    state = homeLocation,
+                    hasPermission = hasLocationPermission,
+                    baseMapType = settings.baseMapType,
+                    onRequestPermission = {
+                        locationPermissionLauncher.launch(
+                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                        )
+                    }
+                )
+            }
+
             item { StatusHero(state = state, isActive = isActive) }
 
             if (deletedOnWeb.isNotEmpty()) {
@@ -192,6 +247,95 @@ fun HomeScreen(
                 items(tracks.take(3), key = { it.trackId }) { track ->
                     RecentTrackRow(track = track, dateFormat = dateFormat, onClick = { onOpenTrack(track.trackId) })
                 }
+            }
+        }
+    }
+}
+
+/** 首頁最上方的「目前位置」地圖：定位後把鏡頭拉近，並在位置放一個大頭針。 */
+@Composable
+private fun CurrentLocationCard(
+    state: HomeLocationState,
+    hasPermission: Boolean,
+    baseMapType: BaseMapType,
+    onRequestPermission: () -> Unit
+) {
+    var mapController by remember { mutableStateOf<GpsMapController?>(null) }
+    val location = state as? HomeLocationState.Available
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Box(modifier = Modifier.fillMaxWidth().height(220.dp)) {
+            androidx.compose.runtime.key(baseMapType) {
+                GpsMapView(
+                    modifier = Modifier.fillMaxSize(),
+                    baseMapType = baseMapType
+                ) { controller -> mapController = controller }
+            }
+
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Filled.MyLocation,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    stringResource(R.string.home_current_location_title),
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+
+            LaunchedEffect(location, mapController) {
+                if (location != null) {
+                    mapController?.showCurrentLocation(location.latitude, location.longitude)
+                }
+            }
+
+            if (!hasPermission) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(16.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.home_location_permission),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Button(onClick = onRequestPermission) {
+                        Text(stringResource(R.string.home_location_allow))
+                    }
+                }
+            } else if (location == null) {
+                Text(
+                    stringResource(
+                        if (state is HomeLocationState.Unavailable) R.string.home_location_unavailable
+                        else R.string.home_location_locating
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(12.dp)
+                        .clip(MaterialTheme.shapes.small)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                )
             }
         }
     }

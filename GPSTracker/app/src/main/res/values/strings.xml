@@ -453,4 +453,9 @@
     <string name="flythrough_base_title">底圖</string>
     <string name="flythrough_base_satellite">衛星 3D</string>
     <string name="flythrough_base_simple">簡易地圖</string>
+    <string name="home_current_location_title">目前位置</string>
+    <string name="home_location_permission">需要定位權限才能顯示目前位置</string>
+    <string name="home_location_allow">允許定位</string>
+    <string name="home_location_locating">正在取得目前位置…</string>
+    <string name="home_location_unavailable">尚未取得定位，請確認手機定位已開啟</string>
 </resources>

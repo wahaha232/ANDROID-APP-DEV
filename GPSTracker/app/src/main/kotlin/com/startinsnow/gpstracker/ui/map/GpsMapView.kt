@@ -15,6 +15,8 @@ import com.startinsnow.gpstracker.export.BaseMapType
 import com.startinsnow.gpstracker.export.TerrainProviderConfig
 import org.json.JSONArray
 import org.json.JSONObject
+import org.maplibre.android.annotations.Marker
+import org.maplibre.android.annotations.MarkerOptions
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -31,6 +33,7 @@ import org.maplibre.android.style.sources.GeoJsonSource
 class GpsMapController {
     var map: MapLibreMap? = null
     var style: Style? = null
+    private var currentLocationMarker: Marker? = null
 
     fun setRoute(coordinates: List<Pair<Double, Double>>) {
         style?.getSourceAs<GeoJsonSource>(SOURCE_ROUTE)?.setGeoJson(lineStringGeoJson(coordinates))
@@ -103,6 +106,22 @@ class GpsMapController {
         map?.easeCamera(CameraUpdateFactory.newLatLng(LatLng(lat, lon)), 300)
     }
 
+    /** 首頁「目前位置」：在地圖上放一個大頭針，並把鏡頭拉近到該位置。 */
+    fun showCurrentLocation(lat: Double, lon: Double) {
+        val currentMap = map ?: return
+        val position = LatLng(lat, lon)
+        val marker = currentLocationMarker
+        if (marker == null) {
+            currentLocationMarker = currentMap.addMarker(MarkerOptions().position(position))
+        } else {
+            marker.position = position
+        }
+        currentMap.animateCamera(
+            CameraUpdateFactory.newLatLngZoom(position, CURRENT_LOCATION_ZOOM),
+            500
+        )
+    }
+
     /**
      * 3D 飛越用：直接把相機放到指定座標上方（含俯角 tilt 與方位 bearing），
      * 用立即移動（非動畫）以便逐格驅動出平順的飛行。
@@ -133,6 +152,7 @@ class GpsMapController {
         const val SOURCE_OUTAGE = "outage-source"
         const val SOURCE_GAP = "gap-source"
         const val SOURCE_PLAYBACK = "playback-source"
+        private const val CURRENT_LOCATION_ZOOM = 16.0
 
         private fun lineStringGeoJson(coordinates: List<Pair<Double, Double>>): String {
             val coordsArray = JSONArray()
