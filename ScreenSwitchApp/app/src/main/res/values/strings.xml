@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- [Handled & Written by Cloud Agent] -->
+<resources>
+    <string name="app_name">ScreenSwitchApp</string>
+    <string name="screen_subtitle">快速控制螢幕常亮與系統休眠時間</string>
+
+    <string name="status_label">目前狀態</string>
+    <string name="status_awake">螢幕保持開啟</string>
+    <string name="status_normal">螢幕依系統設定休眠</string>
+    <string name="status_timeout">系統休眠時間：%1$d 秒</string>
+    <string name="status_admin_on">一鍵關螢幕：已啟用</string>
+    <string name="status_admin_off">一鍵關螢幕：未啟用</string>
+
+    <string name="keep_awake_title">保持螢幕開啟</string>
+    <string name="keep_awake_desc">開啟後，只要 App 顯示在前景，螢幕就不會自動休眠。</string>
+
+    <string name="timeout_title">螢幕休眠時間</string>
+    <string name="timeout_15">15 秒</string>
+    <string name="timeout_30">30 秒</string>
+    <string name="timeout_60">1 分鐘</string>
+    <string name="timeout_120">2 分鐘</string>
+
+    <string name="action_lock_now">立即關閉螢幕</string>
+    <string name="action_enable_admin">啟用一鍵關螢幕</string>
+    <string name="admin_explanation">允許 ScreenSwitchApp 在你按下按鈕時立即鎖定螢幕。</string>
+
+    <string name="help_text">變更休眠時間需要「修改系統設定」權限；一鍵關螢幕需要啟用裝置管理員。設定只會套用到本機裝置。</string>
+    <string name="permission_denied">未取得修改系統設定權限，休眠時間未變更。</string>
+    <string name="timeout_applied">已將系統休眠時間設為 %1$d 秒</string>
+</resources>
