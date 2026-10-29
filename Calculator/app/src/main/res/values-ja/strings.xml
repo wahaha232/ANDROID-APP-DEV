@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">電卓</string>
+    <string name="error_message">エラー</string>
+
+    <string name="tab_calculator">計算</string>
+    <string name="tab_convert">換算</string>
+    <string name="lang_toggle">中</string>
+
+    <string name="hint_amount">金額を入力</string>
+    <string name="status_loading">為替レートを読み込み中…</string>
+    <string name="status_updated">レート更新時刻：%1$s（データ提供：exchangerate-api.com）</string>
+    <string name="status_error">為替レートを読み込めません。接続を確認してください。</string>
+</resources>

@@ -4,7 +4,7 @@
 
     <string name="tab_calculator">Calculate</string>
     <string name="tab_convert">Convert</string>
-    <string name="lang_toggle">中</string>
+    <string name="lang_toggle">日</string>
 
     <string name="hint_amount">Enter amount</string>
     <string name="status_loading">Loading exchange rates…</string>

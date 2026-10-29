@@ -1,3 +1,4 @@
+// [Handled & Written by Cloud Agent]
 package com.wahaha232.calculator
 
 import android.os.Bundle
@@ -21,10 +22,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
-    private var currentInput = "0"
-    private val tokens = mutableListOf<Any>() // alternating Double operand / Char operator
-    private var justEvaluated = false
-    private var awaitingNewOperand = false
+    private val calculator = CalculatorEngine()
 
     private val currencies = listOf("TWD", "USD", "JPY", "HKD", "CNY", "EUR", "GBP")
     private var ratesVsUsd: Map<String, Double>? = null
@@ -88,7 +86,11 @@ class MainActivity : AppCompatActivity() {
         binding.btnLangToggle.setOnClickListener {
             val current = AppCompatDelegate.getApplicationLocales()
             val currentTag = if (current.isEmpty) "zh-TW" else current[0]?.toLanguageTag() ?: "zh-TW"
-            val next = if (currentTag.startsWith("en")) "zh-TW" else "en"
+            val next = when {
+                currentTag.startsWith("en") -> "ja"
+                currentTag.startsWith("ja") -> "zh-TW"
+                else -> "en"
+            }
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(next))
         }
     }
@@ -111,160 +113,60 @@ class MainActivity : AppCompatActivity() {
         binding.btnBackspace.setOnClickListener { onBackspace() }
         binding.btnSign.setOnClickListener { onToggleSign() }
         binding.btnPercent.setOnClickListener { onPercent() }
-        binding.btnAdd.setOnClickListener { onOperator('+') }
-        binding.btnSubtract.setOnClickListener { onOperator('-') }
-        binding.btnMultiply.setOnClickListener { onOperator('×') }
-        binding.btnDivide.setOnClickListener { onOperator('÷') }
+        binding.btnAdd.setOnClickListener { onOperator(CalculatorOperator.PLUS) }
+        binding.btnSubtract.setOnClickListener { onOperator(CalculatorOperator.MINUS) }
+        binding.btnMultiply.setOnClickListener { onOperator(CalculatorOperator.MULTIPLY) }
+        binding.btnDivide.setOnClickListener { onOperator(CalculatorOperator.DIVIDE) }
         binding.btnEquals.setOnClickListener { onEquals() }
     }
 
     private fun onDigit(digit: String) {
-        if (justEvaluated || awaitingNewOperand) {
-            currentInput = "0"
-            justEvaluated = false
-            awaitingNewOperand = false
-        }
-        currentInput = if (currentInput == "0") digit else currentInput + digit
+        calculator.inputDigit(digit[0])
         updateDisplay()
     }
 
     private fun onDot() {
-        if (justEvaluated || awaitingNewOperand) {
-            currentInput = "0"
-            justEvaluated = false
-            awaitingNewOperand = false
-        }
-        if (!currentInput.contains(".")) {
-            currentInput += "."
-            updateDisplay()
-        }
+        calculator.inputDot()
+        updateDisplay()
     }
 
     private fun onClear() {
-        currentInput = "0"
-        tokens.clear()
-        justEvaluated = false
-        awaitingNewOperand = false
+        calculator.clear()
         updateDisplay()
     }
 
     private fun onBackspace() {
-        if (justEvaluated || awaitingNewOperand) {
-            onClear()
-            return
-        }
-        currentInput = if (currentInput.length > 1) currentInput.dropLast(1) else "0"
+        calculator.backspace()
         updateDisplay()
     }
 
     private fun onToggleSign() {
-        currentInput = when {
-            currentInput.startsWith("-") -> currentInput.substring(1)
-            currentInput != "0" -> "-$currentInput"
-            else -> currentInput
-        }
+        calculator.toggleSign()
         updateDisplay()
     }
 
     private fun onPercent() {
-        val value = currentInput.toDoubleOrNull() ?: return
-        currentInput = formatNumber(value / 100.0)
+        calculator.percent()
         updateDisplay()
     }
 
-    private fun onOperator(op: Char) {
-        val value = currentInput.toDoubleOrNull() ?: return
-
-        if (justEvaluated) {
-            tokens.clear()
-            tokens.add(value)
-            tokens.add(op)
-        } else if (awaitingNewOperand && tokens.isNotEmpty()) {
-            // user changed their mind about the operator; just swap it
-            tokens[tokens.size - 1] = op
-        } else {
-            tokens.add(value)
-            tokens.add(op)
-        }
-
-        awaitingNewOperand = true
-        justEvaluated = false
-        currentInput = "0"
+    private fun onOperator(op: CalculatorOperator) {
+        calculator.applyOperator(op)
         updateDisplay()
     }
 
     private fun onEquals() {
-        if (tokens.isEmpty()) return
-        val value = currentInput.toDoubleOrNull() ?: return
-
-        val fullExpression = tokens.toMutableList()
-        fullExpression.add(value)
-
-        val result = evaluateExpression(fullExpression)
-        if (result == null) {
-            showError()
-            return
-        }
-
-        currentInput = formatNumber(result)
-        tokens.clear()
-        awaitingNewOperand = false
-        justEvaluated = true
+        calculator.equals()
         updateDisplay()
     }
 
-    /** Evaluates a flat [operand, op, operand, op, ...] list with × and ÷ resolved before + and -. */
-    private fun evaluateExpression(expression: List<Any>): Double? {
-        val reduced = mutableListOf<Any>(expression[0] as Double)
-        var i = 1
-        while (i < expression.size) {
-            val op = expression[i] as Char
-            val operand = expression[i + 1] as Double
-            if (op == '×' || op == '÷') {
-                val left = reduced.removeAt(reduced.size - 1) as Double
-                if (op == '÷' && operand == 0.0) return null
-                reduced.add(if (op == '×') left * operand else left / operand)
-            } else {
-                reduced.add(op)
-                reduced.add(operand)
-            }
-            i += 2
-        }
-
-        var result = reduced[0] as Double
-        i = 1
-        while (i < reduced.size) {
-            val op = reduced[i] as Char
-            val operand = reduced[i + 1] as Double
-            result = if (op == '+') result + operand else result - operand
-            i += 2
-        }
-        return result
-    }
-
-    private fun showError() {
-        currentInput = "0"
-        tokens.clear()
-        awaitingNewOperand = false
-        justEvaluated = true
-        binding.tvExpression.text = ""
-        binding.tvDisplay.text = getString(R.string.error_message)
-    }
-
-    private fun formatNumber(value: Double): String {
-        if (value.isNaN() || value.isInfinite()) return "0"
-        return if (value == value.toLong().toDouble()) {
-            value.toLong().toString()
-        } else {
-            String.format("%.10f", value).trimEnd('0').trimEnd('.')
-        }
-    }
-
     private fun updateDisplay() {
-        binding.tvDisplay.text = currentInput
-        binding.tvExpression.text = tokens.joinToString(" ") { token ->
-            if (token is Double) formatNumber(token) else token.toString()
+        binding.tvDisplay.text = if (calculator.isError) {
+            getString(R.string.error_message)
+        } else {
+            calculator.display
         }
+        binding.tvExpression.text = calculator.expression
     }
 
     // ---------- Currency convert ----------
