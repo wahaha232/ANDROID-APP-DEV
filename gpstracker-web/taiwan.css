@@ -19,4 +19,4 @@
 .ext-list .e-t1 { font-size: 13px; font-weight: 600; }
 .ext-list .e-t2 { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .ext-list .e-tag { font-size: 11px; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
-.ext-list li.hit .e-tag { background: var(--green); color: #04160d; font-weight: 700; }
+.ext-list li.hit .e-tag { background: var(--green); color: var(--on-green); font-weight: 700; }

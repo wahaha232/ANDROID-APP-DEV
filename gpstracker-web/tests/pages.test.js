@@ -71,3 +71,13 @@ test("白字 + 漸層的元件都用 --grad-btn，而不是對比不足的 --gra
     }
   }
 });
+
+test("一般頁面都在樣式表之前同步載入 gt-theme.js（避免淺色主題先閃一下深色）", () => {
+  for (const p of pages) {
+    if (p === APP) continue;
+    const h = read(p);
+    const m = h.match(/<script src="gt-theme\.js\?v=[0-9a-f]+"><\/script>/);
+    assert.ok(m, p + " 缺少同步載入的 gt-theme.js");
+    assert.ok(h.indexOf(m[0]) < h.indexOf('<link href="style.css'), p + " 的 gt-theme.js 要放在 style.css 之前");
+  }
+});

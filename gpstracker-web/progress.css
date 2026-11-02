@@ -14,8 +14,8 @@
   font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--border);
   border-left: 3px solid var(--primary); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px;
 }
-.pg-note.warn { color: var(--amber); border-color: #5a4718; border-left-color: var(--amber); }
-.pg-note.err { color: var(--red); border-color: #5a1f1f; border-left-color: var(--red); }
+.pg-note.warn { color: var(--amber); border-color: var(--note-warn-border); border-left-color: var(--amber); }
+.pg-note.err { color: var(--red); border-color: var(--note-err-border); border-left-color: var(--red); }
 .pg-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
 .pg-toolbar select, .pg-toolbar input { padding: 7px 11px; }
 .pg-toolbar label.pg-kind { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; cursor: pointer; font-size: 12.5px; color: var(--text); border: 1px solid var(--border); background: var(--surface); }
@@ -33,6 +33,6 @@ table.pg-table { width: 100%; border-collapse: collapse; font-size: 13px; min-wi
 .pg-prog > i { display: block; height: 100%; background: var(--grad-progress); border-radius: 4px; }
 .pg-kind { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid transparent; }
 .pg-kind.virtual { color: var(--amber); background: rgba(251, 191, 36, .1); }
-.pg-kind.reference { color: #7cc4ff; background: rgba(124, 196, 255, .1); }
-.pg-kind.mileage { color: #6bffa8; background: rgba(107, 255, 168, .1); }
+.pg-kind.reference { color: var(--info-text); background: rgba(124, 196, 255, .1); }
+.pg-kind.mileage { color: var(--ok-text); background: rgba(107, 255, 168, .1); }
 .pg-group-h { font-size: 14px; font-weight: 700; margin: 20px 0 10px; }

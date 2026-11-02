@@ -4,7 +4,7 @@
 
 .e-tabs {
   display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 20px 10px;
-  background: rgba(7, 11, 20, .6); border-bottom: 1px solid var(--border);
+  background: var(--bar-bg); border-bottom: 1px solid var(--border);
 }
 .e-tabs button {
   background: var(--surface); color: var(--muted); border: 1px solid var(--border); border-radius: 999px;

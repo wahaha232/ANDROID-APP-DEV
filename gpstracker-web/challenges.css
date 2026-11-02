@@ -5,7 +5,7 @@
 
 .tabs {
   display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 20px 10px;
-  background: rgba(7, 11, 20, .6); border-bottom: 1px solid var(--border);
+  background: var(--bar-bg); border-bottom: 1px solid var(--border);
 }
 .tabs button {
   background: var(--surface); color: var(--muted); border: 1px solid var(--border);
@@ -63,9 +63,9 @@
   transition: border-color .15s;
 }
 .rank li:hover { border-color: var(--border-strong); }
-.rank li:nth-child(1) .pos { color: #fbbf24; }
-.rank li:nth-child(2) .pos { color: #cbd5e1; }
-.rank li:nth-child(3) .pos { color: #fb923c; }
+.rank li:nth-child(1) .pos { color: var(--amber); }
+.rank li:nth-child(2) .pos { color: var(--silver); }
+.rank li:nth-child(3) .pos { color: var(--bronze, #fb923c); }
 .rank .pos { width: 24px; text-align: center; font-weight: 800; color: var(--muted); }
 .rank .mid { flex: 1; min-width: 0; }
 .rank .t1 { font-size: 13px; font-weight: 600; }

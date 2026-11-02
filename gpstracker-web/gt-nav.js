@@ -70,6 +70,28 @@
     return '<a href="' + link(m.href) + '"' + (m.id === section ? ' aria-current="page"' : "") + ">" + m.label + "</a>";
   }).join("");
 
+  // 主題切換（跟隨系統 → 淺色 → 深色）；桌面版由程式設定決定，不顯示。
+  if (window.GTTheme && !GTTheme.hostControlled) {
+    var THEMES = { system: { icon: "🖥️", label: "跟隨系統" }, light: { icon: "☀️", label: "淺色" }, dark: { icon: "🌙", label: "深色" } };
+    var themeBtn = document.createElement("button");
+    themeBtn.type = "button";
+    themeBtn.className = "gt-theme-btn";
+    var paintTheme = function () {
+      var t = THEMES[GTTheme.pref()];
+      themeBtn.textContent = t.icon;
+      themeBtn.title = "主題：" + t.label + "（按一下切換）";
+      themeBtn.setAttribute("aria-label", themeBtn.title);
+    };
+    themeBtn.addEventListener("click", function () {
+      var modes = GTTheme.MODES;
+      GTTheme.set(modes[(modes.indexOf(GTTheme.pref()) + 1) % modes.length]);
+      paintTheme();
+    });
+    document.addEventListener("gt-themechange", paintTheme);
+    paintTheme();
+    actions.appendChild(themeBtn);
+  }
+
   if (section === "explore") {
     var sub = document.createElement("nav");
     sub.className = "gt-subnav";

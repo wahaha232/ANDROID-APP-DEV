@@ -1,6 +1,8 @@
-/* GPS Tracker 儀表板 — 共用設計系統（深色「任務控制台」風格）。
-   各頁面樣式表皆沿用此處的變數；只調整視覺，不影響任何 id / class 命名。 */
-:root {
+/* GPS Tracker 儀表板 — 共用設計系統（深色「任務控制台」風格，另有淺色主題）。
+   各頁面樣式表皆沿用此處的變數；只調整視覺，不影響任何 id / class 命名。
+   主題由 gt-theme.js 設定 <html data-theme="light|dark">；疊在衛星地圖上的元件在淺色主題仍用深色變數。 */
+:root,
+[data-theme="light"] :is(.gt-story-hero, .gt-allmap, .gt-card-thumb, .gt-tl-thumb, .art-canvas-box) {
   --bg: #070b14;
   --bg-2: #0b1220;
   --surface: #0f1828;
@@ -27,14 +29,72 @@
   --shadow: 0 8px 24px rgba(0, 0, 0, .32);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, .45);
   --ease: cubic-bezier(.2, .7, .2, 1);
+  --header-bg: rgba(11, 18, 32, .8);
+  --bar-bg: rgba(7, 11, 20, .6);
+  --glow-1: rgba(76, 141, 255, .16);
+  --glow-2: rgba(122, 92, 255, .12);
+  --note-warn-border: #5a4718;
+  --note-err-border: #5a1f1f;
+  --note-ok-border: #1f5a37;
+  --ok-text: #6bffa8;
+  --info-text: #7cc4ff;
+  --silver: #cbd5e1;
+  --on-green: #04160d;
+  --chart-label: #9fb0cb;
+  --chart-guide: rgba(255, 255, 255, .45);
+  --chart-dot: #fff;
+  --chart-tip-bg: rgba(9, 14, 25, .9);
+  --chart-tip-text: #fff;
   color-scheme: dark;
+}
+[data-theme="light"] :is(.gt-story-hero, .gt-allmap, .gt-card-thumb, .gt-tl-thumb, .art-canvas-box) { color: var(--text); }
+
+:root[data-theme="light"] {
+  --bg: #f4f7fb;
+  --bg-2: #eaf0f8;
+  --surface: #ffffff;
+  --surface-2: #f1f5fb;
+  --surface-3: #e4ebf5;
+  --text: #0f1a2e;
+  --muted: #55627a;
+  --primary: #2563eb;
+  --primary-2: #6d4ce0;
+  --accent: #0e7490;
+  --green: #047857;
+  --amber: #b45309;
+  --red: #c62828;
+  --border: #d9e1ec;
+  --border-strong: #bccadd;
+  --track: #e2e8f1;
+  --green-soft: rgba(4, 120, 87, .08);
+  --primary-soft: rgba(37, 99, 235, .1);
+  --shadow: 0 6px 18px rgba(15, 26, 46, .08);
+  --shadow-lg: 0 14px 34px rgba(15, 26, 46, .14);
+  --header-bg: rgba(255, 255, 255, .85);
+  --bar-bg: rgba(244, 247, 251, .85);
+  --glow-1: rgba(76, 141, 255, .1);
+  --glow-2: rgba(122, 92, 255, .07);
+  --note-warn-border: #f1d79a;
+  --note-err-border: #f3b9b9;
+  --note-ok-border: #a7dcc4;
+  --ok-text: #047857;
+  --info-text: #1d4ed8;
+  --silver: #64748b;
+  --on-green: #fff;
+  --bronze: #c2410c;
+  --chart-label: #55627a;
+  --chart-guide: rgba(15, 26, 46, .4);
+  --chart-dot: #fff;
+  --chart-tip-bg: rgba(15, 26, 46, .9);
+  --chart-tip-text: #fff;
+  color-scheme: light;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
   background:
-    radial-gradient(1100px 520px at 8% -12%, rgba(76, 141, 255, .16), transparent 60%),
-    radial-gradient(900px 480px at 100% -6%, rgba(122, 92, 255, .12), transparent 55%),
+    radial-gradient(1100px 520px at 8% -12%, var(--glow-1), transparent 60%),
+    radial-gradient(900px 480px at 100% -6%, var(--glow-2), transparent 55%),
     var(--bg);
   background-attachment: fixed;
   color: var(--text);
@@ -58,7 +118,7 @@ header {
   position: relative; z-index: 20;
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
   gap: 10px 20px; padding: 10px 20px;
-  background: rgba(11, 18, 32, .8);
+  background: var(--header-bg);
   -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid var(--border);
 }
@@ -111,6 +171,14 @@ canvas { width: 100%; }
 }
 .btn.secondary:hover { border-color: var(--primary); background: var(--surface-3); }
 .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+/* 主題切換鈕（gt-nav.js 加在導覽列最後） */
+.gt-theme-btn {
+  flex: none; width: 34px; height: 34px; display: inline-grid; place-items: center; padding: 0;
+  border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface-2);
+  font-size: 16px; line-height: 1; cursor: pointer; font-family: inherit;
+}
+.gt-theme-btn:hover { border-color: var(--primary); background: var(--surface-3); }
 .btn:active { transform: translateY(0); }
 
 @media (max-width: 900px) {

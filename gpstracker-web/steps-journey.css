@@ -45,7 +45,7 @@
 .sj-chart .area { fill: url(#sjArea); }
 .sj-chart text { fill: var(--muted); font-size: 11px; }
 .sj-chart .ms { stroke: rgba(251, 191, 36, .7); stroke-width: 1; stroke-dasharray: 5 4; }
-.sj-chart .ms-label { fill: #fbbf24; font-size: 11px; }
+.sj-chart .ms-label { fill: var(--amber); font-size: 11px; }
 
 .sj-group { margin-bottom: 18px; }
 .sj-group-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; margin: 0 0 8px; }

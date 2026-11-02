@@ -22,8 +22,9 @@
     // 舊連結相容：競賽中心等頁面仍以 index.html?track=<id> 指向單筆紀錄 → 轉到新的活動故事頁（保留其餘參數）。
     if (new URLSearchParams(location.search).get("track")) location.replace("activity.html" + location.search);
   </script>
-  <link href="style.css?v=8ec4e0bb" rel="stylesheet" />
-  <link href="gt-ui.css?v=d1e2462d" rel="stylesheet" />
+  <script src="gt-theme.js?v=aca527f8"></script>
+  <link href="style.css?v=4f7b45bc" rel="stylesheet" />
+  <link href="gt-ui.css?v=de37c465" rel="stylesheet" />
   <script defer src="common.js?v=08303bce"></script>
   <script defer src="solar-levels.js?v=38941ca7"></script>
   <script defer src="solar-core.js?v=3bca26ad"></script>
@@ -33,7 +34,7 @@
   <script defer src="gt-core.js?v=e0cfc9ae"></script>
   <script defer src="gt-data.js?v=17579721"></script>
   <script defer src="gt-challenges.js?v=7aa8c2f9"></script>
-  <script defer src="gt-nav.js?v=27eb0560"></script>
+  <script defer src="gt-nav.js?v=f4e1a4ce"></script>
   <script defer src="home.js?v=429ccb94"></script>
 </head>
 <body>

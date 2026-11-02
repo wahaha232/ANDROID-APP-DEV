@@ -28,6 +28,11 @@
     function X(f) { return PAD_L + (W - PAD_L - PAD_R) * f; }
     function Y(v) { return H - PAD_B - (H - PAD_T - PAD_B) * ((v - min) / (max - min)); }
 
+    // 文字、輔助線與提示框顏色取自主題變數（gt-theme.js 切換時重畫）；沒有變數時沿用深色值。
+    function themeColor(name, fallback) {
+      return (window.getComputedStyle ? getComputedStyle(canvas).getPropertyValue(name).trim() : "") || fallback;
+    }
+
     function draw() {
       var ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, W, H);
@@ -41,7 +46,7 @@
       g.addColorStop(0, color + "55"); g.addColorStop(1, color + "05");
       ctx.fillStyle = g; ctx.fill();
 
-      ctx.fillStyle = "#9fb0cb"; ctx.font = "11px -apple-system, 'Segoe UI', sans-serif";
+      ctx.fillStyle = themeColor("--chart-label", "#9fb0cb"); ctx.font = "11px -apple-system, 'Segoe UI', sans-serif";
       ctx.textBaseline = "alphabetic";
       ctx.fillText(Math.round(max) + " " + unit, PAD_L, 12);
       ctx.fillText(Math.round(min) + "", PAD_L, H - 3);
@@ -51,16 +56,16 @@
         ctx.save(); ctx.strokeStyle = c; ctx.lineWidth = 1.5; if (dash) ctx.setLineDash([3, 3]);
         ctx.beginPath(); ctx.moveTo(x, PAD_T - 6); ctx.lineTo(x, H - PAD_B); ctx.stroke(); ctx.restore();
         var v = valueAt(f);
-        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x, Y(v), 4, 0, 6.2832); ctx.fill();
+        ctx.fillStyle = themeColor("--chart-dot", "#fff"); ctx.beginPath(); ctx.arc(x, Y(v), 4, 0, 6.2832); ctx.fill();
         ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
         return { x: x, v: v };
       }
       if (hover != null) {
-        var h = line(hover, "rgba(255,255,255,.45)", true);
+        var h = line(hover, themeColor("--chart-guide", "rgba(255,255,255,.45)"), true);
         var text = Math.round(h.v) + " " + unit;
         var tw = ctx.measureText(text).width + 10, tx = Math.min(Math.max(h.x - tw / 2, 2), W - tw - 2);
-        ctx.fillStyle = "rgba(9,14,25,.9)"; ctx.fillRect(tx, 2, tw, 16);
-        ctx.fillStyle = "#fff"; ctx.fillText(text, tx + 5, 14);
+        ctx.fillStyle = themeColor("--chart-tip-bg", "rgba(9,14,25,.9)"); ctx.fillRect(tx, 2, tw, 16);
+        ctx.fillStyle = themeColor("--chart-tip-text", "#fff"); ctx.fillText(text, tx + 5, 14);
       }
       if (cursor != null) line(cursor, "#ff7a45", false);
     }
@@ -104,6 +109,7 @@
     });
 
     if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas); else window.addEventListener("resize", resize);
+    document.addEventListener("gt-themechange", schedule);
 
     return {
       setData: function (x, y) {
