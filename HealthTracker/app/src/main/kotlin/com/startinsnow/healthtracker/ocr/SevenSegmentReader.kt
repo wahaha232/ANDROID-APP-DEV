@@ -60,7 +60,7 @@ object SevenSegmentReader {
     }
 
     /** 以 integral image 做方框平均（半徑 r）。 */
-    private fun boxBlur(src: IntArray, w: Int, h: Int, r: Int): IntArray {
+    internal fun boxBlur(src: IntArray, w: Int, h: Int, r: Int): IntArray {
         val ii = LongArray((w + 1) * (h + 1))
         for (y in 0 until h) {
             var row = 0L
@@ -83,7 +83,7 @@ object SevenSegmentReader {
 
     // ---------- 2. 線段候選 ----------
 
-    private class Comp(val pixels: IntArray, val area: Int, val bw: Int, val bh: Int, val y0: Int, val touchesEdge: Boolean)
+    internal class Comp(val pixels: IntArray, val area: Int, val bw: Int, val bh: Int, val x0: Int, val y0: Int, val touchesEdge: Boolean)
 
     /** 已知數字高度時（由文字辨識的位置線索而來）：只看大小合理的塊，不必猜標準大小；黏在一起的線段也保留。 */
     private fun hintedComponents(mask: BooleanArray, w: Int, h: Int, digitHeight: Int): List<Comp> =
@@ -92,7 +92,7 @@ object SevenSegmentReader {
                 it.bh <= 1.3 * digitHeight && it.bw <= 3.0 * digitHeight && max(it.bw, it.bh) <= 12 * min(it.bw, it.bh)
         }
 
-    private fun allComponents(mask: BooleanArray, w: Int, h: Int): List<Comp> {
+    internal fun allComponents(mask: BooleanArray, w: Int, h: Int): List<Comp> {
         val seen = BooleanArray(mask.size)
         val comps = ArrayList<Comp>()
         val stack = IntArray(mask.size)
@@ -117,7 +117,7 @@ object SevenSegmentReader {
                     if (mask[n] && !seen[n]) { seen[n] = true; stack[sp++] = n }
                 }
             }
-            comps.add(Comp(pts.toIntArray(), pts.size, x1 - x0 + 1, y1 - y0 + 1, y0, x0 == 0 || y0 == 0 || x1 == w - 1 || y1 == h - 1))
+            comps.add(Comp(pts.toIntArray(), pts.size, x1 - x0 + 1, y1 - y0 + 1, x0, y0, x0 == 0 || y0 == 0 || x1 == w - 1 || y1 == h - 1))
         }
         return comps
     }

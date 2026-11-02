@@ -102,4 +102,15 @@ class SevenSegmentReaderTest {
         assertNull(SevenSegmentReader.toGlucose("09"))
         assertNull(SevenSegmentReader.toGlucose(null))
     }
+
+    @Test fun digitSearchFindsTheDigitsInAWholeImage() {
+        for (text in listOf("108", "95", "117")) {
+            val i = render(text)
+            assertEquals(text, com.startinsnow.healthtracker.ocr.DigitSearch.search(i.px, i.w, i.h))
+        }
+    }
+
+    @Test fun digitSearchGivesNullWhenThereAreNoDigits() {
+        assertNull(com.startinsnow.healthtracker.ocr.DigitSearch.search(IntArray(300 * 300) { 130 }, 300, 300))
+    }
 }
