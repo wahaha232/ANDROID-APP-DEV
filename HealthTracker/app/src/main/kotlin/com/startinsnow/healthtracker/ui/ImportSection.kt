@@ -84,8 +84,34 @@ fun ImportSection(records: HealthRecordRepository, cloud: CloudSync) {
                 }
                 batchProgress = null
                 message = result.summary() + "。"
-                if (result.saved > 0) {
+                if (result.saved + result.attached > 0) {
                     // 先存好在手機，再接著上傳；沒登入就留在手機，登入後會自動上傳
+                    val engine = cloud.engine
+                    message += if (engine == null || engine.currentSession() == null) {
+                        "尚未登入雲端，資料已存在手機，登入後會自動上傳。"
+                    } else {
+                        "上傳：" + engine.sync().summary()
+                    }
+                }
+            } catch (e: Exception) {
+                batchProgress = null
+                message = "批次匯入失敗：${e.message}"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    // 從檔案（資料夾）選照片：與相簿選圖相同的批次流程，適合整批放在同一個資料夾的照片
+    val filePhotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            try {
+                val result = PhotoBatchImporter(context, records).run(uris) { done, total -> batchProgress = "處理中 $done / $total" }
+                batchProgress = null
+                message = result.summary() + "。"
+                if (result.saved + result.attached > 0) {
                     val engine = cloud.engine
                     message += if (engine == null || engine.currentSession() == null) {
                         "尚未登入雲端，資料已存在手機，登入後會自動上傳。"
@@ -138,6 +164,11 @@ fun ImportSection(records: HealthRecordRepository, cloud: CloudSync) {
             message = null
             photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }) { Text(batchProgress ?: "批次匯入照片") }
+        OutlinedButton(enabled = !busy, onClick = {
+            message = null
+            filePhotoPicker.launch(arrayOf("image/jpeg", "image/png"))
+        }) { Text("從檔案選照片（批次）") }
+        Text("同一時間已有紀錄但沒有照片時，會直接把照片補到那筆紀錄上（數值與情境不變）。", style = MaterialTheme.typography.bodySmall)
         Text("小米體脂計 S400（米家）", style = MaterialTheme.typography.titleMedium)
         MijiaCaptureStatus()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

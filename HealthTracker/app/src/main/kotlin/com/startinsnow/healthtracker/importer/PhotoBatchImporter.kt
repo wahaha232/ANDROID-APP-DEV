@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
 import com.startinsnow.healthtracker.data.repository.AddOutcome
+import com.startinsnow.healthtracker.data.repository.AttachOutcome
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 import com.startinsnow.healthtracker.ocr.PhotoOcr
 import com.startinsnow.healthtracker.ocr.PhotoStore
@@ -12,6 +13,8 @@ import kotlinx.coroutines.withContext
 
 data class BatchResult(
     val saved: Int = 0,
+    /** 同一時間已有紀錄但沒有照片，這次把照片補上去。 */
+    val attached: Int = 0,
     /** 已有相同數值、時間相近的紀錄（重複匯入同一批照片時會出現）。 */
     val duplicate: Int = 0,
     /** 照片裡認不出血糖數值。 */
@@ -20,10 +23,11 @@ data class BatchResult(
     val noTime: Int = 0,
     val failed: Int = 0,
 ) {
-    val total get() = saved + duplicate + noValue + noTime + failed
+    val total get() = saved + attached + duplicate + noValue + noTime + failed
 
     fun summary(): String = buildString {
-        append("共 $total 張：已記錄 $saved 筆")
+        append("共 $total 張：新增 $saved 筆")
+        if (attached > 0) append("、補上照片 $attached 筆")
         if (duplicate > 0) append("、重複略過 $duplicate")
         if (noValue > 0) append("、認不出數值 $noValue")
         if (noTime > 0) append("、無拍攝時間 $noTime")
@@ -57,8 +61,16 @@ class PhotoBatchImporter(private val context: Context, private val records: Heal
             val taken = withContext(Dispatchers.IO) { PhotoStore.captureTime(file) ?: mediaStoreTime(uri) }
             if (taken == null || taken > now) return r.copy(noTime = r.noTime + 1)
             withContext(Dispatchers.IO) { PhotoStore.compressInPlace(file) }
-            // 與新增紀錄用同一套辨識（含液晶七段數字讀取），不只一般文字辨識
-            val value = PhotoOcr.candidates(file).firstOrNull()?.value ?: return r.copy(noValue = r.noValue + 1)
+            // 同一時間已有紀錄但沒照片：直接把照片補上去（數值以紀錄為準，不重新辨識）
+            when (records.attachPhotoIfNearby(taken, file.absolutePath, now)) {
+                AttachOutcome.ATTACHED -> { keep = true; return r.copy(attached = r.attached + 1) }
+                AttachOutcome.HAS_PHOTO -> return r.copy(duplicate = r.duplicate + 1)
+                AttachOutcome.NONE -> {}
+            }
+            // 與新增紀錄用同一套辨識（含液晶七段數字讀取）。自動模式只收「讀到七段數字」或「數字旁有 mg/dL」的結果，
+            // 避免把標籤、單據上的數字當成血糖。
+            val best = PhotoOcr.candidates(file).firstOrNull { it.lineText == "七段數字" || it.score > 1.05 }
+            val value = best?.value ?: return r.copy(noValue = r.noValue + 1)
             return when (records.addFromPhoto(value, taken, file.absolutePath, now)) {
                 AddOutcome.ADDED -> { keep = true; r.copy(saved = r.saved + 1) }
                 AddOutcome.DUPLICATE -> r.copy(duplicate = r.duplicate + 1)

@@ -39,6 +39,10 @@ interface HealthRecordDao {
     )
     suspend fun countNearby(type: RecordType, value: Double, value2: Double?, from: Long, to: Long): Int
 
+    /** 指定時間附近（未刪除）最接近的一筆；補上照片時用。 */
+    @Query("SELECT * FROM health_records WHERE deletedAt IS NULL AND type = :type AND measuredAt BETWEEN :from AND :to ORDER BY ABS(measuredAt - :target) LIMIT 1")
+    suspend fun nearest(type: RecordType, from: Long, to: Long, target: Long): HealthRecord?
+
     @Query("UPDATE health_records SET syncState = 'SYNCED' WHERE id = :id AND updatedAt = :updatedAt")
     suspend fun markSynced(id: String, updatedAt: Long): Int
 

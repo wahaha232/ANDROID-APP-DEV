@@ -16,6 +16,9 @@ import java.util.UUID
 
 enum class AddOutcome { ADDED, DUPLICATE, INVALID }
 
+/** 補照片的結果：已補上／附近的紀錄已經有照片（視為重複）／附近沒有紀錄。 */
+enum class AttachOutcome { ATTACHED, HAS_PHOTO, NONE }
+
 data class ImportResult(val inserted: Int, val skipped: Int)
 
 data class RestoreResult(val inserted: Int, val updated: Int, val skipped: Int)
@@ -61,6 +64,22 @@ class HealthRecordRepository(private val dao: HealthRecordDao, private val db: R
             )
         )
         return null
+    }
+
+    /**
+     * 照片的拍攝時間前後 2 分鐘內已經有血糖紀錄、而那筆還沒有照片：把照片掛上去（數值、情境不動），
+     * 回傳 ATTACHED。補上照片的紀錄標為待同步、來源改為照片辨識，雲端同步時才會一併上傳照片。
+     */
+    suspend fun attachPhotoIfNearby(measuredAt: Long, photoPath: String, now: Long = System.currentTimeMillis()): AttachOutcome {
+        val near = dao.nearest(RecordType.BLOOD_GLUCOSE, measuredAt - DUPLICATE_WINDOW_MS, measuredAt + DUPLICATE_WINDOW_MS, measuredAt) ?: return AttachOutcome.NONE
+        if (near.photoPath != null && java.io.File(near.photoPath).isFile) return AttachOutcome.HAS_PHOTO // 同一時間已有紀錄和照片：不論辨識出的數字，都不再新增
+        dao.upsert(
+            near.copy(
+                photoPath = photoPath, source = RecordSource.OCR,
+                updatedAt = maxOf(now, near.updatedAt + 1), syncState = SyncState.PENDING,
+            )
+        )
+        return AttachOutcome.ATTACHED
     }
 
     /** 批次照片匯入用：數值不合理回 INVALID；±2 分鐘內已有相同數值回 DUPLICATE（不重複寫入）。 */
