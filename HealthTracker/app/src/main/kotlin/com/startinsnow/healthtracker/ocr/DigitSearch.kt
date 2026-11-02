@@ -26,8 +26,14 @@ object DigitSearch {
             val x1 = (r.x1 * f).toInt().coerceIn(x0 + 1, w)
             val y0 = ((r.y0 - r.ref) * f).toInt().coerceIn(0, h - 2)
             val y1 = ((r.y1 + r.ref) * f).toInt().coerceIn(y0 + 1, h)
-            val read = SevenSegmentReader.read(crop(gray, w, x0, y0, x1, y1), x1 - x0, y1 - y0)
+            val roi = crop(gray, w, x0, y0, x1, y1)
+            val read = SevenSegmentReader.read(roi, x1 - x0, y1 - y0)
             if (SevenSegmentReader.toGlucose(read) != null) return read
+            // 線段黏在一起時（光線不均、反光），改用「已知數字高度」模式再讀；高度約為直條長度的 2.35 倍
+            for (mul in listOf(1.0, 0.9, 1.1)) {
+                val hinted = SevenSegmentReader.read(roi, x1 - x0, y1 - y0, (r.ref * f * 2.35 * mul).toInt())
+                if (SevenSegmentReader.toGlucose(hinted) != null) return hinted
+            }
         }
 
         // C：掃描上半部的重疊視窗，多數決

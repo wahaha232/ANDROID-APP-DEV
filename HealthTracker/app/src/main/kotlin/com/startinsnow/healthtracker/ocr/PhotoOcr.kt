@@ -98,17 +98,17 @@ object PhotoOcr {
      * 數字高度用線索框高度的幾種比例各試一次；左側範圍也試兩種寬度（數字最多 3 位）。讀到合理血糖值就回傳。
      */
     private fun sevenSegment(bmp: Bitmap, lines: List<OcrLine>): GlucoseCandidate? {
-        val anchors = lines.filter { it.bottom > it.top && it.height >= bmp.height * 0.04 }.sortedByDescending { it.height }.take(3)
+        val anchors = lines.filter { it.bottom > it.top && it.height >= bmp.height * 0.04 }.sortedByDescending { it.height }.take(1) // 主要路徑是 DigitSearch；這裡只是最後的備援，只試最大的一個線索
         for (a in anchors) {
             val h = a.bottom - a.top
-            for (leftMul in listOf(2.6, 3.0)) {
+            for (leftMul in listOf(3.0)) {
                 val x0 = (a.left - leftMul * h).toInt().coerceIn(0, bmp.width - 2)
                 val y0 = (a.top - 0.08 * h).toInt().coerceIn(0, bmp.height - 2)
                 val x1 = (a.right + 0.3 * h).toInt().coerceIn(x0 + 1, bmp.width) // 文字框常比實際數字偏左，右側要多留
                 val y1 = (a.bottom + 0.08 * h).toInt().coerceIn(y0 + 1, bmp.height)
                 val gray = grayRegion(bmp, x0, y0, x1, y1)
                 debugDump(bmp, gray, x1 - x0, y1 - y0, h, "a${a.left}_${a.top}_${a.right}_${a.bottom}_m$leftMul")
-                for (hintMul in listOf(0.88, 0.84, 0.92)) { // 文字框比實際數字高約 12%
+                for (hintMul in listOf(0.88)) { // 文字框比實際數字高約 12%
                     val raw = SevenSegmentReader.read(gray, x1 - x0, y1 - y0, (h * hintMul).toInt())
                     if (com.startinsnow.healthtracker.BuildConfig.DEBUG) android.util.Log.d("PhotoOcr", "seg7 anchor=[${a.left},${a.top},${a.right},${a.bottom}] roi=[$x0,$y0,$x1,$y1] hint=${(h * hintMul).toInt()} -> $raw")
                     val v = SevenSegmentReader.toGlucose(raw) ?: continue

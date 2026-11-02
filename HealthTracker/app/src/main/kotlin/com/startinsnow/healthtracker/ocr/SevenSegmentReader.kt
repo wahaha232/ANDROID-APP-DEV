@@ -19,14 +19,18 @@ object SevenSegmentReader {
 
     /** gray：0..255 灰階，大小 w×h。回傳數字字串（1～4 位）；讀不出來回傳 null。 */
     fun read(gray: IntArray, w: Int, h: Int, digitHeight: Int = 0): String? {
-        // 局部對比的視窗大小會影響結果：用三種大小各讀一次，至少兩次相同才採用，避免單次誤讀
-        val results = listOf(0.12, 0.2, 0.3).mapNotNull { readWith(gray, w, h, it, digitHeight) }
+        // 局部對比的視窗大小會影響結果：用三種大小各讀一次，避免單次誤讀
+        var results = listOf(0.12, 0.2, 0.3).mapNotNull { readWith(gray, w, h, it, digitHeight) }
+        // 線段之間的縫很細時，先模糊會讓相鄰線段黏成一塊；讀不到就改用不模糊的遮罩再試一次
+        if (results.isEmpty()) results = listOf(0.12, 0.2, 0.3).mapNotNull { readWith(gray, w, h, it, digitHeight, preBlur = 0) }
         if (results.isEmpty()) return null
-        val top = results.groupingBy { it }.eachCount().maxByOrNull { it.value }!!
-        return if (top.value >= 2) top.key else null
+        val counts = results.groupingBy { it }.eachCount()
+        val top = counts.maxByOrNull { it.value }!!
+        // 兩次以上相同才採用；只有一個視窗讀到（其他都讀不出來）而沒有互相矛盾的結果，也採用
+        return if (top.value >= 2 || counts.size == 1) top.key else null
     }
 
-    internal fun readWith(gray: IntArray, w: Int, h: Int, windowFrac: Double, digitHeight: Int = 0): String? {
+    internal fun readWith(gray: IntArray, w: Int, h: Int, windowFrac: Double, digitHeight: Int = 0, preBlur: Int = 1): String? {
         if (w < 40 || h < 40) return null
         // 四周補一圈底色，避免緊貼邊緣的數字被當成邊界雜訊丟掉
         val pad = max(8, min(w, h) / 12)
@@ -38,7 +42,7 @@ object SevenSegmentReader {
 
         // 局部背景的視窗要比線段結構大：已知數字高度時取 0.7～1.8 倍數字高度，否則取影像短邊的比例
         val windowPx = if (digitHeight > 0) (digitHeight * windowFrac * 6).toInt() else (min(pw, ph) * windowFrac).toInt().coerceIn(21, 151)
-        val mask = darkMask(g, pw, ph, windowPx) ?: return null
+        val mask = darkMask(g, pw, ph, windowPx, preBlur) ?: return null
         val segs = if (digitHeight > 0) hintedComponents(mask, pw, ph, digitHeight) else segmentComponents(mask, pw, ph)
         if (segs.size < 3) return null
         val pixels = digitBand(segs, pw, ph, digitHeight) ?: return null // 編碼 y*pw+x
@@ -48,8 +52,8 @@ object SevenSegmentReader {
 
     // ---------- 1. 深色遮罩 ----------
 
-    private fun darkMask(g: IntArray, w: Int, h: Int, windowPx: Int): BooleanArray? {
-        val blur = boxBlur(g, w, h, 1)
+    private fun darkMask(g: IntArray, w: Int, h: Int, windowPx: Int, preBlur: Int): BooleanArray? {
+        val blur = if (preBlur > 0) boxBlur(g, w, h, preBlur) else g
         val win = windowPx.coerceAtLeast(21) / 2
         val bg = boxBlur(blur, w, h, win)
         val sorted = blur.sorted()
