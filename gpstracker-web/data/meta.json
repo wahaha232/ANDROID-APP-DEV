@@ -31,25 +31,30 @@
       "mode": "PUBLIC_TRANSPORT"
     },
     "afd27c76-6fe6-4109-bcd0-bb697714b436": {
-      "title": "\u96A8\u6A5F\u8DEF\u7DDA 1023-1811"
+      "title": "隨機路線 1023-1811"
     },
     "61c74cc7-6274-4aa3-a24a-c76f82c7804a": {
-      "title": "\u74B0\u5927\u4E0D\u5217\u985B\u5CF6\uFF08\u542B\u6642\u9593\uFF09"
+      "title": "環大不列顛島（含時間）"
     },
     "18da9ea2-e939-4f81-a04a-895dbd82379a": {
-      "title": "\u96A8\u6A5F\u8DEF\u7DDA 1027-1029"
+      "title": "隨機路線 1027-1029"
     },
     "ca1d1443-71b6-44a7-a911-da6ba579b526": {
-      "title": "\u74B0\u5927\u4E0D\u5217\u985B\u5CF6\uFF08\u542B\u6642\u9593\uFF09"
+      "title": "環大不列顛島（含時間）"
     },
     "9c3bccbd-46ab-475f-80c7-8eb1a1e8525c": {
-      "title": "\u7F8E\u570B 20 \u865F\u516C\u8DEF US Route 20\uFF08\u542B\u6642\u9593\u30FB\u958B\u8ECA\uFF09"
+      "title": "美國 20 號公路 US Route 20（含時間・開車）"
     },
     "7df43c15-0893-40b7-a0a7-214d66bf1496": {
       "title": "USA Perimeter Drive Loop (100k, timed)"
     },
     "81a1fb32-87be-4766-8246-f4a6df356750": {
       "title": "Great Britain Coastal Loop"
+    },
+    "64107ebe-591f-4b2a-989a-0f95dcb33db9": {
+      "title": "",
+      "notes": "",
+      "mode": "PUBLIC_TRANSPORT"
     }
   }
 }
