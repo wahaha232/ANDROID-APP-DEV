@@ -72,7 +72,10 @@ class SyncEngine(
 
     suspend fun hasPending(): Boolean = store.pending().isNotEmpty()
 
-    suspend fun sync(): SyncResult = lock.withLock {
+    /** 全程在 IO 執行緒：網路錯誤回應的內容也要在背景執行緒讀（在主執行緒讀會丟 NetworkOnMainThreadException）。 */
+    suspend fun sync(): SyncResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { syncLocked() }
+
+    private suspend fun syncLocked(): SyncResult = lock.withLock {
         val result = try {
             val r = withAuth { session -> doSync(session) }
             if (r.error == null) sessions.setLastSyncAt(clock())
