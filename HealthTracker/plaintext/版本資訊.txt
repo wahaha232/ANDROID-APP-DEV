@@ -1,0 +1,11 @@
+HealthTracker（血糖記錄）1.0.639
+versionCode：639
+原始碼 commit：36893aa425f5c4c6e4effcdb412e4efa1c18ea29（1.0.638）
+GitHub main：https://github.com/wahaha232/ANDROID-APP-DEV
+GitHub Release：https://github.com/wahaha232/ANDROID-APP-DEV/releases/tag/healthtracker-v1.0.639
+最新 APK：https://github.com/wahaha232/ANDROID-APP-DEV/releases/latest/download/healthtracker-1.0.639-debug.apk
+
+本次修正：
+- Supabase 網址若貼上 /rest/v1、/auth/v1、/storage/v1 會自動收斂為專案根網址，修正 /rest/v1/rest/v1 的 404。
+- 總覽「標準判定」改為近 30 天平均值（血糖依空腹／餐前、餐後分開平均），不再只看最近一筆。
+- 單筆紀錄標籤改為「此筆」，與平均判定區分。

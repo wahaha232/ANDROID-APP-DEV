@@ -1,0 +1,13 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+build/
+captures/
+.cxx/
+*.apk
+*.aab
+*.log
+
+# 歸檔資料夾（含 APK、圖示原檔、純文字原始碼）不進版控
+血糖記錄APP/

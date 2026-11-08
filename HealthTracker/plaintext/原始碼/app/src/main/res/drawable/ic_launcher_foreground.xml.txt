@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  圖示主圖（使用者提供的 3D 風格圖，D:\Claude\血糖記錄APP\ICON.jpg 裁切後的 ic_launcher_art.png）。
+  自適應圖示畫布 108dp、可見區約中央 72dp：主圖放在 80dp 的方塊內（四周各內縮 14dp），
+  內容（血滴、愛心、剪貼簿）縮在中央 66dp 安全區內，圓形或圓角方形遮罩都不會切到。
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:bottom="14dp"
+        android:left="14dp"
+        android:right="14dp"
+        android:top="14dp">
+        <bitmap
+            android:gravity="fill"
+            android:src="@drawable/ic_launcher_art" />
+    </item>
+</layer-list>
