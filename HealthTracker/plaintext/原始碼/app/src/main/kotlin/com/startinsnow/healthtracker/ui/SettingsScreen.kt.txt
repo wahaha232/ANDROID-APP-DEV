@@ -2,10 +2,11 @@ package com.startinsnow.healthtracker.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -38,6 +39,7 @@ import com.startinsnow.healthtracker.data.repository.RecordValidator
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository, cloud: CloudSync) {
     val scope = rememberCoroutineScope()
@@ -74,7 +76,8 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // 設定分組：一次只顯示一組，常用的個人資料與雲端同步不必在一長串裡找
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // 用 FlowRow 讓 7 個分組自動換行，避免「關於／App 更新」藏在橫向捲動最右邊而找不到。
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("個人資料", "匯入資料", "雲端同步", "報告", "備份與隱私", "提醒與安全", "關於").forEachIndexed { i, name ->
                 FilterChip(selected = group == i, onClick = { group = i }, label = { Text(name) })
             }
@@ -124,7 +127,12 @@ fun SettingsScreen(repo: UserSettingsRepository, records: HealthRecordRepository
         Text("總覽圖表可在卡片上切換「趨勢／日曆／時段」，會記住你上次選的。", style = MaterialTheme.typography.bodySmall)
         }
         if (group == 1) ImportSection(records, cloud)
-        if (group == 2) CloudSection(cloud)
+        if (group == 2) {
+            CloudSection(cloud)
+            HorizontalDivider()
+            // 雲端更新放在雲端同步頁，登入後立即看得到
+            UpdateSection(cloud, repo)
+        }
         if (group == 3) ReportSection(records, repo)
         if (group == 4) BackupSection(records)
         if (group == 5) ReminderLockSection(repo)

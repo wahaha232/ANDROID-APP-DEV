@@ -46,7 +46,17 @@ fun UpdateSection(cloud: CloudSync, settings: UserSettingsRepository) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val engine = cloud.engine
-    val updater = remember(engine) { engine?.let { AppUpdater(it, BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY) } }
+    val baseUrl = cloud.configuredUrl()
+    val anonKey = cloud.configuredAnonKey()
+    // 更新器必須用「App 內目前設定」的 Supabase 網址與 anon key，
+    // 不能只用建置時的 BuildConfig（發佈版通常沒有把金鑰寫進 APK）。
+    val updater = remember(engine, baseUrl, anonKey) {
+        if (engine != null && !baseUrl.isNullOrBlank() && !anonKey.isNullOrBlank()) {
+            AppUpdater(engine, baseUrl, anonKey)
+        } else {
+            null
+        }
+    }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var latest by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -87,9 +97,11 @@ fun UpdateSection(cloud: CloudSync, settings: UserSettingsRepository) {
             Text("上次自動檢查：" + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(at)) + "　" + msg, style = MaterialTheme.typography.bodySmall)
         }
         if (updater == null) {
-            Text("這個版本沒有設定雲端，無法檢查更新。", style = MaterialTheme.typography.bodySmall)
+            Text("尚未設定雲端，無法檢查更新。請先到「雲端同步」登入，或輸入 Supabase 網址與 anon key。", style = MaterialTheme.typography.bodySmall)
             return@Column
         }
+        Text("更新來源：${baseUrl.orEmpty()}", style = MaterialTheme.typography.bodySmall)
+        Text("雲端需要私人 bucket「app-updates」，內含 latest.json 與 APK；還沒上傳時會顯示「雲端還沒有放新版本」。", style = MaterialTheme.typography.bodySmall)
         OutlinedButton(enabled = !busy, onClick = {
             busy = true; message = "檢查中…"; downloaded = false; progress = null
             scope.launch {

@@ -39,6 +39,9 @@ class CloudSync(context: Context, private val dao: HealthRecordDao) {
     /** 目前使用的設定（給畫面顯示；金鑰不直接顯示）。 */
     fun configuredUrl(): String? = readUrl()
 
+    /** App 內設定或建置時的 anon key（只給雲端更新等內部功能使用，不顯示在畫面）。 */
+    fun configuredAnonKey(): String? = readKey()
+
     fun hasRuntimeConfig(): Boolean = prefs.getString(KEY_URL, null)?.isNotBlank() == true
 
     /** 儲存使用者輸入的雲端設定；回傳錯誤訊息，成功回傳 null。 */
