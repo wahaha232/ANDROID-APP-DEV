@@ -63,6 +63,7 @@ import com.startinsnow.healthtracker.data.db.HealthRecord
 import com.startinsnow.healthtracker.data.db.MeasureContext
 import com.startinsnow.healthtracker.data.prefs.UserSettings
 import com.startinsnow.healthtracker.data.prefs.UserSettingsRepository
+import com.startinsnow.healthtracker.data.repository.HealthStandards
 import com.startinsnow.healthtracker.data.db.RecordType
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
 import com.startinsnow.healthtracker.data.repository.OverviewMath
@@ -182,26 +183,53 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: 
             }
         }
 
-        // 標準判定：使用衛福部／WHO 公開標準，依個人性別、年齡與身高判定（僅供參考）
+        // 標準判定：用「近 30 天平均值」判定，不是只看最近一筆。
+        val standardsDays = 30
         val standardRows = listOf(RecordType.WEIGHT, RecordType.BODY_FAT, RecordType.BLOOD_GLUCOSE).mapNotNull { t ->
-            OverviewMath.latest(list, t)?.let { r -> assessmentFor(r, user)?.let { a -> Triple(r, a, t) } }
+            val window = OverviewMath.window(list, t, standardsDays, now)
+            if (window.isEmpty()) return@mapNotNull null
+            // 血糖依情境分開平均；有空腹／餐前就用它，其次餐後，最後才全部混算。
+            val (used, usedContext, contextLabel) = if (t == RecordType.BLOOD_GLUCOSE) {
+                val fasting = window.filter { it.context == MeasureContext.FASTING || it.context == MeasureContext.BEFORE_MEAL }
+                val afterMeal = window.filter { it.context == MeasureContext.AFTER_MEAL }
+                when {
+                    fasting.isNotEmpty() -> Triple(fasting, MeasureContext.FASTING as MeasureContext?, "空腹／餐前")
+                    afterMeal.isNotEmpty() -> Triple(afterMeal, MeasureContext.AFTER_MEAL as MeasureContext?, "餐後")
+                    else -> Triple(window, null as MeasureContext?, "未分情境")
+                }
+            } else {
+                Triple(window, null as MeasureContext?, null)
+            }
+            val average = used.map { it.value }.average()
+            val assessment = assessmentForAverage(t, average, user, usedContext) ?: return@mapNotNull null
+            AverageStandardRow(t, average, used.size, assessment, contextLabel)
         }
         if (standardRows.isNotEmpty()) {
             AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("標準判定（衛福部／WHO，僅供參考）", style = MaterialTheme.typography.titleSmall)
-                    standardRows.forEach { (r, a, _) ->
+                    Text("標準判定（近 $standardsDays 天平均）", style = MaterialTheme.typography.titleSmall)
+                    Text("以區間平均值判定，不是只看最近一筆；依衛福部／WHO 標準，僅供參考。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    standardRows.forEach { row ->
                         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Icon(recordIcon(r.type), contentDescription = null, tint = recordAccent(r.type), modifier = Modifier.size(20.dp))
+                            Icon(recordIcon(row.type), contentDescription = null, tint = recordAccent(row.type), modifier = Modifier.size(20.dp))
                             Column(Modifier.weight(1f)) {
-                                Text("${r.type.label}　${formatMain(r)}", style = MaterialTheme.typography.bodyMedium)
-                                Text(a.label, color = assessmentColor(a.severity), style = MaterialTheme.typography.bodySmall)
-                                Text(a.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                val bmi = if (row.type == RecordType.WEIGHT) HealthStandards.bmi(row.average, user.heightCm) else null
+                                val avgText = buildString {
+                                    append(row.type.label).append(" 平均 ")
+                                    append(fmtNumber(row.average, if (row.type == RecordType.BLOOD_GLUCOSE) 0 else 1))
+                                    append(' ').append(row.type.unit)
+                                    if (bmi != null) append("（BMI ${fmtNumber(bmi, 1)}）")
+                                    row.contextLabel?.let { append("（$it）") }
+                                    append("，${row.count} 筆")
+                                }
+                                Text(avgText, style = MaterialTheme.typography.bodyMedium)
+                                Text(row.assessment.label + "（平均判定）", color = assessmentColor(row.assessment.severity), style = MaterialTheme.typography.bodySmall)
+                                Text(row.assessment.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
-                    com.startinsnow.healthtracker.data.repository.HealthStandards
-                        .healthyWeightRange(user.heightCm, com.startinsnow.healthtracker.data.repository.HealthStandards.ageFromBirthYear(user.birthYear))
+                    HealthStandards
+                        .healthyWeightRange(user.heightCm, HealthStandards.ageFromBirthYear(user.birthYear))
                         ?.let { Text("標準體重：${it.detail}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
@@ -231,6 +259,14 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: 
         AddRecordDialog(records = records, initialType = t, onDismiss = { addType = null }, onSaved = { addType = null })
     }
 }
+
+private data class AverageStandardRow(
+    val type: RecordType,
+    val average: Double,
+    val count: Int,
+    val assessment: HealthStandards.Assessment,
+    val contextLabel: String?,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

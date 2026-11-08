@@ -241,9 +241,9 @@ private fun RecordCard(r: HealthRecord, user: UserSettings, onEdit: () -> Unit, 
                     if (r.type == RecordType.WEIGHT) user.bmi(r.value)?.let { append("　BMI ${"%.1f".format(it)}") }
                 }
                 Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                // 依衛福部／WHO 標準判定（資料不足就不顯示）
+                // 單筆的參考判定（總覽的「標準判定」才是用區間平均值）
                 assessmentFor(r, user)?.let { a ->
-                    Text("${a.label}（標準判定）", style = MaterialTheme.typography.bodySmall, color = assessmentColor(a.severity))
+                    Text("${a.label}（此筆）", style = MaterialTheme.typography.bodySmall, color = assessmentColor(a.severity))
                 }
                 if (r.note.isNotEmpty()) Text(r.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

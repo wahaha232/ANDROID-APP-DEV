@@ -43,7 +43,7 @@ class CloudSync(context: Context, private val dao: HealthRecordDao) {
 
     /** 儲存使用者輸入的雲端設定；回傳錯誤訊息，成功回傳 null。 */
     fun configure(url: String, anonKey: String): String? {
-        val u = url.trim().trimEnd('/')
+        val u = normalizeSupabaseUrl(url)
         val k = anonKey.trim()
         if (!u.startsWith("https://") || !u.contains(".supabase.co")) return "網址格式應為 https://xxxx.supabase.co"
         if (k.length < 30) return "anon 金鑰格式不正確（請貼上 Supabase 的 anon public key）"
@@ -59,8 +59,10 @@ class CloudSync(context: Context, private val dao: HealthRecordDao) {
     }
 
     private fun readUrl(): String? =
-        prefs.getString(KEY_URL, null)?.takeIf { it.isNotBlank() }
-            ?: BuildConfig.SUPABASE_URL.trim().takeIf { it.startsWith("https://") && it.isNotBlank() }
+        (prefs.getString(KEY_URL, null)?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.SUPABASE_URL.trim().takeIf { it.startsWith("https://") && it.isNotBlank() })
+            ?.let { normalizeSupabaseUrl(it) }
+            ?.takeIf { it.startsWith("https://") && it.contains(".supabase.co") }
 
     private fun readKey(): String? =
         prefs.getString(KEY_KEY, null)?.takeIf { it.isNotBlank() }
@@ -83,4 +85,22 @@ class CloudSync(context: Context, private val dao: HealthRecordDao) {
         const val KEY_URL = "url"
         const val KEY_KEY = "anon_key"
     }
+}
+
+/**
+ * 只保留 Supabase 專案根網址。
+ * 使用者常直接貼上 REST 端點（https://xxx.supabase.co/rest/v1）或後面帶其他路徑；
+ * 程式原本又會自己接 /rest/v1，結果變成 /rest/v1/rest/v1 而 404。這裡統一取出 scheme + host。
+ */
+internal fun normalizeSupabaseUrl(input: String): String {
+    val trimmed = input.trim()
+    val uri = runCatching { java.net.URI(trimmed) }.getOrNull()
+    if (uri != null && uri.scheme == "https" && !uri.host.isNullOrBlank()) {
+        return "https://${uri.host}"
+    }
+    // 沒有 scheme 或 URI 解析失敗時，至少去掉常見的 API 後綴與結尾斜線
+    return trimmed
+        .trimEnd('/')
+        .replace(Regex("(?i)/(rest|auth|storage)/v1$"), "")
+        .trimEnd('/')
 }

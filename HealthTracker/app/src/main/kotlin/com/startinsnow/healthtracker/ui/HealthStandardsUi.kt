@@ -24,6 +24,23 @@ internal fun assessmentFor(r: HealthRecord, user: UserSettings, nowYear: Int = Y
     }
 }
 
+/** 總覽的標準判定：用一段期間的平均值判定，而不是只看最近一筆。 */
+internal fun assessmentForAverage(
+    type: RecordType,
+    average: Double,
+    user: UserSettings,
+    context: com.startinsnow.healthtracker.data.db.MeasureContext? = null,
+    nowYear: Int = Year.now().value,
+): HealthStandards.Assessment? {
+    val age = HealthStandards.ageFromBirthYear(user.birthYear, nowYear)
+    return when (type) {
+        RecordType.WEIGHT -> HealthStandards.weightAssessment(average, user.heightCm, age)
+        RecordType.BODY_FAT -> HealthStandards.bodyFatAssessment(average, user.sex, age)
+        RecordType.BLOOD_GLUCOSE -> HealthStandards.glucoseAssessment(average, context, age)
+        else -> null
+    }
+}
+
 @Composable
 internal fun assessmentColor(severity: HealthStandards.Severity): Color {
     val dark = isSystemInDarkTheme()
@@ -35,12 +52,12 @@ internal fun assessmentColor(severity: HealthStandards.Severity): Color {
     }
 }
 
-/** 一行判定標籤＋標準說明（新增紀錄與總覽共用）。 */
+/** 一行判定標籤＋標準說明；[title] 用來區分「此筆判定」與「平均判定」。 */
 @Composable
-internal fun AssessmentLine(a: HealthStandards.Assessment, modifier: Modifier = Modifier) {
+internal fun AssessmentLine(a: HealthStandards.Assessment, modifier: Modifier = Modifier, title: String = "此筆判定") {
     Column(modifier) {
         Text(
-            "${a.label}（標準判定）",
+            "${a.label}（$title）",
             color = assessmentColor(a.severity),
             style = MaterialTheme.typography.bodyMedium,
         )
