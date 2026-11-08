@@ -57,37 +57,60 @@ class HealthConnectImporter(private val context: Context) {
         )
         private const val LOOKBACK_DAYS = 365L
         private const val PAGE_SIZE = 1000
+        private const val MAX_PAGES = 100
     }
 
     fun isAvailable(): Boolean =
         runCatching { HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE }.getOrDefault(false)
 
-    suspend fun hasPermissions(): Boolean = runCatching {
-        HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions().containsAll(PERMISSIONS)
-    }.getOrDefault(false)
+    suspend fun grantedPermissions(): Set<String> = runCatching {
+        HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
+    }.getOrDefault(emptySet())
 
+    /** 還缺哪些權限；只要求缺少的，避免已授權體重卻被體脂率卡住、每次都重跳授權。 */
+    suspend fun missingPermissions(): Set<String> = PERMISSIONS - grantedPermissions()
+
+    suspend fun hasPermissions(): Boolean = runCatching { missingPermissions().isEmpty() }.getOrDefault(false)
+
+    /**
+     * 讀體重與體脂率。只讀「已授權」的類型（允許只授權其中一種），
+     * 分頁有上限，避免 pageToken 異常時無限迴圈；結果依時間新到舊排序。
+     */
     suspend fun scan(now: Instant = Instant.now()): List<HcSample> {
         val client = HealthConnectClient.getOrCreate(context)
+        val granted = grantedPermissions()
         val filter = TimeRangeFilter.between(now.minus(LOOKBACK_DAYS, ChronoUnit.DAYS), now)
         val out = ArrayList<HcSample>()
 
-        var token: String? = null
-        do {
-            val resp = client.readRecords(ReadRecordsRequest(WeightRecord::class, filter, pageSize = PAGE_SIZE, pageToken = token))
-            resp.records.mapTo(out) {
-                HcSample(it.metadata.id, RecordType.WEIGHT, it.weight.inKilograms, it.time.toEpochMilli(), it.metadata.dataOrigin.packageName)
+        if (HealthPermission.getReadPermission(WeightRecord::class) in granted) {
+            readAll(out, MAX_PAGES) { token ->
+                client.readRecords(ReadRecordsRequest(WeightRecord::class, filter, pageSize = PAGE_SIZE, pageToken = token))
+                    .also { resp ->
+                        resp.records.mapTo(out) {
+                            HcSample(it.metadata.id, RecordType.WEIGHT, it.weight.inKilograms, it.time.toEpochMilli(), it.metadata.dataOrigin.packageName)
+                        }
+                    }.pageToken
             }
-            token = resp.pageToken
-        } while (token != null)
+        }
+        if (HealthPermission.getReadPermission(BodyFatRecord::class) in granted) {
+            readAll(out, MAX_PAGES) { token ->
+                client.readRecords(ReadRecordsRequest(BodyFatRecord::class, filter, pageSize = PAGE_SIZE, pageToken = token))
+                    .also { resp ->
+                        resp.records.mapTo(out) {
+                            HcSample(it.metadata.id, RecordType.BODY_FAT, it.percentage.value, it.time.toEpochMilli(), it.metadata.dataOrigin.packageName)
+                        }
+                    }.pageToken
+            }
+        }
+        return out.distinctBy { it.hcId }.sortedByDescending { it.measuredAt }
+    }
 
-        token = null
+    private inline fun readAll(out: MutableList<HcSample>, maxPages: Int, read: (String?) -> String?) {
+        var token: String? = null
+        var pages = 0
         do {
-            val resp = client.readRecords(ReadRecordsRequest(BodyFatRecord::class, filter, pageSize = PAGE_SIZE, pageToken = token))
-            resp.records.mapTo(out) {
-                HcSample(it.metadata.id, RecordType.BODY_FAT, it.percentage.value, it.time.toEpochMilli(), it.metadata.dataOrigin.packageName)
-            }
-            token = resp.pageToken
-        } while (token != null)
-        return out
+            token = read(token)?.takeIf { it.isNotBlank() }
+            pages++
+        } while (token != null && pages < maxPages)
     }
 }

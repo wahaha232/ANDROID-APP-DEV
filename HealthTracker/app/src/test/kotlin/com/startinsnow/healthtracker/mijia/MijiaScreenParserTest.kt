@@ -91,4 +91,56 @@ class MijiaScreenParserTest {
         val recs = MijiaScreenParser.toRecords(MijiaReading(NOW, 700.0, 1.0), NOW)
         assertTrue(recs.isEmpty())
     }
+
+    // ---- 寬鬆解析：米家常常不把頁面標題放進無障礙畫面，這時仍要能讀 ----
+
+    private fun loose(texts: List<UiText>, fallback: Long = NOW) = MijiaScreenParser.parseLoose(texts, TAIPEI, NOW, fallback)
+
+    @Test fun looseReadsWithoutPageTitle() {
+        val r = loose(s400Page().filterNot { it.text.startsWith("Xiaomi") })!!
+        assertEquals(68.4, r.weightKg!!, 0.0)
+        assertEquals(22.0, r.bodyFatPercent!!, 0.0)
+        assertTrue(!r.timeEstimated)
+    }
+
+    @Test fun looseUsesFallbackTimeWhenTimeIsMissing() {
+        val page = s400Page().filterNot { it.text.startsWith("2026") }
+        val r = loose(page, fallback = NOW - 3_600_000)!!
+        assertEquals(NOW - 3_600_000, r.measuredAt)
+        assertTrue(r.timeEstimated)
+        assertEquals(68.4, r.weightKg!!, 0.0)
+    }
+
+    @Test fun dashDotAndChineseTimeFormatsWork() {
+        val expected = Instant.parse("2026-10-18T22:33:00Z").toEpochMilli()
+        for (time in listOf("2026-10-19 06:33", "2026.10.19 06:33", "10月19日 06:33")) {
+            assertEquals(time, expected, loose(s400Page(time = time))!!.measuredAt)
+        }
+    }
+
+    @Test fun twelveHourTimeWorks() {
+        val expected = Instant.parse("2026-10-19T10:33:00Z").toEpochMilli() // 台北 18:33
+        assertEquals(expected, loose(s400Page(time = "下午 6:33"))!!.measuredAt)
+    }
+
+    @Test fun unitAttachedWeightWorks() {
+        val page = s400Page().filterNot { it.text.trim() in listOf("68", ".4") } + t("68.4 kg", 425, 612, 733, 899)
+        assertEquals(68.4, parse(page)!!.weightKg!!, 0.0)
+    }
+
+    @Test fun bodyFatValueBelowLabelIsAccepted() {
+        val page = s400Page().map {
+            when (it.text) {
+                "22" -> it.copy(top = 2335, bottom = 2447)
+                "體脂率" -> it.copy(top = 2169, bottom = 2281)
+                else -> it
+            }
+        }
+        assertEquals(22.0, parse(page)!!.bodyFatPercent!!, 0.0)
+    }
+
+    @Test fun looksLikeScaleDetectsPageWithoutTitle() {
+        assertTrue(MijiaScreenParser.looksLikeScale(s400Page().filterNot { it.text.startsWith("Xiaomi") }))
+        assertTrue(!MijiaScreenParser.looksLikeScale(listOf(t("我的家", 0, 0, 100, 50), t("70", 0, 100, 50, 200))))
+    }
 }

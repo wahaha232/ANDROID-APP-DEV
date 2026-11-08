@@ -40,7 +40,10 @@ private val dotTime = DateTimeFormatter.ofPattern("MM/dd HH:mm")
  * 用來看自己習慣在一天的哪些時段測量。概念參考 JetLagged 的時間軸（Apache-2.0），位置＝時間比例。
  */
 @Composable
-fun DailyDistributionChart(records: List<HealthRecord>, rows: Int, zone: ZoneId, today: LocalDate) {
+fun DailyDistributionChart(
+    records: List<HealthRecord>, rows: Int, zone: ZoneId, today: LocalDate,
+    unit: String = "mg/dL", decimals: Int = 0,
+) {
     val dots = remember(records, rows, today) { CalendarMath.dayDots(records, rows, today, zone) }
     var sel by remember(dots) { mutableStateOf<Int?>(null) }
     val dark = isSystemInDarkTheme()
@@ -105,7 +108,7 @@ fun DailyDistributionChart(records: List<HealthRecord>, rows: Int, zone: ZoneId,
         val picked = sel?.let { dots.getOrNull(it) }?.record
         Text(
             modifier = Modifier.padding(top = 6.dp),
-            text = if (picked != null) "${picked.value.toInt()} mg/dL　" + dotTime.format(Instant.ofEpochMilli(picked.measuredAt).atZone(zone))
+            text = if (picked != null) "${fmtNumber(picked.value, decimals)} $unit　" + dotTime.format(Instant.ofEpochMilli(picked.measuredAt).atZone(zone))
             else "點圓點可看數值與時間；每個點代表一次測量。",
             style = MaterialTheme.typography.bodySmall,
         )

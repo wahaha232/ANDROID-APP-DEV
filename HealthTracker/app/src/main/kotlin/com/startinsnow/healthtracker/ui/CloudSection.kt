@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,8 +44,29 @@ fun CloudSection(cloud: CloudSync) {
         Text("雲端同步", style = MaterialTheme.typography.titleLarge)
         if (engine == null) {
             Text(
-                "尚未設定雲端。請在 local.properties 加入 supabase.url 與 supabase.anonKey 後重新建置。",
+                "尚未設定雲端。可直接在這裡輸入 Supabase 專案網址與 anon 公開金鑰（只存在這支手機）。",
                 style = MaterialTheme.typography.bodyMedium,
+            )
+            var url by remember { mutableStateOf("") }
+            var anon by remember { mutableStateOf("") }
+            var err by remember { mutableStateOf<String?>(null) }
+            OutlinedTextField(
+                url, { url = it }, label = { Text("Supabase 專案網址（https://xxxx.supabase.co）") },
+                singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                anon, { anon = it }, label = { Text("anon public key") }, singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(enabled = url.isNotBlank() && anon.isNotBlank(), onClick = { err = cloud.configure(url, anon) }) {
+                Text("儲存雲端設定")
+            }
+            err?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            Text(
+                "也可以在建置時於 local.properties 設定 supabase.url／supabase.anonKey。切勿使用 service_role 金鑰。",
+                style = MaterialTheme.typography.bodySmall,
             )
             return@Column
         }
@@ -149,6 +171,9 @@ fun CloudSection(cloud: CloudSync) {
                 // 背景同步會被省電機制延後；到清單把「健康紀錄」設為不限制（小米：應用程式省電）。
                 context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }) { Text("省電設定（確保背景同步）") }
+            if (cloud.hasRuntimeConfig()) {
+                TextButton(onClick = { cloud.clearConfig(); message = "已移除 App 內雲端設定" }) { Text("移除 App 內雲端設定") }
+            }
         }
         message?.let { Text(it, color = if (it.startsWith("同步完成") || it == "登入成功" || it.startsWith("已登出")) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error) }
     }

@@ -63,7 +63,9 @@ import com.startinsnow.healthtracker.data.db.MeasureContext
 import com.startinsnow.healthtracker.data.db.RecordSource
 import com.startinsnow.healthtracker.data.repository.MeasureTime
 import com.startinsnow.healthtracker.data.db.RecordType
+import com.startinsnow.healthtracker.data.prefs.Sex
 import com.startinsnow.healthtracker.data.repository.HealthRecordRepository
+import com.startinsnow.healthtracker.data.repository.HealthStandards
 import com.startinsnow.healthtracker.ocr.GlucoseCandidate
 import com.startinsnow.healthtracker.ocr.GlucoseOcrParser
 import com.startinsnow.healthtracker.ocr.PhotoCrop
@@ -283,6 +285,33 @@ fun AddRecordDialog(
                         value = v2, onValueChange = { v2 = it }, label = { Text("舒張壓") }, singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     )
+                }
+                // 依衛福部／WHO 參考標準即時判定（資料不足就不判定）
+                val u = user
+                if (u != null) {
+                    val num = v.toDoubleOrNull()
+                    val age = HealthStandards.ageFromBirthYear(u.birthYear)
+                    val assessment = when (type) {
+                        RecordType.WEIGHT -> num?.let { HealthStandards.weightAssessment(it, u.heightCm, age) }
+                        RecordType.BODY_FAT -> num?.let { HealthStandards.bodyFatAssessment(it, u.sex, age) }
+                        RecordType.BLOOD_GLUCOSE -> num?.let { HealthStandards.glucoseAssessment(it, ctx, age) }
+                        else -> null
+                    }
+                    if (assessment != null) {
+                        AssessmentLine(assessment)
+                        Text(
+                            "判定依衛福部／WHO 公開標準，僅供參考，不能取代醫師診斷。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else if (type == RecordType.BODY_FAT && (u.sex == Sex.UNSPECIFIED || u.birthYear == null)) {
+                        Text("要判定體脂率，請先到設定填寫性別與出生年。", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (type == RecordType.WEIGHT) {
+                        HealthStandards.healthyWeightRange(u.heightCm, age)?.let {
+                            Text(it.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("備註（選填）") })
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

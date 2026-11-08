@@ -112,6 +112,10 @@ private val dateTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 private val monthDay = DateTimeFormatter.ofPattern("MM/dd")
 private val bubbleTime = DateTimeFormatter.ofPattern("MM/dd HH:mm")
 
+/** 依類型決定小數位（血糖／血壓整數，體重／體脂率 1 位）。 */
+internal fun fmtNumber(v: Double, decimals: Int): String =
+    if (decimals <= 0) "%.0f".format(v) else "%.${decimals}f".format(v)
+
 /** 觸點 px 最近的資料點索引（版面常數與 TrendChart 的繪圖範圍一致）。 */
 private fun nearestIndex(points: List<HealthRecord>, px: Float, widthPx: Float, leftPx: Float, rightPx: Float): Int {
     val w = widthPx - leftPx - rightPx
@@ -126,6 +130,8 @@ private fun nearestIndex(points: List<HealthRecord>, px: Float, widthPx: Float, 
 fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: UserSettingsRepository, onSeeAll: () -> Unit) {
     val user by settings.settings.collectAsState(initial = UserSettings())
     var ctxName by rememberSaveable { mutableStateOf<String?>(null) }
+    var trendTypeName by rememberSaveable { mutableStateOf(RecordType.BLOOD_GLUCOSE.name) }
+    val trendType = RecordType.entries.firstOrNull { it.name == trendTypeName } ?: RecordType.BLOOD_GLUCOSE
     // null = 資料庫還沒回來：先不畫內容，避免第一幀閃出「還沒有紀錄」
     val loaded by records.observeAll().collectAsState(initial = null)
     val list = loaded.orEmpty()
@@ -153,7 +159,11 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: 
             FilledTonalButton(onClick = { addType = RecordType.WEIGHT }, modifier = Modifier.weight(1f)) { Text("記錄其他") }
         }
 
-        TrendCard(list, days, now, zone, user.overviewChart, { scope.launch { settings.saveOverviewChart(it) } }, ctxName, user.glucoseLow, user.glucoseHigh, onCtx = { ctxName = it }) { days = it }
+        TrendCard(
+            list, trendType, { trendTypeName = it.name }, days, now, zone, user.overviewChart,
+            { scope.launch { settings.saveOverviewChart(it) } }, ctxName, user.glucoseLow, user.glucoseHigh,
+            onCtx = { ctxName = it },
+        ) { days = it }
 
         val others = listOf(RecordType.WEIGHT, RecordType.BODY_FAT, RecordType.BLOOD_PRESSURE)
             .mapNotNull { t -> OverviewMath.latest(list, t) }
@@ -168,6 +178,31 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: 
                             Text(OverviewMath.relativeAge(r.measuredAt, now), style = MaterialTheme.typography.bodySmall)
                         }
                     }
+                }
+            }
+        }
+
+        // 標準判定：使用衛福部／WHO 公開標準，依個人性別、年齡與身高判定（僅供參考）
+        val standardRows = listOf(RecordType.WEIGHT, RecordType.BODY_FAT, RecordType.BLOOD_GLUCOSE).mapNotNull { t ->
+            OverviewMath.latest(list, t)?.let { r -> assessmentFor(r, user)?.let { a -> Triple(r, a, t) } }
+        }
+        if (standardRows.isNotEmpty()) {
+            AppCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("標準判定（衛福部／WHO，僅供參考）", style = MaterialTheme.typography.titleSmall)
+                    standardRows.forEach { (r, a, _) ->
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(recordIcon(r.type), contentDescription = null, tint = recordAccent(r.type), modifier = Modifier.size(20.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("${r.type.label}　${formatMain(r)}", style = MaterialTheme.typography.bodyMedium)
+                                Text(a.label, color = assessmentColor(a.severity), style = MaterialTheme.typography.bodySmall)
+                                Text(a.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    com.startinsnow.healthtracker.data.repository.HealthStandards
+                        .healthyWeightRange(user.heightCm, com.startinsnow.healthtracker.data.repository.HealthStandards.ageFromBirthYear(user.birthYear))
+                        ?.let { Text("標準體重：${it.detail}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
         }
@@ -200,15 +235,32 @@ fun OverviewScreen(records: HealthRecordRepository, cloud: CloudSync, settings: 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrendCard(
-    list: List<HealthRecord>, days: Int, now: Long, zone: ZoneId, mode: Int, onMode: (Int) -> Unit,
+    list: List<HealthRecord>, type: RecordType, onType: (RecordType) -> Unit,
+    days: Int, now: Long, zone: ZoneId, mode: Int, onMode: (Int) -> Unit,
     ctxName: String?, low: Double?, high: Double?, onCtx: (String?) -> Unit, onDays: (Int) -> Unit,
 ) {
-    val ctx = MeasureContext.entries.firstOrNull { it.name == ctxName }
-    val window = OverviewMath.byContext(OverviewMath.window(list, RecordType.BLOOD_GLUCOSE, days, now), ctx)
+    val isGlucose = type == RecordType.BLOOD_GLUCOSE
+    val ctx = if (isGlucose) MeasureContext.entries.firstOrNull { it.name == ctxName } else null
+    val window = OverviewMath.window(list, type, days, now).let { if (isGlucose) OverviewMath.byContext(it, ctx) else it }
     val stats = OverviewMath.stats(window)
+    val decimals = if (isGlucose) 0 else 1
+    val unit = type.unit
     AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(listOf("血糖趨勢（mg/dL）", "測量日曆", "測量時段")[mode.coerceIn(0, 2)], style = MaterialTheme.typography.titleSmall)
+            Text(
+                when (mode.coerceIn(0, 2)) {
+                    0 -> "${type.label}趨勢（$unit）"
+                    1 -> "測量日曆"
+                    else -> "測量時段"
+                },
+                style = MaterialTheme.typography.titleSmall,
+            )
+            // 可切換要看的數值：血糖 / 體重 / 體脂率 / 血壓
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(RecordType.BLOOD_GLUCOSE, RecordType.WEIGHT, RecordType.BODY_FAT, RecordType.BLOOD_PRESSURE).forEach { t ->
+                    FilterChip(selected = type == t, onClick = { onType(t) }, label = { Text(t.label) })
+                }
+            }
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 listOf("趨勢", "日曆", "時段").forEachIndexed { i, label ->
                     SegmentedButton(
@@ -225,37 +277,50 @@ private fun TrendCard(
                     ) { Text(label) }
                 }
             }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = ctx == null, onClick = { onCtx(null) }, label = { Text("全部情境") })
-                MeasureContext.entries.forEach { c ->
-                    FilterChip(selected = ctx == c, onClick = { onCtx(c.name) }, label = { Text(c.label) })
+            if (isGlucose) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = ctx == null, onClick = { onCtx(null) }, label = { Text("全部情境") })
+                    MeasureContext.entries.forEach { c ->
+                        FilterChip(selected = ctx == c, onClick = { onCtx(c.name) }, label = { Text(c.label) })
+                    }
                 }
             }
             if (mode == 1) {
-                CalendarHeatmap(OverviewMath.byContext(list.filter { it.type == RecordType.BLOOD_GLUCOSE }, ctx), zone, java.time.LocalDate.now(zone))
+                val heat = list.filter { it.type == type }
+                CalendarHeatmap(if (isGlucose) OverviewMath.byContext(heat, ctx) else heat, zone, java.time.LocalDate.now(zone))
             } else if (window.isEmpty() || (mode == 0 && window.size < 2)) {
                 Text(
-                    if (window.isEmpty()) "近 $days 天沒有${ctx?.label ?: ""}血糖紀錄" else "資料不足（近 $days 天只有 1 筆，至少要 2 筆才畫趨勢）",
+                    if (window.isEmpty()) "近 $days 天沒有${type.label}紀錄"
+                    else "資料不足（近 $days 天只有 1 筆，至少要 2 筆才畫趨勢）",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             } else {
                 if (mode == 2) {
-                    DailyDistributionChart(window, if (days == 7) 7 else 14, zone, java.time.LocalDate.now(zone))
+                    DailyDistributionChart(
+                        window, if (days == 7) 7 else 14, zone, java.time.LocalDate.now(zone),
+                        unit = unit, decimals = decimals,
+                    )
                 } else {
-                    TrendChart(window, zone, if (low != null && high != null) low to high else null)
+                    TrendChart(
+                        window, zone, if (isGlucose && low != null && high != null) low to high else null,
+                        unit = unit, decimals = decimals,
+                    )
                 }
             }
             if (mode != 1) stats?.let {
                 Text(
-                    "近 $days 天：${it.count} 筆　平均 ${"%.0f".format(it.avg)}　最低 ${"%.0f".format(it.min)}　最高 ${"%.0f".format(it.max)}",
+                    "近 $days 天：${it.count} 筆　平均 ${fmtNumber(it.avg, decimals)}　最低 ${fmtNumber(it.min, decimals)}　最高 ${fmtNumber(it.max, decimals)} $unit",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            if (mode != 1) OverviewMath.inRange(window, low, high)?.let {
+            if (mode != 1 && isGlucose) OverviewMath.inRange(window, low, high)?.let {
                 Text(
-                    "落在您設定的範圍（${low?.toInt()}–${high?.toInt()}）內：${it.inRange}/${it.total} 筆（${it.percent}%）",
+                    "落在您設定的血糖範圍（${low?.toInt()}–${high?.toInt()}）內：${it.inRange}/${it.total} 筆（${it.percent}%）",
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+            if (type == RecordType.BLOOD_PRESSURE) {
+                Text("血壓趨勢顯示收縮壓（第一數值）。", style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -263,7 +328,7 @@ private fun TrendCard(
 
 /** 折線圖（2dp 線、含底色環的圓點、髮絲格線；文字用文字色，線色藍色，亮／暗各自選色）。 */
 @Composable
-private fun TrendChart(points: List<HealthRecord>, zone: ZoneId, band: Pair<Double, Double>?) {
+private fun TrendChart(points: List<HealthRecord>, zone: ZoneId, band: Pair<Double, Double>?, unit: String, decimals: Int) {
     val bandColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f)
     val dark = isSystemInDarkTheme()
     val lineColor = if (dark) Color(0xFF3987E5) else Color(0xFF2A78D6)
@@ -276,7 +341,7 @@ private fun TrendChart(points: List<HealthRecord>, zone: ZoneId, band: Pair<Doub
         minOf(points.minOf { it.value }, band?.first ?: Double.MAX_VALUE),
         maxOf(points.maxOf { it.value }, band?.second ?: -Double.MAX_VALUE),
     )
-    val description = "血糖趨勢圖，${points.size} 筆，最新 ${points.last().value.toInt()} mg/dL；點選或左右拖曳可查看每一筆"
+    val description = "趨勢圖，${points.size} 筆，最新 ${fmtNumber(points.last().value, decimals)} $unit；點選或左右拖曳可查看每一筆"
     var sel by remember(points) { mutableStateOf<Int?>(null) } // 目前點選的資料點
     val bubbleBg = MaterialTheme.colorScheme.inverseSurface
     val bubbleText = MaterialTheme.colorScheme.inverseOnSurface
@@ -311,7 +376,8 @@ private fun TrendChart(points: List<HealthRecord>, zone: ZoneId, band: Pair<Doub
         scale.ticks.forEach { tick ->
             val ty = y(tick)
             drawLine(gridColor, Offset(left, ty), Offset(left + w, ty), strokeWidth = 1.dp.toPx())
-            val text = "%.0f".format(tick)
+            val tickDecimals = if (scale.ticks.any { abs(it - Math.round(it).toDouble()) > 1e-9 }) 1 else 0
+            val text = fmtNumber(tick, tickDecimals)
             val m = measurer.measure(text, label)
             drawText(m, topLeft = Offset(left - 6.dp.toPx() - m.size.width, ty - m.size.height / 2f))
         }
@@ -334,7 +400,7 @@ private fun TrendChart(points: List<HealthRecord>, zone: ZoneId, band: Pair<Doub
         val last = points.last()
         val picked = sel?.let { points.getOrNull(it) }
         if (picked == null) {
-            val lastText = measurer.measure("${last.value.toInt()}", TextStyle(fontSize = 11.sp, color = textColor))
+            val lastText = measurer.measure(fmtNumber(last.value, decimals), TextStyle(fontSize = 11.sp, color = textColor))
             drawText(lastText, topLeft = Offset((x(last.measuredAt) - lastText.size.width / 2f).coerceIn(left, left + w - lastText.size.width), y(last.value) - lastText.size.height - 8.dp.toPx()))
         } else {
             val px = x(picked.measuredAt)
@@ -342,7 +408,7 @@ private fun TrendChart(points: List<HealthRecord>, zone: ZoneId, band: Pair<Doub
             drawLine(textColor.copy(alpha = 0.6f), Offset(px, top), Offset(px, top + h), strokeWidth = 1.dp.toPx())
             drawCircle(ringColor, radius = 8.dp.toPx(), center = Offset(px, py))
             drawCircle(lineColor, radius = 6.dp.toPx(), center = Offset(px, py))
-            val text = "${picked.value.toInt()} mg/dL\n" + bubbleTime.format(Instant.ofEpochMilli(picked.measuredAt).atZone(zone))
+            val text = "${fmtNumber(picked.value, decimals)} $unit\n" + bubbleTime.format(Instant.ofEpochMilli(picked.measuredAt).atZone(zone))
             val m = measurer.measure(text, TextStyle(fontSize = 12.sp, color = bubbleText))
             val padX = 8.dp.toPx()
             val padY = 5.dp.toPx()

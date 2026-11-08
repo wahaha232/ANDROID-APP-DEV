@@ -67,7 +67,19 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
     var pendingDelete by remember { mutableStateOf<HealthRecord?>(null) }
     var editing by remember { mutableStateOf<HealthRecord?>(null) }
     var viewingPhoto by remember { mutableStateOf<String?>(null) }
-    val shown = if (filter == null) list else list.filter { it.type == filter }
+    // 「全部」一定要包含所有類型（體重／體脂率／血糖／血壓），不可只列部分；並固定依時間新到舊。
+    val shown = recordsForTab(list, filter)
+    val rows = buildList {
+        var lastDay: String? = null
+        shown.forEach { r ->
+            val day = dayLabel(r.measuredAt)
+            if (day != lastDay) {
+                add(RecordListRow.Day(day))
+                lastDay = day
+            }
+            add(RecordListRow.Item(r))
+        }
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -95,23 +107,39 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
             } else if (shown.isEmpty()) {
                 EmptyState(recordIcon(filter!!), "這個類型還沒有紀錄", "切換上方篩選，或新增一筆${filter!!.label}。")
             } else {
+                if (filter == null) {
+                    Text(
+                        summaryText(list),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
                 LazyColumn(
                     Modifier.fillMaxSize(),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // 依日期分組（資料已是新到舊），掃讀長清單比較輕鬆
-                    shown.groupBy { dayLabel(it.measuredAt) }.forEach { (day, dayRecords) ->
-                        item(key = "day-$day") {
-                            Text(
-                                day,
+                    items(
+                        rows,
+                        key = { row ->
+                            when (row) {
+                                is RecordListRow.Day -> "day-${row.label}"
+                                is RecordListRow.Item -> row.record.id
+                            }
+                        },
+                    ) { row ->
+                        when (row) {
+                            is RecordListRow.Day -> Text(
+                                row.label,
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(top = 8.dp, start = 4.dp),
                             )
-                        }
-                        items(dayRecords, key = { it.id }) { r ->
-                            RecordCard(r, user, onEdit = { editing = r }, onPhoto = { viewingPhoto = r.photoPath }, onDelete = { pendingDelete = r })
+                            is RecordListRow.Item -> {
+                                val r = row.record
+                                RecordCard(r, user, onEdit = { editing = r }, onPhoto = { viewingPhoto = r.photoPath }, onDelete = { pendingDelete = r })
+                            }
                         }
                     }
                 }
@@ -159,6 +187,27 @@ fun RecordsScreen(records: HealthRecordRepository, settings: UserSettingsReposit
     }
 }
 
+/**
+ * 「全部」分頁必須包含每一種類型（體重、體脂率、血糖、血壓），指定類型時只留該類型。
+ * 一律依量測時間新到舊，避免清單只列出部分資料。
+ */
+internal fun recordsForTab(all: List<HealthRecord>, filter: RecordType?): List<HealthRecord> =
+    (if (filter == null) all else all.filter { it.type == filter }).sortedByDescending { it.measuredAt }
+
+internal fun typeCounts(all: List<HealthRecord>): Map<RecordType, Int> =
+    all.groupingBy { it.type }.eachCount()
+
+internal fun summaryText(all: List<HealthRecord>): String {
+    val counts = typeCounts(all)
+    val parts = RecordType.entries.mapNotNull { t -> counts[t]?.takeIf { it > 0 }?.let { "${t.label} $it" } }
+    return "全部 ${all.size} 筆：" + parts.joinToString("、")
+}
+
+private sealed interface RecordListRow {
+    data class Day(val label: String) : RecordListRow
+    data class Item(val record: HealthRecord) : RecordListRow
+}
+
 internal fun formatMain(r: HealthRecord): String = when (r.type) {
     RecordType.BLOOD_PRESSURE -> "${r.value.toInt()}/${r.value2?.toInt()} ${r.type.unit}"
     RecordType.BLOOD_GLUCOSE -> "${r.value.toInt()} ${r.type.unit}"
@@ -192,6 +241,10 @@ private fun RecordCard(r: HealthRecord, user: UserSettings, onEdit: () -> Unit, 
                     if (r.type == RecordType.WEIGHT) user.bmi(r.value)?.let { append("　BMI ${"%.1f".format(it)}") }
                 }
                 Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // 依衛福部／WHO 標準判定（資料不足就不顯示）
+                assessmentFor(r, user)?.let { a ->
+                    Text("${a.label}（標準判定）", style = MaterialTheme.typography.bodySmall, color = assessmentColor(a.severity))
+                }
                 if (r.note.isNotEmpty()) Text(r.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (r.photoPath != null && File(r.photoPath).isFile) {
