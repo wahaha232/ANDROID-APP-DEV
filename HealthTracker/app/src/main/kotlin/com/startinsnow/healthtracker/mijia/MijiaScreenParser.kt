@@ -84,7 +84,11 @@ object MijiaScreenParser {
             if (!looksLikeScale(texts)) return null
         }
 
-        val times = texts.mapNotNull { t -> parseTimeMillis(t.text, zone, now)?.takeIf { it <= now + MAX_FUTURE_MS }?.let { t to it } }
+        val headers = texts.mapNotNull { t -> parseDateHeader(t.text)?.let { t to it } }
+        val times = texts.mapNotNull { t ->
+            (timeUnderHeader(t, headers, zone) ?: parseTimeMillis(t.text, zone, now))
+                ?.takeIf { it <= now + MAX_FUTURE_MS }?.let { t to it }
+        }
         val paired = readWeightWithTime(texts, times)
         // 有時間時只在時間上方找體重（避免把下方的 BMI／肌肉量當體重）；
         // 真的找不到才用「字體明顯最大」的數字當備援。
@@ -287,6 +291,28 @@ object MijiaScreenParser {
             return todayMillis(h, mi, zone, now, sec)
         }
         return null
+    }
+
+    private val dateHeaderRe = Regex("""^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})$""")
+    private val timeOnlyRe = Regex("""^(\d{1,2}):(\d{2})$""")
+
+    /** 單獨一行的日期（例如歷史清單的分組標題「2026/11/01」）。 */
+    internal fun parseDateHeader(text: String): LocalDate? {
+        val m = dateHeaderRe.matchEntire(normalize(text)) ?: return null
+        return runCatching { LocalDate.of(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt()) }.getOrNull()
+    }
+
+    /**
+     * 只有「17:54」這種時間時，不能當成今天：歷史清單的日期在上方的分組標題。
+     * 有標題就用「在它上方、最靠近」的那個日期；沒有標題才回傳 null，交給原本的推估。
+     */
+    private fun timeUnderHeader(t: UiText, headers: List<Pair<UiText, LocalDate>>, zone: ZoneId): Long? {
+        val m = timeOnlyRe.matchEntire(t.text) ?: return null
+        val header = headers.filter { it.first.top < t.top }.maxByOrNull { it.first.top } ?: return null
+        val h = m.groupValues[1].toInt()
+        val mi = m.groupValues[2].toInt()
+        val d = header.second
+        return localMillis(d.year, d.monthValue, d.dayOfMonth, h, mi, 0, zone)
     }
 
     private fun noYearMillis(month: Int, day: Int, hour: Int, minute: Int, zone: ZoneId, now: Long): Long? {

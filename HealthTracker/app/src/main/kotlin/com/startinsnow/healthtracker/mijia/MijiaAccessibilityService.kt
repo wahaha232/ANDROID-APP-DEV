@@ -31,8 +31,27 @@ class MijiaAccessibilityService : AccessibilityService() {
         MijiaCaptureStore.attach(this)
     }
 
+    private var lastRunAt = 0L
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var trailingScheduled = false
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.packageName?.toString() != MIJIA_PACKAGE) return
+        // 米家畫面一直在更新，事件很密；每次都走訪整棵畫面樹很耗電，所以最多每 350ms 解析一次。
+        // 被略過的事件補一次延後的解析，避免「最後一次畫面更新」沒被讀到。
+        val t = android.os.SystemClock.elapsedRealtime()
+        if (t - lastRunAt < MIN_INTERVAL_MS) {
+            if (!trailingScheduled) {
+                trailingScheduled = true
+                handler.postDelayed({
+                    trailingScheduled = false
+                    lastRunAt = android.os.SystemClock.elapsedRealtime()
+                    captureNow(force = false)
+                }, MIN_INTERVAL_MS)
+            }
+            return
+        }
+        lastRunAt = t
         captureNow(force = false)
     }
 
@@ -119,6 +138,7 @@ class MijiaAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
         MijiaCaptureStore.detach(this)
         scope.cancel()
         super.onDestroy()
@@ -129,6 +149,7 @@ class MijiaAccessibilityService : AccessibilityService() {
         const val PREFS = "mijia_capture"
         const val KEY_LAST = "last"
         private const val MAX_NODES = 600
+        private const val MIN_INTERVAL_MS = 350L
         private const val MAX_RAW_LINES = 80
         private const val MAX_FUTURE_MS = 24 * 3_600_000L
     }

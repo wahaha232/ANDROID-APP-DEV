@@ -45,9 +45,10 @@ internal fun assessmentForAverage(
 internal fun assessmentColor(severity: HealthStandards.Severity): Color {
     val dark = isSystemInDarkTheme()
     return when (severity) {
-        HealthStandards.Severity.LOW -> if (dark) Color(0xFFFFB74D) else Color(0xFFB26A00)
+        // 只是參考提示，不用警報紅：偏低用藍、正常用綠、偏高用琥珀
+        HealthStandards.Severity.LOW -> if (dark) Color(0xFF64B5F6) else Color(0xFF1565C0)
         HealthStandards.Severity.NORMAL -> if (dark) Color(0xFF81C784) else Color(0xFF2E7D32)
-        HealthStandards.Severity.HIGH -> MaterialTheme.colorScheme.error
+        HealthStandards.Severity.HIGH -> if (dark) Color(0xFFFFB74D) else Color(0xFFB26A00)
         HealthStandards.Severity.UNKNOWN -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 }

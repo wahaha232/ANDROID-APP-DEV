@@ -48,8 +48,9 @@ class CloudSync(context: Context, private val dao: HealthRecordDao) {
     fun configure(url: String, anonKey: String): String? {
         val u = normalizeSupabaseUrl(url)
         val k = anonKey.trim()
-        if (!u.startsWith("https://") || !u.contains(".supabase.co")) return "網址格式應為 https://xxxx.supabase.co"
+        if (!isSupabaseUrl(u)) return "網址格式應為 https://xxxx.supabase.co"
         if (k.length < 30) return "anon 金鑰格式不正確（請貼上 Supabase 的 anon public key）"
+        anonKeyProblem(k)?.let { return it }
         prefs.edit().putString(KEY_URL, u).putString(KEY_KEY, k).apply()
         engine = build(u, k)
         return null
@@ -65,7 +66,7 @@ class CloudSync(context: Context, private val dao: HealthRecordDao) {
         (prefs.getString(KEY_URL, null)?.takeIf { it.isNotBlank() }
             ?: BuildConfig.SUPABASE_URL.trim().takeIf { it.startsWith("https://") && it.isNotBlank() })
             ?.let { normalizeSupabaseUrl(it) }
-            ?.takeIf { it.startsWith("https://") && it.contains(".supabase.co") }
+            ?.takeIf { isSupabaseUrl(it) }
 
     private fun readKey(): String? =
         prefs.getString(KEY_KEY, null)?.takeIf { it.isNotBlank() }
@@ -88,6 +89,35 @@ class CloudSync(context: Context, private val dao: HealthRecordDao) {
         const val KEY_URL = "url"
         const val KEY_KEY = "anon_key"
     }
+}
+
+/**
+ * 網址必須是 https，且主機名稱「剛好以 .supabase.co 結尾」。
+ * 只檢查「包含 .supabase.co」不夠：https://x.supabase.co.evil.com 也含有它，登入時帳密就會送去別人的網站。
+ */
+internal fun isSupabaseUrl(url: String): Boolean {
+    val uri = runCatching { java.net.URI(url.trim()) }.getOrNull() ?: return false
+    val host = uri.host?.lowercase() ?: return false
+    return uri.scheme == "https" && uri.userInfo == null && host.endsWith(".supabase.co") && host.length > ".supabase.co".length &&
+        host.removeSuffix(".supabase.co").all { it.isLetterOrDigit() || it == '-' }
+}
+
+/**
+ * 擋掉不該放進 App 的金鑰：secret／service_role 能繞過資料保護，只准用 anon（publishable）公開金鑰。
+ * 回傳錯誤訊息；沒問題回傳 null。JWT 格式的金鑰會解碼看 role 欄位。
+ */
+internal fun anonKeyProblem(key: String): String? {
+    val k = key.trim()
+    if (k.startsWith("sb_secret_")) return "這是 secret 金鑰，絕不能放在 App 裡；請改貼 anon／publishable 公開金鑰"
+    val parts = k.split('.')
+    if (parts.size == 3) {
+        val role = runCatching {
+            val json = String(java.util.Base64.getUrlDecoder().decode(parts[1]), Charsets.UTF_8)
+            Regex(""""role"\s*:\s*"([^"]+)"""").find(json)?.groupValues?.get(1)
+        }.getOrNull()
+        if (role != null && role != "anon") return "這把金鑰的角色是「$role」，不是 anon 公開金鑰（絕不能使用 service_role）"
+    }
+    return null
 }
 
 /**

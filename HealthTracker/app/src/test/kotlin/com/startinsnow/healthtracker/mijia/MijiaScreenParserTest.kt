@@ -53,6 +53,37 @@ class MijiaScreenParserTest {
         assertEquals(68.4, parse(page)!!.weightKg!!, 0.0)
     }
 
+    @Test fun timeOnlyTextUsesTheDateHeaderAboveIt() {
+        // 歷史清單：日期是上方的分組標題，時間只有「08:08」；不能當成今天
+        val page = listOf(
+            t("Xiaomi 體脂計 S400", 365, 100, 867, 160),
+            t("2026/10/15", 70, 200, 249, 250),
+            t("68.4", 425, 300, 733, 520), t("08:08", 439, 560, 782, 610),
+            t("體脂率", 451, 700, 769, 740), t("22", 451, 640, 547, 700),
+        )
+        val r = parse(page)!!
+        assertEquals(Instant.parse("2026-10-15T00:08:00Z").toEpochMilli(), r.measuredAt) // 台北 10/15 08:08
+    }
+
+    @Test fun dateHeaderBelowTheTimeIsNotUsed() {
+        // 標題在時間下方（屬於下一組），不能拿來定日期；沒有標題就維持原本的推估（今天或昨天）
+        val page = listOf(
+            t("Xiaomi 體脂計 S400", 365, 100, 867, 160),
+            t("68.4", 425, 300, 733, 520), t("08:08", 439, 560, 782, 610),
+            t("2026/10/10", 70, 800, 249, 850),
+            t("體脂率", 451, 700, 769, 740), t("22", 451, 640, 547, 700),
+        )
+        val r = parse(page)!!
+        assertEquals(Instant.parse("2026-10-19T00:08:00Z").toEpochMilli(), r.measuredAt) // NOW 是台北 10/19 12:00 → 今天 08:08
+    }
+
+    @Test fun parseDateHeaderOnlyAcceptsAStandaloneDate() {
+        assertEquals(java.time.LocalDate.of(2026, 11, 1), MijiaScreenParser.parseDateHeader("2026/11/01"))
+        assertEquals(java.time.LocalDate.of(2026, 11, 1), MijiaScreenParser.parseDateHeader("2026-11-1"))
+        assertNull(MijiaScreenParser.parseDateHeader("2026/11/01 08:08"))
+        assertNull(MijiaScreenParser.parseDateHeader("2026/13/45"))
+    }
+
     @Test fun otherPagesAreIgnored() {
         assertNull(parse(s400Page(title = "我的家")))
         assertNull(parse(listOf(t("米家", 0, 0, 100, 50), t("70", 0, 100, 50, 200))))

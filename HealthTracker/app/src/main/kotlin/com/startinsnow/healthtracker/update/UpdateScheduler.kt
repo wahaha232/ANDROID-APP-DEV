@@ -133,7 +133,14 @@ class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             UpdateState.setLastCheck(applicationContext, "尚未登入雲端")
             return Result.success()
         }
-        val updater = AppUpdater(engine, BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
+        // 與手動檢查一致：用「App 內目前的」雲端設定（發佈版通常沒有把網址與金鑰寫進 APK）
+        val baseUrl = app.cloud.configuredUrl()
+        val anonKey = app.cloud.configuredAnonKey()
+        if (baseUrl.isNullOrBlank() || anonKey.isNullOrBlank()) {
+            UpdateState.setLastCheck(applicationContext, "尚未設定雲端網址與金鑰")
+            return Result.success()
+        }
+        val updater = AppUpdater(engine, baseUrl, anonKey)
         return try {
             val info = updater.fetchLatest()
             val current = BuildConfig.VERSION_CODE
