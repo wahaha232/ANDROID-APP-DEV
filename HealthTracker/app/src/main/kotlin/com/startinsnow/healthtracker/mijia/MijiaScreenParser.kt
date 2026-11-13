@@ -75,6 +75,40 @@ object MijiaScreenParser {
         return texts.any { bmiLabelRe.matches(it.text) } && texts.any { muscleLabelRe.matches(it.text) }
     }
 
+    /** 其他指標的標籤：這些標籤上方緊鄰的數字是 BMI／肌肉量等，不是體重。 */
+    private val otherMetricLabelRe = Regex(
+        """^(BMI|身體質量指數|肌肉量|骨骼肌|Muscle(\s*mass)?|Skeletal\s*muscle|水分|水份|身體水分|蛋白質|骨量|基礎代謝|基礎代謝率|內臟脂肪|內臟脂肪等級|體脂率|體脂肪率|Body\s*fat(\s*(rate|percentage))?|Visceral\s*fat|Protein|Bone\s*mass|BMR|Water)$""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * 擺在其他指標標籤正上方（水平幾乎對齊、垂直緊鄰）的數字節點。
+     * 11/09、11/11 都發生過把 BMI（24.4）當成體重存進去，所以體重候選要先排除這些節點。
+     */
+    private fun metricValueNodes(texts: List<UiText>): Set<UiText> {
+        val labels = texts.filter { otherMetricLabelRe.matches(it.text) }
+        if (labels.isEmpty()) return emptySet()
+        val numberRe = Regex("""^\d{1,3}(\.\d{1,2})?$""")
+        val out = HashSet<UiText>()
+        for (n in texts) {
+            if (!numberRe.matches(n.text)) continue
+            for (l in labels) {
+                val gapX = when {
+                    n.right < l.left -> l.left - n.right
+                    n.left > l.right -> n.left - l.right
+                    else -> 0
+                }
+                val gapY = when {
+                    n.bottom < l.top -> l.top - n.bottom
+                    n.top > l.bottom -> Int.MAX_VALUE // 標籤上方才算，數字在標籤下方的不是它的值
+                    else -> 0
+                }
+                if (gapX <= 16 && gapY <= max(l.height, n.height) * 1.5 + 24) { out += n; break }
+            }
+        }
+        return out
+    }
+
     private fun parseInternal(raw: List<UiText>, zone: ZoneId, now: Long, allowMissingTime: Boolean, fallbackTime: Long): MijiaReading? {
         val texts = normalized(raw)
         if (texts.isEmpty()) return null
@@ -89,12 +123,15 @@ object MijiaScreenParser {
             (timeUnderHeader(t, headers, zone) ?: parseTimeMillis(t.text, zone, now))
                 ?.takeIf { it <= now + MAX_FUTURE_MS }?.let { t to it }
         }
-        val paired = readWeightWithTime(texts, times)
+        // 體重只從「不是其他指標的值」的數字裡找
+        val metricNodes = metricValueNodes(texts)
+        val weightTexts = if (metricNodes.isEmpty()) texts else texts.filterNot { it in metricNodes }
+        val paired = readWeightWithTime(weightTexts, times)
         // 有時間時只在時間上方找體重（避免把下方的 BMI／肌肉量當體重）；
         // 真的找不到才用「字體明顯最大」的數字當備援。
         val weight = paired?.let { it.first to it.second }
             ?: if (allowMissingTime) {
-                if (times.isEmpty()) readWeightLoose(texts) else readWeightLooseIfDominant(texts)
+                if (times.isEmpty()) readWeightLoose(weightTexts) else readWeightLooseIfDominant(weightTexts)
             } else {
                 null
             }

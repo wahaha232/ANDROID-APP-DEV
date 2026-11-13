@@ -80,7 +80,7 @@ class MijiaAccessibilityService : AccessibilityService() {
         val raw = rawLines(texts)
         val records = (application as HealthTrackerApp).records
         scope.launch {
-            val result = records.importRecords(MijiaScreenParser.toRecords(reading))
+            val result = records.importMijiaReading(MijiaScreenParser.toRecords(reading))
             val event = MijiaCaptureStore.Event(
                 seq = MijiaCaptureStore.nextSeq(),
                 at = now,

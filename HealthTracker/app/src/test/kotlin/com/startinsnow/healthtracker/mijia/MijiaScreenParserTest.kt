@@ -53,6 +53,38 @@ class MijiaScreenParserTest {
         assertEquals(68.4, parse(page)!!.weightKg!!, 0.0)
     }
 
+    @Test fun bmiIsNeverReadAsWeightEvenWhenTheBigWeightIsMissing() {
+        // 2026-11-11 的情況：畫面變動、體重大字不在，只剩下方的 BMI／肌肉量區，BMI（24.4）曾被當成體重
+        val page = listOf(
+            t("Xiaomi 體脂計 S400", 365, 165, 867, 236),
+            t("24.4", 96, 2169, 415, 2281), t("BMI", 96, 2281, 415, 2335),
+            t("22", 451, 2169, 547, 2281), t("%", 553, 2214, 587, 2281), t("體脂率", 451, 2281, 769, 2335),
+            t("51.1", 805, 2169, 937, 2281), t("kg", 943, 2210, 989, 2266), t("肌肉量", 805, 2281, 1124, 2335),
+            t("2026/10/19 06:33", 439, 2400, 782, 2456),
+        )
+        val r = MijiaScreenParser.parse(page, TAIPEI, NOW)
+        assertTrue(r == null || r.weightKg == null)
+        val loose = MijiaScreenParser.parseLoose(page.filterNot { it.text.startsWith("Xiaomi") }, TAIPEI, NOW)
+        assertTrue(loose == null || loose.weightKg == null)
+    }
+
+    @Test fun muscleMassIsNeverReadAsWeight() {
+        val page = listOf(
+            t("Xiaomi 體脂計 S400", 365, 165, 867, 236),
+            t("51.1", 805, 2169, 937, 2281), t("肌肉量", 805, 2281, 1124, 2335),
+            t("22", 451, 2169, 547, 2281), t("體脂率", 451, 2281, 769, 2335),
+            t("2026/10/19 06:33", 439, 2400, 782, 2456),
+        )
+        val r = MijiaScreenParser.parse(page, TAIPEI, NOW)
+        assertTrue(r == null || r.weightKg == null)
+    }
+
+    @Test fun realWeightStillReadWhenBmiIsAlsoPresent() {
+        // 一般完整畫面：體重 68.4，BMI 25.1 在下方；結果不受影響
+        val r = parse(s400Page())!!
+        assertEquals(68.4, r.weightKg!!, 0.0)
+    }
+
     @Test fun timeOnlyTextUsesTheDateHeaderAboveIt() {
         // 歷史清單：日期是上方的分組標題，時間只有「08:08」；不能當成今天
         val page = listOf(

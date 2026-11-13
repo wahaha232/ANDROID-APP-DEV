@@ -29,6 +29,7 @@ class HealthRecordRepository(private val dao: HealthRecordDao, private val db: R
 
     private companion object {
         const val DUPLICATE_WINDOW_MS = 2 * 60_000L
+        const val SAME_MEASUREMENT_MS = 60_000L
     }
 
     fun observeAll(): Flow<List<HealthRecord>> = dao.observeAll()
@@ -125,6 +126,21 @@ class HealthRecordRepository(private val dao: HealthRecordDao, private val db: R
     }
 
     /** 批次匯入（Health Connect／CSV）。id 是確定性的，所以重複匯入、或匯入使用者已刪除的紀錄都不會重複出現。 */
+    /**
+     * 米家畫面讀取專用：同一類型在同一次量測時間（前後 1 分鐘）已經有紀錄，就不再收。
+     * 同一次量測不會有兩個不同的體重；第二筆幾乎一定是畫面變動時的誤讀（例如把 BMI 當體重）。
+     */
+    suspend fun importMijiaReading(records: List<HealthRecord>): ImportResult {
+        return inTransaction {
+            var inserted = 0
+            for (r in records) {
+                val near = dao.nearest(r.type, r.measuredAt - SAME_MEASUREMENT_MS, r.measuredAt + SAME_MEASUREMENT_MS, r.measuredAt)
+                if (near == null && dao.insertIgnore(r) != -1L) inserted++
+            }
+            ImportResult(inserted = inserted, skipped = records.size - inserted)
+        }
+    }
+
     suspend fun importRecords(records: List<HealthRecord>): ImportResult {
         return inTransaction {
         var inserted = 0
