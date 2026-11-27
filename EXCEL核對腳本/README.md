@@ -116,7 +116,8 @@ python -m unittest discover -s tests -v
 | `o193d_checker.py` | CLI 主程式、報告排版、結束碼 |
 | `embed_extractor.py` | 提取並分類內嵌 PDF |
 | `pdf_parser.py` | 測試報告 / MSDS 解析（含欄位定位） |
-| `excel_checker.py` | Excel 讀取與核對邏輯（含欄位 B~J FMD 與 K~M PDF 比對） |
+| `excel_checker.py` | O-193D 讀取與核對邏輯（含檔名正崴料號、欄位 B~J FMD 與 K~M PDF 比對） |
+| `svhc_checker.py` | O-202AH REACH SVHC 調查表核對（253 項 SVHC 清單 ＋ O-193D / FMD 交叉比對） |
 | `fmd_matcher.py` | SAMSUNG FMD 原廠成分表解析、本機快取索引與三層配對 |
 | `excel_fixer.py` | Excel COM 修正、備份與型別寫入 |
 | `執行核對.bat` | 單檔拖曳操作的包裝 |

@@ -29,6 +29,7 @@ from excel_checker import CheckSummary, check_sheet, load_workbook_sheets
 from excel_fixer import ExcelComSession, apply_fixes_via_excel_com
 from fmd_matcher import DEFAULT_SAMSUNG_FMD_DIR, FMDRecord, load_fmd_index
 from pdf_parser import MSDSData, TestReportData, parse_msds_pdf, parse_test_report_pdf
+from svhc_checker import check_o202_workbook, is_o202_svhc_workbook
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +321,8 @@ class FileCheckResult:
     test_reports: List[TestReportData] = field(default_factory=list)
     msds_list: List[MSDSData] = field(default_factory=list)
     total_pdfs: int = 0
+    is_o202: bool = False
+    extra_o193d_paths: List[str] = field(default_factory=list)
 
 
 def _is_excel_file(path: str) -> bool:
@@ -416,30 +419,40 @@ def reverify_result(
     except Exception as exc:
         return _set_error(result, f"讀取複驗檔案失敗：{exc}")
 
-    verify = CheckSummary(
-        excel_path=target_path,
-        total_pdfs=result.total_pdfs,
-        test_report_count=len(result.test_reports),
-        msds_count=len(result.msds_list),
-    )
-    for sh in sheets2:
-        verify.sheets_scanned.append(sh.name)
-        if (
-            not args.include_example
-            and _SKIP_SHEET_NAME_RE.search(sh.name)
-            and (args.sheet is None or args.sheet != sh.name)
-        ):
-            verify.notes.append(
-                f"工作表 [{sh.name}] 為範例/範本，已略過（可用 --include-example 納入）。"
-            )
-            continue
-        sh_issues, sh_notes, checked = check_sheet(
-            sh, result.test_reports, result.msds_list, fmd_records=fmd_records
+    if result.is_o202:
+        verify = check_o202_workbook(
+            target_path,
+            sheets2,
+            fmd_records=fmd_records,
+            extra_o193d_paths=result.extra_o193d_paths,
+            include_example=args.include_example,
+            target_sheet=args.sheet,
         )
-        verify.issues.extend(sh_issues)
-        verify.notes.extend(sh_notes)
-        if checked:
-            verify.sheets_checked.append(sh.name)
+    else:
+        verify = CheckSummary(
+            excel_path=target_path,
+            total_pdfs=result.total_pdfs,
+            test_report_count=len(result.test_reports),
+            msds_count=len(result.msds_list),
+        )
+        for sh in sheets2:
+            verify.sheets_scanned.append(sh.name)
+            if (
+                not args.include_example
+                and _SKIP_SHEET_NAME_RE.search(sh.name)
+                and (args.sheet is None or args.sheet != sh.name)
+            ):
+                verify.notes.append(
+                    f"工作表 [{sh.name}] 為範例/範本，已略過（可用 --include-example 納入）。"
+                )
+                continue
+            sh_issues, sh_notes, checked = check_sheet(
+                sh, result.test_reports, result.msds_list, fmd_records=fmd_records, excel_path=result.path
+            )
+            verify.issues.extend(sh_issues)
+            verify.notes.extend(sh_notes)
+            if checked:
+                verify.sheets_checked.append(sh.name)
 
     if not verify.sheets_checked:
         return _set_error(result, "修正後複驗找不到可核對的工作表。")
@@ -568,6 +581,7 @@ def process_file(
     used_report_paths: Optional[set] = None,
     fmd_records: Optional[List[FMDRecord]] = None,
     fmd_init_notes: Optional[List[str]] = None,
+    extra_o193d_paths: Optional[List[str]] = None,
 ) -> FileCheckResult:
     """核對單一 Excel；所有輸出先收集在 FileCheckResult，由 main 決定顯示方式。"""
     excel_path = os.path.abspath(excel_path)
@@ -633,29 +647,48 @@ def process_file(
     if not sheets:
         return _set_error(result, "活頁簿中沒有可讀取的工作表。")
 
-    for sh in sheets:
-        summary.sheets_scanned.append(sh.name)
-        if (
-            not args.include_example
-            and _SKIP_SHEET_NAME_RE.search(sh.name)
-            and (args.sheet is None or args.sheet != sh.name)
-        ):
-            summary.notes.append(
-                f"工作表 [{sh.name}] 為範例/範本，已略過（可用 --include-example 納入）。"
-            )
-            continue
-        sh_issues, sh_notes, checked = check_sheet(
-            sh, test_reports, msds_list, fmd_records=fmd_records
+    if is_o202_svhc_workbook(sheets):
+        o202_summary = check_o202_workbook(
+            excel_path,
+            sheets,
+            fmd_records=fmd_records,
+            extra_o193d_paths=extra_o193d_paths or (),
+            include_example=args.include_example,
+            target_sheet=args.sheet,
         )
-        summary.issues.extend(sh_issues)
-        summary.notes.extend(sh_notes)
-        if checked:
-            summary.sheets_checked.append(sh.name)
+        o202_summary.total_pdfs = len(embedded_pdfs)
+        o202_summary.test_report_count = len(test_reports)
+        o202_summary.msds_count = len(msds_list)
+        for note in (fmd_init_notes or []):
+            o202_summary.notes.append(note)
+        summary = o202_summary
+        result.summary = summary
+        result.is_o202 = True
+        result.extra_o193d_paths = list(extra_o193d_paths or ())
+    else:
+        for sh in sheets:
+            summary.sheets_scanned.append(sh.name)
+            if (
+                not args.include_example
+                and _SKIP_SHEET_NAME_RE.search(sh.name)
+                and (args.sheet is None or args.sheet != sh.name)
+            ):
+                summary.notes.append(
+                    f"工作表 [{sh.name}] 為範例/範本，已略過（可用 --include-example 納入）。"
+                )
+                continue
+            sh_issues, sh_notes, checked = check_sheet(
+                sh, test_reports, msds_list, fmd_records=fmd_records, excel_path=excel_path
+            )
+            summary.issues.extend(sh_issues)
+            summary.notes.extend(sh_notes)
+            if checked:
+                summary.sheets_checked.append(sh.name)
 
     if not summary.sheets_checked:
         return _set_error(
             result,
-            "沒有核對任何工作表：找不到含「部件名稱 / Part name」表頭的工作表，"
+            "沒有核對任何工作表：找不到含「部件名稱 / Part name」或「REACH SVHC」表頭的工作表，"
             "請確認檔案格式或改用 --sheet 指定。",
         )
 
@@ -1001,6 +1034,10 @@ def main(argv: List[str] | None = None) -> int:
     if not args.no_fmd and args.fmd_dir:
         fmd_records, fmd_init_notes = load_fmd_index(args.fmd_dir)
 
+    batch_o193d_paths = [
+        p for p in targets if re.search(r"O-?193D", os.path.basename(p), re.IGNORECASE)
+    ]
+
     # 階段 1：先全部完成 PDF 提取與核對（批次 --fix 也統一在階段 2 共用同一個 Excel COM）
     for index, path in enumerate(targets, 1):
         if batch_mode:
@@ -1012,6 +1049,7 @@ def main(argv: List[str] | None = None) -> int:
             used_report_paths=used_report_paths,
             fmd_records=fmd_records,
             fmd_init_notes=fmd_init_notes,
+            extra_o193d_paths=batch_o193d_paths,
         )
         results.append(result)
         if batch_mode:

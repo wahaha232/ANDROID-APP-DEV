@@ -788,8 +788,10 @@ def _is_standalone_100_pct(sheet: UnifiedSheet, row: int, pct_col: Optional[int]
     return abs(v - 100.0) <= 0.15
 
 
-def _find_header_field_value(sheet: UnifiedSheet, header_row: int, label_re: re.Pattern) -> Optional[str]:
-    """從表頭區（1..header_row-1）依標籤正則尋找右側對應值。"""
+def _find_header_field_cell(
+    sheet: UnifiedSheet, header_row: int, label_re: re.Pattern
+) -> Optional[Tuple[int, int, str]]:
+    """從表頭區（1..header_row-1）依標籤正則尋找右側對應儲存格，回傳 (row, col, value)。"""
     limit_row = min(sheet.nrows, max(header_row - 1, 15))
     for r in range(1, limit_row + 1):
         for c in range(1, min(sheet.ncols, 20) + 1):
@@ -803,8 +805,15 @@ def _find_header_field_value(sheet: UnifiedSheet, header_row: int, label_re: re.
                     continue
                 val = sheet.get_str(r, c + dc)
                 if val:
-                    return val
+                    ar, ac = sheet.get_anchor(r, c + dc)
+                    return ar, ac, val
     return None
+
+
+def _find_header_field_value(sheet: UnifiedSheet, header_row: int, label_re: re.Pattern) -> Optional[str]:
+    """從表頭區（1..header_row-1）依標籤正則尋找右側對應值。"""
+    found = _find_header_field_cell(sheet, header_row, label_re)
+    return found[2] if found else None
 
 
 _FOXLINK_PN_LABEL_RE = re.compile(
@@ -815,6 +824,24 @@ _SUPPLIER_PN_LABEL_RE = re.compile(
     r"供應商產品料號|供应商产品料号|Supplier\s*Product\s*No|原廠型番|原厂型番|Manufacturer\s*Part\s*No",
     re.IGNORECASE,
 )
+_FILENAME_O193D_PN_RE = re.compile(
+    r"([A-Z0-9][A-Z0-9\-]{5,})\s*[_\-\s]*O-?193D\b",
+    re.IGNORECASE,
+)
+
+
+def extract_foxlink_pn_from_filename(excel_path: str) -> Optional[str]:
+    """
+    從檔名解析 O-193D 前面的正崴料號，例如：
+      '07C6-105M-43AD O-193D 環境管理物質部件展開表...xls' -> '07C6-105M-43AD'
+    """
+    if not excel_path:
+        return None
+    stem = os.path.splitext(os.path.basename(excel_path))[0].strip()
+    m = _FILENAME_O193D_PN_RE.search(stem)
+    if not m:
+        return None
+    return m.group(1).strip().rstrip("-_")
 
 
 def _find_foxlink_part_no_in_header(sheet: UnifiedSheet, header_row: int) -> Optional[str]:
@@ -1185,6 +1212,7 @@ def check_sheet(
     test_reports: List[TestReportData],
     msds_list: List[MSDSData],
     fmd_records: Optional[List[FMDRecord]] = None,
+    excel_path: str = "",
 ) -> Tuple[List[CheckIssue], List[str], bool]:
     issues: List[CheckIssue] = []
     notes: List[str] = []
@@ -1245,6 +1273,29 @@ def check_sheet(
 
     if not data_rows:
         notes.append(f"工作表 [{sheet.name}] 未找到有效資料列，僅完成表頭偵測。")
+
+    # -----------------------------------------------------------------------
+    # 0. 檔名 O-193D 前正崴料號 vs 表頭 Foxlink 產品料號比對
+    # -----------------------------------------------------------------------
+    fn_foxlink_pn = extract_foxlink_pn_from_filename(excel_path)
+    if fn_foxlink_pn:
+        fox_cell = _find_header_field_cell(sheet, layout.header_row, _FOXLINK_PN_LABEL_RE)
+        if fox_cell:
+            fr, fc, actual_fox = fox_cell
+            if re.sub(r"\s+", "", actual_fox).upper() != re.sub(r"\s+", "", fn_foxlink_pn).upper():
+                issues.append(
+                    CheckIssue(
+                        sheet_name=sheet.name,
+                        cell_address=make_cell_address(fr, fc),
+                        item_name="正崴料號(檔名比對)",
+                        actual_value=actual_fox,
+                        expected_value=fn_foxlink_pn,
+                        evidence=f"檔名 O-193D 前標示正崴料號為 {fn_foxlink_pn}，與表頭填寫不一致",
+                        severity="ERROR",
+                        fixable=True,
+                        fix_value=fn_foxlink_pn,
+                    )
+                )
 
     # -----------------------------------------------------------------------
     # 1. 重量驗算（區分合併/成分拆分列 vs 同名同重的獨立部件）

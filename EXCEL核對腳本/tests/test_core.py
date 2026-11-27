@@ -1123,5 +1123,88 @@ class TestOverwriteAndIterativeFix(unittest.TestCase):
         self.assertIn("100.0%", bar100)
 
 
+class TestO193DFilenameAndO202CrossCheck(unittest.TestCase):
+    def test_extract_foxlink_pn_from_o193d_filename_and_header_mismatch(self):
+        from excel_checker import extract_foxlink_pn_from_filename
+
+        fname = r"D:\test\07C6-105M-43AD O-193D 環境管理物質部件展開表The Parts List of Enviromental Management Substances.xls"
+        self.assertEqual(extract_foxlink_pn_from_filename(fname), "07C6-105M-43AD")
+
+        sheet = make_sheet([
+            [None, "Foxlink產品料號", "07C6-999M-WRONG"],
+            [None, "部件名稱", "均質材料", "含量(%)"],
+            [None, "P1", "M1", 100],
+        ])
+        issues, _notes, checked = check_sheet(sheet, [], [], excel_path=fname)
+        self.assertTrue(checked)
+        fox_issues = [i for i in issues if i.item_name == "正崴料號(檔名比對)"]
+        self.assertEqual(len(fox_issues), 1)
+        self.assertEqual(fox_issues[0].expected_value, "07C6-105M-43AD")
+        self.assertTrue(fox_issues[0].fixable)
+
+    def test_o202_cross_checks_o193d_and_detects_svhc_omission(self):
+        import openpyxl
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            o193d_path = root / "07C6-105M-43AD O-193D 環境管理物質部件展開表.xlsx"
+            o202_path = root / "07C6-105M-43AD REACH法規SVHC物質調查表O-202 AH03.xlsx"
+
+            # 建立 O-193D（含 1 筆 SVHC CAS: 7439-92-1 鉛）
+            wb1 = openpyxl.Workbook()
+            ws1 = wb1.active
+            ws1.title = "環境管理物質部件展開表"
+            ws1["A3"], ws1["D3"] = "產品名稱", "MLCC"
+            ws1["A4"], ws1["D4"] = "Foxlink產品料號", "07C6-105M-43AD"
+            ws1["A5"], ws1["D5"] = "供應商產品料號", "CL03A105MQ3CSNH"
+            ws1["A7"], ws1["D7"] = "總重量", "0.32mg"
+            for c, v in enumerate(["", "部件名稱", "部件重量", "均質材料", "CAS No.", "含量(%)"], 1):
+                ws1.cell(9, c, v)
+            for c, v in enumerate(["", "Ceramic body", "0.32mg", "Ceramic", "7439-92-1", 100], 1):
+                ws1.cell(10, c, v)
+            wb1.save(o193d_path)
+
+            # 建立 O-202AH（工作表 1 範例、工作表 2 253 項 SVHC 清單、工作表 3 實際填寫頁）
+            wb2 = openpyxl.Workbook()
+            ws_ex = wb2.active
+            ws_ex.title = "範例"
+            o202_headers = [
+                "供應商料號\nSupplier P/N", "正崴料號\nFoxlink P/N", "物料名稱Description",
+                "含有SVHC的名稱\nThe name of SVHC", "SVHC登記號\nSVHC CAS No.",
+                "物料重量 (grams)", "SVHC 重量 (grams)", "SVHC 占物料比重",
+                "SVHC 使用部位/用途", "SVHC 削減日期",
+            ]
+            for c, v in enumerate(o202_headers, 1):
+                ws_ex.cell(8, c, v)
+            for c, v in enumerate(["8112-9000-XXX", "5811-XXXX-XXXX", "端子", "不含", "", "400g"], 1):
+                ws_ex.cell(9, c, v)
+
+            ws_cat = wb2.create_sheet("SVHC清單")
+            ws_cat["A1"] = "REACH 要求通報的高關注物質（SVHC)一覽表"
+            ws_cat["A3"], ws_cat["B3"], ws_cat["C3"] = "No", "CAS NO.", "化學物質名稱"
+            ws_cat["A4"], ws_cat["B4"], ws_cat["C4"] = 189, "7439-92-1", "鉛\nLead"
+
+            ws_real = wb2.create_sheet("調查表")
+            ws_real["A1"] = "REACH法規SVHC物質調查表"
+            for c, v in enumerate(o202_headers, 1):
+                ws_real.cell(8, c, v)
+            # 故意將供應商料號、正崴料號、物料重量填錯，且填「不含」但 O-193D 含 7439-92-1
+            for c, v in enumerate(["CL03A_WRONG", "07C6-WRONG", "MLCC", "不含", "", "0.50mg"], 1):
+                ws_real.cell(9, c, v)
+            wb2.save(o202_path)
+
+            out = io.StringIO()
+            with redirect_stdout(out), redirect_stderr(io.StringIO()):
+                rc = main([str(o202_path), "--no-fmd"])
+
+            text = out.getvalue()
+            self.assertEqual(rc, 2)
+            self.assertIn("供應商料號", text)
+            self.assertIn("正崴料號", text)
+            self.assertIn("物料重量", text)
+            self.assertIn("SVHC 漏報檢查", text)
+            self.assertIn("7439-92-1", text)
+
+
 if __name__ == "__main__":
     unittest.main()
