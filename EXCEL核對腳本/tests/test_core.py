@@ -35,8 +35,11 @@ from excel_checker import (  # noqa: E402
     detect_header_layout,
     results_match,
 )
-from excel_fixer import _coerce_fix_value, _excel_file_format  # noqa: E402
+from excel_fixer import _coerce_fix_value, _excel_file_format, apply_fixes_via_excel_com  # noqa: E402
 from o193d_checker import (  # noqa: E402
+    DEFAULT_BACKUP_DIR,
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_REPORT_DIR,
     FileCheckResult,
     _aggregate_exit_code,
     _collect_excel_targets,
@@ -256,6 +259,30 @@ class TestCheckSheetGrouping(unittest.TestCase):
         self.assertTrue(checked)
         self.assertNotIn("成分含量總和", {i.item_name for i in issues})
 
+    def test_repeated_weight_without_pct_counts_once(self):
+        sheet = make_sheet([
+            ["總重量: 0.1 g"],
+            [None, "部件名稱", "部件重量(g)"],
+            [None, "Screw", 0.1],
+            [None, "Screw", 0.1],
+            [None, "Screw", 0.1],
+        ])
+        issues, notes, checked = check_sheet(sheet, [], [])
+        self.assertTrue(checked)
+        self.assertNotIn("重量驗算", {i.item_name for i in issues})
+
+    def test_same_name_100pct_counts_as_independent_parts(self):
+        sheet = make_sheet([
+            ["總重量: 0.3 g"],
+            [None, "部件名稱", "部件重量(g)", "含量(%)"],
+            [None, "Screw", 0.1, 100],
+            [None, "Screw", 0.1, 100],
+            [None, "Screw", 0.1, 100],
+        ])
+        issues, notes, checked = check_sheet(sheet, [], [])
+        self.assertTrue(checked)
+        self.assertNotIn("重量驗算", {i.item_name for i in issues})
+
 
 class TestFixerHelpers(unittest.TestCase):
     def test_coerce_fix_value(self):
@@ -385,6 +412,27 @@ class TestPdfColumnOrder(unittest.TestCase):
         rep = parse_test_report_pdf(pdf, "multiline.pdf", "multiline.pdf")
         self.assertEqual(rep.results["Cl"].expected_value, "386")
         self.assertEqual(rep.results["F"].expected_value, "<30")
+
+    def test_adjacent_multi_table_same_page(self):
+        pdf = _make_pdf([
+            (72, [
+                (40, "Test Item"), (200, "Limit"), (300, "Unit"),
+                (360, "MDL"), (430, "Result"),
+            ]),
+            (100, [(40, "Cadmium (Cd)"), (200, "1000"), (300, "mg/kg"), (360, "2"), (430, "38")]),
+            (120, [(40, "Lead (Pb)"), (200, "1000"), (300, "mg/kg"), (360, "2"), (430, "N.D.")]),
+            (140, [
+                (40, "Test Item"), (200, "Limit"), (300, "Unit"),
+                (360, "MDL"), (430, "Result"),
+            ]),
+            (160, [(40, "Chlorine (Cl)"), (200, "1000"), (300, "mg/kg"), (360, "50"), (430, "120")]),
+            (180, [(40, "Bromine (Br)"), (200, "1000"), (300, "mg/kg"), (360, "50"), (430, "N.D.")]),
+        ])
+        rep = parse_test_report_pdf(pdf, "two-tables.pdf", "two-tables.pdf")
+        self.assertEqual(rep.results["Cd"].expected_value, "38")
+        self.assertEqual(rep.results["Pb"].expected_value, "<2")
+        self.assertEqual(rep.results["Cl"].expected_value, "120")
+        self.assertEqual(rep.results["Br"].expected_value, "<50")
 
     def test_report_no_with_parenthesized_english_label(self):
         text = (
@@ -612,6 +660,219 @@ class TestBatchMain(unittest.TestCase):
             self.assertIn("通過", out.getvalue())
             self.assertIn("失敗", out.getvalue())
             self.assertIn("沒有核對任何工作表", err.getvalue())
+
+
+class TestOutputDirectories(unittest.TestCase):
+    def test_default_directories_under_script_dir(self):
+        script_dir = Path(__file__).resolve().parents[1]
+        self.assertEqual(Path(DEFAULT_OUTPUT_DIR), script_dir / "output")
+        self.assertEqual(Path(DEFAULT_REPORT_DIR), script_dir / "reports")
+        self.assertEqual(Path(DEFAULT_BACKUP_DIR), script_dir / "backup")
+
+    def test_collect_targets_excludes_output_dirs(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "source.xlsx").write_bytes(b"x")
+            for folder in ("output", "reports", "backup"):
+                d = root / folder
+                d.mkdir()
+                (d / f"{folder}_file.xlsx").write_bytes(b"x")
+
+            targets, errors = _collect_excel_targets(
+                [str(root)],
+                True,
+                exclude_dirs=[str(root / "output"), str(root / "reports"), str(root / "backup")],
+            )
+            self.assertEqual(errors, [])
+            self.assertEqual({Path(p).name for p in targets}, {"source.xlsx"})
+
+    def test_save_report_writes_to_report_dir_and_avoids_name_collision(self):
+        import openpyxl
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            dir_a = root / "a"
+            dir_b = root / "b"
+            report_dir = root / "reports"
+            dir_a.mkdir()
+            dir_b.mkdir()
+
+            for d in (dir_a, dir_b):
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "展開表"
+                for c, value in enumerate(["", "部件名稱", "均質材料", "含量(%)"], 1):
+                    ws.cell(2, c, value)
+                for c, value in enumerate(["", "P1", "M1", 100], 1):
+                    ws.cell(3, c, value)
+                wb.save(d / "same.xlsx")
+
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                rc = main([
+                    str(dir_a / "same.xlsx"),
+                    str(dir_b / "same.xlsx"),
+                    "--save-report",
+                    "--report-dir",
+                    str(report_dir),
+                ])
+
+            self.assertEqual(rc, 0)
+            self.assertFalse((dir_a / "same_核對報告.txt").exists())
+            self.assertFalse((dir_b / "same_核對報告.txt").exists())
+            self.assertTrue((report_dir / "same_核對報告.txt").exists())
+            self.assertTrue((report_dir / "same_核對報告_2.txt").exists())
+            self.assertTrue((report_dir / "批次核對摘要.txt").exists())
+
+    def test_apply_fixes_keeps_original_and_writes_backup_and_output(self):
+        class _DummyFont:
+            Color = None
+
+        class _DummyCell:
+            def __init__(self):
+                self.NumberFormat = None
+                self.Value = None
+                self.Font = _DummyFont()
+
+        class _DummySheet:
+            def __init__(self):
+                self.cells = {}
+
+            def Range(self, addr):
+                return self.cells.setdefault(addr, _DummyCell())
+
+        class _DummyWorkbook:
+            def __init__(self, filename):
+                self.filename = filename
+                self.sheets = {"展開表": _DummySheet()}
+                self.saved = False
+                self.closed = False
+
+            def Worksheets(self, name):
+                return self.sheets[name]
+
+            def Save(self):
+                self.saved = True
+
+            def Close(self, SaveChanges=False):
+                self.closed = True
+
+        class _DummyWorkbooks:
+            def __init__(self):
+                self.opened = []
+
+            def Open(self, Filename, **kwargs):
+                wb = _DummyWorkbook(Filename)
+                self.opened.append(wb)
+                return wb
+
+        class _DummyExcel:
+            def __init__(self):
+                self.Workbooks = _DummyWorkbooks()
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            src = root / "part.xlsx"
+            src.write_bytes(b"ORIGINAL_CONTENT")
+            out_dir = root / "output"
+            bak_dir = root / "backup"
+
+            issue = CheckIssue(
+                sheet_name="展開表",
+                cell_address="C3",
+                item_name="Cd",
+                actual_value="N.D.",
+                expected_value="<2",
+                severity="ERROR",
+                fixable=True,
+                fix_value="<2",
+            )
+
+            excel = _DummyExcel()
+            res1 = apply_fixes_via_excel_com(
+                str(src), [issue], excel_app=excel, output_dir=str(out_dir), backup_dir=str(bak_dir)
+            )
+            res2 = apply_fixes_via_excel_com(
+                str(src), [issue], excel_app=excel, output_dir=str(out_dir), backup_dir=str(bak_dir)
+            )
+
+            self.assertEqual(src.read_bytes(), b"ORIGINAL_CONTENT")
+            self.assertEqual(Path(res1.backup_path), bak_dir / "part_修正前備份.xlsx")
+            self.assertEqual(Path(res1.saved_path), out_dir / "part_已修正.xlsx")
+            self.assertEqual(Path(res2.backup_path), bak_dir / "part_修正前備份_2.xlsx")
+            self.assertEqual(Path(res2.saved_path), out_dir / "part_已修正_2.xlsx")
+            self.assertTrue(Path(res1.backup_path).exists())
+            self.assertTrue(Path(res1.saved_path).exists())
+            self.assertEqual(res1.fixed_count, 1)
+            self.assertEqual(excel.Workbooks.opened[0].filename, str(out_dir / "part_已修正.xlsx"))
+            self.assertTrue(excel.Workbooks.opened[0].saved)
+            self.assertTrue(excel.Workbooks.opened[0].closed)
+
+
+class TestColumnsKMComparison(unittest.TestCase):
+    def test_extract_date_with_bilingual_date_label(self):
+        text = (
+            "报告号(REPORT NO.) \n: RT26R-S6850-001-C \n"
+            "日期(DATE) : 2026 年09 月29 日 \n"
+            "样品收到日期 (SAMPLE RECEIVED) : 2026年 09月03日"
+        )
+        parsed, _raw, labeled = _extract_report_date(text)
+        self.assertEqual(parsed, "2026/09/29")
+        self.assertTrue(labeled)
+
+    def test_columns_k_to_m_mismatch_blank_and_unreferenced(self):
+        sheet = make_sheet([
+            [None, "部件名稱", "均質材料", "含量(%)", "測試報告編號", "測試機構", "測試日期", "Cd"],
+            # K 欄少 -C（模糊配對成功但編號不完全一致）、L 欄機構錯、M 欄日期錯
+            [None, "P1", "M1", 100, "RT26R-S6850-001", "SGS", "2026/01/01", "<2"],
+            # K 欄空白但有材料與數據
+            [None, "P2", "M2", 100, "", "", "", "<2"],
+        ])
+        rep1 = TestReportData(
+            filename="r1.pdf",
+            source_entry="r1.pdf",
+            report_no="RT26R-S6850-001-C",
+            all_report_nos=["RT26R-S6850-001-C"],
+            agency="Intertek",
+            report_date="2026/09/29",
+            date_is_labeled=True,
+            results={
+                "Cd": pdf_parser.SubstanceResult(
+                    substance_key="Cd", expected_value="<2", raw_result="N.D.", mdl="2", page=2
+                )
+            },
+        )
+        rep_unused = TestReportData(
+            filename="unused.pdf",
+            source_entry="unused.pdf",
+            report_no="RT26R-S6850-999-C",
+            all_report_nos=["RT26R-S6850-999-C"],
+            agency="Intertek",
+            report_date="2026/09/29",
+            date_is_labeled=True,
+        )
+
+        issues, notes, checked = check_sheet(sheet, [rep1, rep_unused], [])
+        self.assertTrue(checked)
+
+        by_item = {(i.cell_address, i.item_name): i for i in issues}
+        self.assertIn(("E2", "測試報告編號"), by_item)
+        self.assertTrue(by_item[("E2", "測試報告編號")].fixable)
+        self.assertEqual(by_item[("E2", "測試報告編號")].fix_value, "RT26R-S6850-001-C")
+
+        self.assertIn(("F2", "測試機構"), by_item)
+        self.assertTrue(by_item[("F2", "測試機構")].fixable)
+        self.assertEqual(by_item[("F2", "測試機構")].fix_value, "Intertek")
+
+        self.assertIn(("G2", "測試日期"), by_item)
+        self.assertTrue(by_item[("G2", "測試日期")].fixable)
+        self.assertEqual(by_item[("G2", "測試日期")].fix_value, "2026/09/29")
+
+        self.assertIn(("E3", "測試報告編號"), by_item)
+        self.assertEqual(by_item[("E3", "測試報告編號")].severity, "WARNING")
+
+        self.assertIn(("E欄", "未引用測試報告"), by_item)
+        self.assertEqual(by_item[("E欄", "未引用測試報告")].expected_value, "RT26R-S6850-999-C")
+        self.assertTrue(any("已比對內嵌 PDF" in n for n in notes))
 
 
 if __name__ == "__main__":

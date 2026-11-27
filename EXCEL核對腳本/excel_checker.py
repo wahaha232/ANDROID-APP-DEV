@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-O-193D Excel 欄位 B～AD 自動核對核心模組
+O-193D Excel 欄位自動核對核心模組
 支援：
-  - 讀取 .xls (xlrd) 與 .xlsx (openpyxl)，完整處理合併儲存格
+  - 讀取 .xls (xlrd) 與 .xlsx / .xlsm (openpyxl)，完整處理合併儲存格與儲存格格式（百分比）
+  - 動態偵測有效欄數（上限 80 欄），避免寬表右側物質漏檢
   - 自動偵測表頭列（含「部件名稱 / Part name」）與各欄位對應位置（不寫死欄序）
-  - 重量驗算（各部件重量統一單位換算加總 vs 表頭總重量）
-  - 成分資訊（均質材料組成總和 = 100%、CAS No. 是否存在於內嵌 MSDS）
+  - 重量驗算（區分合併/分拆成分列與獨立同名同重部件，統一單位換算加總 vs 表頭總重量）
+  - 成分資訊（依儲存格百分比格式或數值推測計算均質材料組成總和 = 100%、CAS No. 核對 MSDS）
   - 報告基本資訊（依報告編號配對 PDF，核對測試機構與報告日期）
   - 測試結果（Cd, Pb, Hg, Cr6+, PBB, PBDE, DEHP, BBP, DBP, DIBP, Cl, Br, F, PFOA, PFOS, Be, As, Sb）
-    容許 ㎍/cm2、μg/cm2、ug/cm2 符號差異與 38 vs 38.0 數值格式差異
+    容許 ㎍/cm2、μg/cm2、ug/cm2 符號差異與 38 vs 38.0 數值格式差異；多樣品歧義結果僅警告不自動修正
 """
 
 from __future__ import annotations
@@ -30,6 +31,8 @@ from pdf_parser import (
     normalize_unit,
     parse_date_string,
 )
+
+MAX_SCAN_COLS = 80
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +81,7 @@ class CheckSummary:
 
 
 # ---------------------------------------------------------------------------
-# 統一的 .xls / .xlsx 工作表讀取器（1-based 座標 + 合併儲存格解析）
+# 統一的 .xls / .xlsx 工作表讀取器（1-based 座標 + 合併儲存格解析 + 百分比格式）
 # ---------------------------------------------------------------------------
 
 def col_index_to_letter(col: int) -> str:
@@ -106,6 +109,7 @@ class UnifiedSheet:
         merged_map: Dict[Tuple[int, int], Tuple[int, int]],
         datemode: int = 0,
         formula_without_cache: Optional[List[str]] = None,
+        percent_cells: Optional[Set[Tuple[int, int]]] = None,
     ) -> None:
         self.name = name
         self.nrows = nrows
@@ -114,9 +118,14 @@ class UnifiedSheet:
         self._merged_map = merged_map
         self.datemode = datemode
         self.formula_without_cache: List[str] = formula_without_cache or []
+        self._percent_cells: Set[Tuple[int, int]] = percent_cells or set()
 
     def get_anchor(self, row: int, col: int) -> Tuple[int, int]:
         return self._merged_map.get((row, col), (row, col))
+
+    def is_percent_format(self, row: int, col: int) -> bool:
+        anchor = self.get_anchor(row, col)
+        return anchor in self._percent_cells
 
     def get_raw(self, row: int, col: int) -> Any:
         if row < 1 or col < 1 or row > self.nrows or col > self.ncols:
@@ -136,6 +145,22 @@ class UnifiedSheet:
         return str(val).strip()
 
 
+def _detect_effective_ncols_openpyxl(ws, nrows: int) -> int:
+    """動態偵測表頭區（前 40 列）實際有值的最右欄，避免硬截 35 欄漏檢或被殘留格式撐爆。"""
+    max_col = min(ws.max_column or 0, MAX_SCAN_COLS)
+    if max_col <= 35 or not nrows:
+        return max_col
+    rightmost = 35
+    probe_rows = min(nrows, 40)
+    for row in ws.iter_rows(min_row=1, max_row=probe_rows, max_col=max_col, values_only=True):
+        for idx in range(len(row), rightmost, -1):
+            v = row[idx - 1]
+            if v is not None and str(v).strip() != "":
+                rightmost = idx
+                break
+    return rightmost
+
+
 def load_workbook_sheets(excel_path: str, target_sheet: Optional[str] = None) -> List[UnifiedSheet]:
     ext = os.path.splitext(excel_path)[1].lower()
     sheets: List[UnifiedSheet] = []
@@ -148,6 +173,7 @@ def load_workbook_sheets(excel_path: str, target_sheet: Optional[str] = None) ->
             if target_sheet and sh.name != target_sheet:
                 continue
             grid: List[List[Any]] = []
+            percent_cells: Set[Tuple[int, int]] = set()
             for r in range(sh.nrows):
                 row_vals: List[Any] = []
                 for c in range(sh.ncols):
@@ -161,6 +187,14 @@ def load_workbook_sheets(excel_path: str, target_sheet: Optional[str] = None) ->
                             pass
                     elif cell.ctype == xlrd.XL_CELL_EMPTY:
                         val = None
+                    elif cell.ctype == xlrd.XL_CELL_NUMBER:
+                        try:
+                            xf = wb.xf_list[cell.xf_index]
+                            fmt = wb.format_map.get(xf.format_key)
+                            if fmt and "%" in (fmt.format_str or ""):
+                                percent_cells.add((r + 1, c + 1))
+                        except Exception:
+                            pass
                     row_vals.append(val)
                 grid.append(row_vals)
 
@@ -171,7 +205,12 @@ def load_workbook_sheets(excel_path: str, target_sheet: Optional[str] = None) ->
                     for cc in range(clo + 1, chi + 1):
                         merged_map[(rr, cc)] = anchor
 
-            sheets.append(UnifiedSheet(sh.name, sh.nrows, sh.ncols, grid, merged_map, wb.datemode))
+            sheets.append(
+                UnifiedSheet(
+                    sh.name, sh.nrows, sh.ncols, grid, merged_map,
+                    wb.datemode, percent_cells=percent_cells,
+                )
+            )
 
     elif ext in (".xlsx", ".xlsm"):
         import openpyxl
@@ -183,15 +222,25 @@ def load_workbook_sheets(excel_path: str, target_sheet: Optional[str] = None) ->
                 if target_sheet and ws.title != target_sheet:
                     continue
                 nrows = ws.max_row or 0
-                # 只核對 B～AD（≤35 欄）；避免右側殘留格式把 max_column 撐到 16384
-                ncols = min(ws.max_column or 0, 35)
+                ncols = _detect_effective_ncols_openpyxl(ws, nrows)
+                grid: List[List[Any]] = []
+                percent_cells: Set[Tuple[int, int]] = set()
                 if nrows and ncols:
-                    grid = [
-                        list(row)
-                        for row in ws.iter_rows(min_row=1, max_row=nrows, max_col=ncols, values_only=True)
-                    ]
-                else:
-                    grid = []
+                    for r_idx, row in enumerate(
+                        ws.iter_rows(min_row=1, max_row=nrows, max_col=ncols, values_only=False),
+                        start=1,
+                    ):
+                        row_vals: List[Any] = []
+                        for c_idx, cell in enumerate(row, start=1):
+                            val = cell.value
+                            row_vals.append(val)
+                            if (
+                                isinstance(val, (int, float))
+                                and not isinstance(val, bool)
+                                and "%" in (cell.number_format or "")
+                            ):
+                                percent_cells.add((r_idx, c_idx))
+                        grid.append(row_vals)
                 merged_map: Dict[Tuple[int, int], Tuple[int, int]] = {}
                 for rng in ws.merged_cells.ranges:
                     if rng.min_col > ncols:
@@ -200,23 +249,21 @@ def load_workbook_sheets(excel_path: str, target_sheet: Optional[str] = None) ->
                     for rr in range(rng.min_row, rng.max_row + 1):
                         for cc in range(rng.min_col, min(rng.max_col, ncols) + 1):
                             merged_map[(rr, cc)] = anchor
-                pending.append((ws.title, nrows, ncols, grid, merged_map))
+                pending.append((ws.title, nrows, ncols, grid, merged_map, percent_cells))
         finally:
             wb.close()
 
-        # data_only=True 對「從未被 Excel 計算並儲存」的公式會回傳 None。
-        # 先用便宜的 XML 掃描確認有公式，再以 read-only 模式找公式座標，
-        # 避免沒有公式的活頁簿也要完整載入第二次。
         uncached = (
             _collect_uncached_formulas(excel_path, pending)
             if _workbook_has_formulas(excel_path)
             else {}
         )
-        for name, nrows, ncols, grid, merged_map in pending:
+        for name, nrows, ncols, grid, merged_map, percent_cells in pending:
             sheets.append(
                 UnifiedSheet(
                     name, nrows, ncols, grid, merged_map,
                     formula_without_cache=uncached.get(name, []),
+                    percent_cells=percent_cells,
                 )
             )
     else:
@@ -226,7 +273,7 @@ def load_workbook_sheets(excel_path: str, target_sheet: Optional[str] = None) ->
 
 
 def _workbook_has_formulas(excel_path: str) -> bool:
-    """便宜地掃描 worksheet XML 是否含公式，避免無公式時仍第二次完整載入。"""
+    """掃描 worksheet XML 是否含公式標籤（<f> 或 <f ...>），避免把 <filters> 誤判為公式。"""
     try:
         with zipfile.ZipFile(excel_path) as zf:
             for info in zf.infolist():
@@ -240,18 +287,17 @@ def _workbook_has_formulas(excel_path: str) -> bool:
                         if not chunk:
                             break
                         data = tail + chunk
-                        if b"<f" in data:
+                        if b"<f>" in data or b"<f " in data:
                             return True
-                        tail = data[-1:]
+                        tail = data[-3:]
     except Exception:
-        # 無法判斷時保守執行完整公式檢查
         return True
     return False
 
 
 def _collect_uncached_formulas(
     excel_path: str,
-    sheet_grids: List[Tuple[str, int, int, List[List[Any]], Dict[Tuple[int, int], Tuple[int, int]]]],
+    sheet_grids: List[Tuple[str, int, int, List[List[Any]], Dict[Tuple[int, int], Tuple[int, int]], Set[Tuple[int, int]]]],
 ) -> Dict[str, List[str]]:
     """找出公式儲存格但 data_only 值為 None 的位置（最多每表記錄 20 個）。"""
     import openpyxl
@@ -262,7 +308,7 @@ def _collect_uncached_formulas(
     except Exception:
         return result
     try:
-        for name, nrows, ncols, grid, _ in sheet_grids:
+        for name, nrows, ncols, grid, _, _ in sheet_grids:
             if name not in wb.sheetnames or not nrows or not ncols:
                 continue
             try:
@@ -296,14 +342,13 @@ def _collect_uncached_formulas(
 
 
 # ---------------------------------------------------------------------------
-# 表頭偵測與欄位對應（自動偵測欄位 B～AD，不寫死順序）
+# 表頭偵測與欄位對應（自動偵測，不寫死順序）
 # ---------------------------------------------------------------------------
 
 _HEADER_ANCHOR_RE = re.compile(r"部件名稱|部件名称|零件名稱|零件名称|Part\s*Name", re.IGNORECASE)
 
 _META_COLUMN_PATTERNS: Dict[str, List[str]] = {
     "part_name": [r"部件名稱|部件名称|零件名稱|零件名称|Part\s*Name"],
-    # 先辨識「重量單位」，避免被下方的「重量」規則吃掉
     "weight_unit": [r"重量單位|重量单位|單位|单位|Unit"],
     "content_pct": [r"含量|百分比|比例|組成比|组成比|Content|Composition\s*\(?%\)?|Weight\s*%"],
     "part_weight": [
@@ -312,9 +357,9 @@ _META_COLUMN_PATTERNS: Dict[str, List[str]] = {
     "material_name": [r"均質材料|均质材料|材質名稱|材质名称|材料名稱|材料名称|Homogeneous\s*Material|Material\s*Name"],
     "composition_name": [r"成分名稱|成份名稱|成分名称|化學物質|化学物质|物質名稱|物质名称|Substance\s*Name|Chemical\s*Name|Ingredient"],
     "cas_no": [r"\bCAS\b|CAS\s*No|CAS編號|CAS编号"],
-    "report_no": [r"報告編號|报告编号|測試報告編號|测试报告编号|檢測報告編號|检测报告编号|Report\s*No|Report\s*Number"],
-    "agency": [r"測試機構|测试机构|檢測機構|检测机构|實驗室|实验室|Test\s*Agency|Testing\s*Lab|Lab(?:oratory)?"],
-    "report_date": [r"測試日期|测试日期|報告日期|报告日期|簽發日期|签发日期|Test\s*Date|Report\s*Date|Issue\s*Date"],
+    "report_no": [r"報告編號|报告编号|測試報告編號|测试报告编号|檢測報告編號|检测报告编号|報告號|报告号|測試報告號|测试报告号|Report\s*No|Report\s*Number"],
+    "agency": [r"測試機構|测试机构|檢測機構|检测机构|檢測單位|检测单位|測試單位|测试单位|實驗室|实验室|Test\s*Agency|Testing\s*Lab|Lab(?:oratory)?"],
+    "report_date": [r"測試日期|测试日期|報告日期|报告日期|簽發日期|签发日期|發行日期|发行日期|出具日期|報告日|报告日|Test\s*Date|Report\s*Date|Issue\s*Date"],
 }
 
 _SUBSTANCE_HEADER_PATTERNS: List[Tuple[str, List[str]]] = [
@@ -338,7 +383,6 @@ _SUBSTANCE_HEADER_PATTERNS: List[Tuple[str, List[str]]] = [
     ("Sb", [r"(?:^|[\s\(（/])Sb(?:$|[\s\)）/])|Antimony|銻|锑"]),
 ]
 
-# 與 PDF 解析器的物質鍵保持一致；只改一邊時立即在 import 階段失敗
 if {key for key, _ in _SUBSTANCE_HEADER_PATTERNS} != set(SUBSTANCE_KEYS):
     raise RuntimeError(
         "excel_checker 與 pdf_parser 的物質鍵不一致，請同步更新 "
@@ -348,15 +392,15 @@ if {key for key, _ in _SUBSTANCE_HEADER_PATTERNS} != set(SUBSTANCE_KEYS):
 
 @dataclass
 class HeaderLayout:
-    header_row: int            # 主表頭列 (1-based)
-    data_start_row: int        # 資料起始列 (1-based)
-    meta_cols: Dict[str, int]  # field_key -> col_index (1-based)
-    substance_cols: Dict[str, int]  # substance_key -> col_index (1-based)
-    weight_header_unit: str = "g"   # 表頭中若標示「重量(g)」或「重量(mg)」
+    header_row: int
+    data_start_row: int
+    meta_cols: Dict[str, int]
+    substance_cols: Dict[str, int]
+    weight_header_unit: str = "g"
 
 
 def detect_header_layout(sheet: UnifiedSheet) -> Optional[HeaderLayout]:
-    """自動尋找含「部件名稱 / Part name」的表頭列，並掃描欄位 B～AD 建立欄位對應。"""
+    """自動尋找含「部件名稱 / Part name」的表頭列，並掃描有效欄位建立欄位對應。"""
     max_scan_row = min(sheet.nrows, 40)
     header_row = None
 
@@ -372,30 +416,25 @@ def detect_header_layout(sheet: UnifiedSheet) -> Optional[HeaderLayout]:
     if not header_row:
         return None
 
-    # 偵測多列表頭（例如 header_row 與 header_row+1 皆為表頭，常見於 RoHS 合併大標題 + 子項目）
+    scan_max_col = min(sheet.ncols, MAX_SCAN_COLS)
     header_rows = [header_row]
     if header_row + 1 <= sheet.nrows:
-        # 若下一列出現任何物質關鍵字或 CAS/報告編號，則納入表頭範圍
-        next_row_text = " ".join(sheet.get_str(header_row + 1, c) for c in range(2, min(sheet.ncols, 35) + 1))
+        next_row_text = " ".join(sheet.get_str(header_row + 1, c) for c in range(2, scan_max_col + 1))
         if re.search(r"\b(Cd|Pb|Hg|Cr6\+?|PBB|PBDE|DEHP|CAS)\b|檢出|限值|單位", next_row_text, re.IGNORECASE):
             header_rows.append(header_row + 1)
 
     data_start_row = max(header_rows) + 1
-    # 若資料起始列其實是「限值 / Limit / 單位」說明列，再往下跳一列
     if data_start_row <= sheet.nrows:
-        row_probe = " ".join(sheet.get_str(data_start_row, c) for c in range(2, min(sheet.ncols, 35) + 1))
+        row_probe = " ".join(sheet.get_str(data_start_row, c) for c in range(2, scan_max_col + 1))
         if re.search(r"(?:^|\s)(?:Limit|限值|管制標準|管控標準|標準值|單位|Unit)(?:\s|$)", row_probe, re.IGNORECASE):
             if not sheet.get_str(data_start_row, 2) or re.search(r"限值|Limit|標準", sheet.get_str(data_start_row, 2), re.IGNORECASE):
                 data_start_row += 1
 
-    # 掃描欄位 B (2) ～ AD (30)（若工作表更寬且有物質延伸，最多掃到 min(ncols, 35)）
-    scan_max_col = min(sheet.ncols, 35)
     meta_cols: Dict[str, int] = {}
     substance_cols: Dict[str, int] = {}
     weight_header_unit = "g"
 
     for c in range(2, scan_max_col + 1):
-        # 組合該欄在所有表頭列的文字（去重）
         parts = []
         for hr in header_rows:
             t = sheet.get_str(hr, c)
@@ -405,9 +444,6 @@ def detect_header_layout(sheet: UnifiedSheet) -> Optional[HeaderLayout]:
         if not combined:
             continue
 
-        # 優先辨識物質欄位（避免 Cl/Br/F 等被誤配到其他欄位）
-        # 由下往上逐列表頭比對：子表頭優先，找不到再回上層表頭；
-        # 可處理「主表頭 Cd/Pb + 下一列限值/單位」與兩列式子表頭。
         matched_sub = False
         for sub_key, pats in _SUBSTANCE_HEADER_PATTERNS:
             if sub_key in substance_cols:
@@ -425,7 +461,6 @@ def detect_header_layout(sheet: UnifiedSheet) -> Optional[HeaderLayout]:
         if matched_sub:
             continue
 
-        # 辨識中繼資料欄位
         for field_key, pats in _META_COLUMN_PATTERNS.items():
             if field_key in meta_cols:
                 continue
@@ -465,7 +500,6 @@ _WEIGHT_TOKEN_RE = r"(kg|mg|μg|ug|µg|公斤|千克|公克|毫克|微克|克|g)
 
 
 def _to_grams(value: float, unit: str) -> Optional[float]:
-    """換算為公克；無法辨識的單位回傳 None（不再默默當成 g）。"""
     u = (unit or "g").strip().lower()
     factor = _WEIGHT_UNIT_FACTORS.get(u)
     if factor is None:
@@ -479,7 +513,6 @@ def _parse_weight_and_unit(raw: Any, default_unit: str = "g") -> Optional[Tuple[
     if isinstance(raw, (int, float)) and not isinstance(raw, bool):
         return float(raw), default_unit.lower()
     s = str(raw).strip().replace(",", "").replace("，", "")
-    # 只接受「數值 + 單位」的完整內容；避免從長備註（例如 GQS-ZZ09-13）誤抓數字當重量
     m = re.fullmatch(
         rf"\s*(?:約|~)?\s*(-?\d+(?:\.\d+)?)\s*{_WEIGHT_TOKEN_RE}?\s*",
         s,
@@ -493,7 +526,6 @@ def _parse_weight_and_unit(raw: Any, default_unit: str = "g") -> Optional[Tuple[
 
 
 def _find_total_weight_in_header(sheet: UnifiedSheet, header_row: int) -> Optional[Tuple[str, float, str]]:
-    """在表頭上方區域搜尋「總重量 / Total Weight」，回傳 (cell_address, grams, raw_display)。"""
     label_re = re.compile(r"總重量|总重量|產品總重|产品总重|Total\s*Weight", re.IGNORECASE)
     for r in range(1, header_row):
         for c in range(1, min(sheet.ncols, 20) + 1):
@@ -501,7 +533,6 @@ def _find_total_weight_in_header(sheet: UnifiedSheet, header_row: int) -> Option
             if not txt or not label_re.search(txt):
                 continue
             label_match = label_re.search(txt)
-            # 情況 1：數值在同一格，例如 "總重量: 12,500 g"（支援千分位）
             m_inline = re.search(
                 rf"[:：]?\s*(-?\d[\d,]*(?:\.\d+)?)\s*{_WEIGHT_TOKEN_RE}?",
                 txt[label_match.end():],
@@ -512,7 +543,6 @@ def _find_total_weight_in_header(sheet: UnifiedSheet, header_row: int) -> Option
                 if m_inline.group(2):
                     u = m_inline.group(2).lower()
                 else:
-                    # 單位可能寫在標籤括號內，例如 "總重量(kg): 1.5"
                     u_lbl = re.search(
                         rf"[\(（]\s*{_WEIGHT_TOKEN_RE}\s*[\)）]", txt, re.IGNORECASE
                     )
@@ -521,23 +551,19 @@ def _find_total_weight_in_header(sheet: UnifiedSheet, header_row: int) -> Option
                 if grams is not None:
                     return make_cell_address(r, c), grams, f"{val}{u}"
 
-            # 情況 2：數值在右側相鄰儲存格（最多往右找 3 格）
             for dc in range(1, 4):
                 if c + dc > sheet.ncols:
                     break
-                # 跳過同一合併格
                 if sheet.get_anchor(r, c + dc) == sheet.get_anchor(r, c):
                     continue
                 v_raw = sheet.get_value(r, c + dc)
                 parsed = _parse_weight_and_unit(v_raw, "g")
                 if parsed:
                     val, u = parsed
-                    # 檢查再右一格是否為單位（如 "g" / "mg" / "kg"）
                     if c + dc + 1 <= sheet.ncols:
                         u_next = sheet.get_str(r, c + dc + 1).lower()
                         if u_next in _WEIGHT_UNIT_FACTORS:
                             u = u_next
-                    # 也檢查標籤本身是否註明單位，例如 "總重量(g)"
                     u_lbl = re.search(rf"[\(（]\s*{_WEIGHT_TOKEN_RE}\s*[\)）]", txt, re.IGNORECASE)
                     if u_lbl and not re.search(_WEIGHT_TOKEN_RE, str(v_raw), re.IGNORECASE):
                         u = u_lbl.group(1).lower()
@@ -556,7 +582,6 @@ def _report_keys(rep: TestReportData) -> List[str]:
 
 
 def _safe_affix_match(a: str, b: str) -> bool:
-    """只允許前綴/後綴關係（版本尾碼），避免任意包含造成誤配。"""
     if not a or not b:
         return False
     short, long = (a, b) if len(a) <= len(b) else (b, a)
@@ -568,17 +593,12 @@ def _safe_affix_match(a: str, b: str) -> bool:
 def _match_test_report(
     report_no_cell: str, reports: List[TestReportData]
 ) -> Tuple[Optional[TestReportData], Optional[str]]:
-    """
-    回傳 (配對到的報告, 警告訊息)。
-    若有多份報告同時符合，回傳 (None, 警告)，交由人工確認，不任意挑選。
-    """
     if not report_no_cell:
         return None, None
     target_norm = _normalize_report_key(report_no_cell)
     if len(target_norm) < 4:
         return None, None
 
-    # 1. 精準比對（忽略空白與符號）
     exact = [
         rep for rep in reports
         if any(_normalize_report_key(cand) == target_norm for cand in _report_keys(rep))
@@ -590,7 +610,6 @@ def _match_test_report(
             return None, f"有多份報告的編號與「{report_no_cell}」完全相同（{names}）"
         return exact[0], None
 
-    # 2. 前綴/後綴比對（處理 Excel 填寫精簡編號或 PDF 帶版本尾碼如 _01）
     fuzzy = [
         rep for rep in reports
         if any(_safe_affix_match(target_norm, _normalize_report_key(cand)) for cand in _report_keys(rep))
@@ -602,7 +621,6 @@ def _match_test_report(
             return None, f"「{report_no_cell}」同時符合多份報告（{names}），請人工確認"
         return fuzzy[0], None
 
-    # 3. 檔名比對 fallback（僅接受唯一命中）
     fname_hits = []
     for rep in reports:
         fn = _normalize_report_key(os.path.splitext(rep.filename)[0])
@@ -650,17 +668,10 @@ _COMPARE_SYMBOLS = {"<": "lt", "≤": "le", ">": "gt", "≥": "ge", "~": "approx
 
 
 def _normalize_result_for_compare(val_str: str) -> Tuple[str, Optional[float], str]:
-    """
-    將測試結果拆解為 (kind, numeric_value, normalized_unit)：
-      - kind: lt/le/gt/ge/approx/num/text/empty
-      - 統一 ㎍/cm2、μg/cm2、µg/cm2、ug/cm2、μg/cm² 為 "μg/cm2"
-      - 數值轉 float，使 38 == 38.0、<2 == <2.0、<0.10 == <0.1、-0.5 可解析
-    """
     s = (val_str or "").strip()
     if not s:
         return ("empty", None, "")
 
-    # 統一全形符號與千分位
     s_norm = (
         s.replace("＜", "<").replace("＞", ">")
         .replace("≤", "≤").replace("≥", "≥")
@@ -668,7 +679,6 @@ def _normalize_result_for_compare(val_str: str) -> Tuple[str, Optional[float], s
     )
     s_norm = re.sub(r"[㎍μµu]g\s*/\s*cm[2²]", "μg/cm2", s_norm, flags=re.IGNORECASE)
 
-    # 比較符號 + 數值 [unit]
     m_sym = re.match(r"^([<≤>≥~])\s*(-?\d+(?:\.\d+)?)\s*(.*)$", s_norm)
     if m_sym:
         kind = _COMPARE_SYMBOLS[m_sym.group(1)]
@@ -676,7 +686,6 @@ def _normalize_result_for_compare(val_str: str) -> Tuple[str, Optional[float], s
         unit = normalize_unit(m_sym.group(3)) if m_sym.group(3).strip() else "ppm"
         return (kind, num, unit)
 
-    # 純數字 [unit]
     m_num = re.match(r"^(-?\d+(?:\.\d+)?)\s*(.*)$", s_norm)
     if m_num:
         num = float(m_num.group(1))
@@ -698,13 +707,6 @@ def _compare_kind_group(kind: str) -> str:
 
 
 def results_match(excel_val: str, expected_val: str) -> bool:
-    """
-    比對 Excel 填寫值與報告正確值：
-      - 容許 ㎍/cm2、μg/cm2、ug/cm2 符號差異
-      - 容許 38 vs 38.0、<2 vs ≤2（同方向）數值格式差異
-      - 支援 >、≥、~ 與負數
-      - ND / N.D. 視為不符合 <MDL（強制要求修正）
-    """
     k1, n1, u1 = _normalize_result_for_compare(excel_val)
     k2, n2, u2 = _normalize_result_for_compare(expected_val)
 
@@ -732,8 +734,8 @@ def _row_blocks(sheet: UnifiedSheet, rows: List[int], col: Optional[int]) -> Lis
     """
     將連續資料列切成「區塊」：
       - 合併儲存格：同一個 anchor 視為同一區塊
-      - 未合併：連續相同文字視為同一區塊（避免每列重複填寫造成重複計算）
-      - 空白：沿用目前區塊（常見於合併儲存格或只填第一列）
+      - 未合併：連續相同文字視為同一區塊
+      - 空白：沿用目前區塊
     """
     if col is None:
         return [list(rows)]
@@ -743,8 +745,6 @@ def _row_blocks(sheet: UnifiedSheet, rows: List[int], col: Optional[int]) -> Lis
     cur_rows: List[int] = []
     for r in rows:
         text = sheet.get_str(r, col)
-        # 以「文字」為區塊鍵：合併儲存格的錨點列與被覆蓋列會取得相同文字，
-        # 未合併但每列重複填寫的名稱也能連續分組。
         key: Any = ("text", text) if text else cur_key
 
         if cur_key is None or key != cur_key:
@@ -757,6 +757,25 @@ def _row_blocks(sheet: UnifiedSheet, rows: List[int], col: Optional[int]) -> Lis
     if cur_rows:
         blocks.append(cur_rows)
     return blocks
+
+
+def _is_standalone_100_pct(sheet: UnifiedSheet, row: int, pct_col: Optional[int]) -> bool:
+    """判斷該列是否為單獨構成 100% 的獨立成分列（用於區分兩個同名同重的獨立部件）。"""
+    # 沒有含量欄位時無法證明是獨立部件，維持原行為：同重量只計一次，
+    # 避免每列重複填寫重量時被誤加總成多個部件。
+    if pct_col is None:
+        return False
+    raw = sheet.get_value(row, pct_col)
+    if raw is None or str(raw).strip() == "":
+        return False
+    s = str(raw).strip().replace("%", "").replace("％", "").strip()
+    try:
+        v = float(s)
+    except ValueError:
+        return False
+    if sheet.is_percent_format(row, pct_col) or abs(v - 1.0) <= 0.005:
+        return abs(v - 1.0) <= 0.005
+    return abs(v - 100.0) <= 0.15
 
 
 def check_sheet(
@@ -788,7 +807,6 @@ def check_sheet(
     for m in msds_list:
         all_msds_cas.update(m.cas_set)
 
-    # 決定有效資料列範圍（避開底部空白與備註列）
     part_col = layout.meta_cols.get("part_name")
     mat_col = layout.meta_cols.get("material_name")
     comp_col = layout.meta_cols.get("composition_name")
@@ -800,24 +818,20 @@ def check_sheet(
     agency_col = layout.meta_cols.get("agency")
     date_col = layout.meta_cols.get("report_date")
 
+    scan_max_col = min(sheet.ncols, MAX_SCAN_COLS)
     data_rows: List[int] = []
     for r in range(layout.data_start_row, sheet.nrows + 1):
-        # 若整列 B~AD 皆空或為「合計 / Total / 備註 / Note」則略過
-        row_vals = [sheet.get_str(r, c) for c in range(2, min(sheet.ncols, 35) + 1)]
+        row_vals = [sheet.get_str(r, c) for c in range(2, scan_max_col + 1)]
         if not any(row_vals):
             continue
         first_txt = sheet.get_str(r, part_col) if part_col else row_vals[0]
         if re.match(r"^(合計|总计|總計|Total|備註|备注|Note|說明|说明)\b", first_txt, re.IGNORECASE):
             continue
-        # 排除頁尾說明／簽核列：這類列常被合併儲存格帶入部件欄，
-        # 若當成資料列會把備註中的數字誤認為重量或報告編號。
         if len(first_txt) > 80:
             continue
         note_cols = [c for c in (part_col, mat_col, comp_col, rep_col) if c is not None]
         if any(_NOTE_ROW_RE.search(sheet.get_str(r, c)) for c in note_cols):
             continue
-        # 需有部件／材料／成分名稱、CAS、報告編號或百分比其中之一；
-        # 百分比列即使其他欄位空白（例如 Balance/Other）也要保留給成分加總。
         has_key_data = any(
             sheet.get_str(r, col)
             for col in (part_col, mat_col, comp_col, cas_col, rep_col, pct_col)
@@ -830,7 +844,7 @@ def check_sheet(
         notes.append(f"工作表 [{sheet.name}] 未找到有效資料列，僅完成表頭偵測。")
 
     # -----------------------------------------------------------------------
-    # 1. 重量驗算
+    # 1. 重量驗算（區分合併/成分拆分列 vs 同名同重的獨立部件）
     # -----------------------------------------------------------------------
     total_wt_info = _find_total_weight_in_header(sheet, layout.header_row)
     if total_wt_info and wt_col:
@@ -838,10 +852,48 @@ def check_sheet(
         sum_g = 0.0
         wt_count = 0
 
-        # 以「部件」為區塊，每個區塊只計一次重量（相容合併與每列重複填寫）
         for block in _row_blocks(sheet, data_rows, part_col):
+            # 檢查此區塊是否為「多個未合併且各自獨立 100% 的同名部件」
+            part_anchors = {sheet.get_anchor(r, part_col) for r in block} if part_col else set()
+            wt_anchors = {sheet.get_anchor(r, wt_col) for r in block}
+            is_unmerged_independent = (
+                len(block) > 1
+                and part_col is not None
+                and len(part_anchors) == len(block)
+                and len(wt_anchors) == len(block)
+                and all(_is_standalone_100_pct(sheet, r, pct_col) for r in block)
+            )
+
+            if is_unmerged_independent:
+                for r in block:
+                    raw_wt = sheet.get_value(r, wt_col)
+                    if raw_wt is None or str(raw_wt).strip() == "":
+                        continue
+                    unit_override = sheet.get_str(r, wt_unit_col).lower() if wt_unit_col else ""
+                    default_u = (
+                        unit_override if unit_override in _WEIGHT_UNIT_FACTORS else layout.weight_header_unit
+                    )
+                    parsed = _parse_weight_and_unit(raw_wt, default_u)
+                    if not parsed:
+                        notes.append(f"工作表 [{sheet.name}] 第 {r} 列重量「{raw_wt}」無法解析，已排除。")
+                        continue
+                    val, u = parsed
+                    grams = _to_grams(val, u)
+                    if grams is None:
+                        notes.append(f"工作表 [{sheet.name}] 第 {r} 列重量單位「{u}」無法辨識，已排除。")
+                        continue
+                    sum_g += grams
+                    wt_count += 1
+                continue
+
             distinct: Dict[Tuple[float, str], int] = {}
+            seen_wt_anchors: Set[Tuple[int, int]] = set()
             for r in block:
+                wa = sheet.get_anchor(r, wt_col)
+                if wa in seen_wt_anchors:
+                    continue
+                seen_wt_anchors.add(wa)
+
                 raw_wt = sheet.get_value(r, wt_col)
                 if raw_wt is None or str(raw_wt).strip() == "":
                     continue
@@ -872,7 +924,7 @@ def check_sheet(
                 wt_count += 1
 
         if wt_count > 0:
-            tol = max(abs(total_g) * 0.005, 1e-3)  # 容許 0.5% 四捨五入誤差或 0.001g
+            tol = max(abs(total_g) * 0.005, 1e-3)
             if abs(sum_g - total_g) > tol:
                 issues.append(
                     CheckIssue(
@@ -892,8 +944,6 @@ def check_sheet(
     # -----------------------------------------------------------------------
     if pct_col:
         seen_pct_anchors: Set[Tuple[int, int]] = set()
-
-        # 先切部件區塊，再切均質材料區塊；未合併而重複填寫的名稱也能正確分組
         part_blocks = _row_blocks(sheet, data_rows, part_col) if part_col else [list(data_rows)]
         for part_rows in part_blocks:
             if mat_col and mat_col != part_col:
@@ -902,7 +952,7 @@ def check_sheet(
                 material_blocks = [part_rows]
 
             for block in material_blocks:
-                entries: List[Tuple[int, float]] = []
+                entries: List[Tuple[int, float, bool]] = []
                 for r in block:
                     pct_anchor = sheet.get_anchor(r, pct_col)
                     if pct_anchor in seen_pct_anchors:
@@ -917,16 +967,20 @@ def check_sheet(
                         num_pct = float(s_pct)
                     except ValueError:
                         continue
-                    entries.append((r, num_pct))
+                    has_pct_fmt = sheet.is_percent_format(r, pct_col)
+                    entries.append((r, num_pct, has_pct_fmt))
 
                 if not entries:
                     continue
 
-                raw_sum = sum(v for _, v in entries)
-                # 判斷是否為 Excel 百分比小數格式（例如 0.35 + 0.65 = 1.0）
-                is_decimal_pct = (
-                    all(0.0 <= v <= 1.0001 for _, v in entries) and abs(raw_sum - 1.0) <= 0.15
-                )
+                raw_sum = sum(v for _, v, _ in entries)
+                # 優先依據 Excel 儲存格的百分比格式判斷；無格式資訊時退回數值推測
+                if any(fmt for _, _, fmt in entries):
+                    is_decimal_pct = True
+                else:
+                    is_decimal_pct = (
+                        all(0.0 <= v <= 1.0001 for _, v, _ in entries) and abs(raw_sum - 1.0) <= 0.15
+                    )
                 pct_sum = raw_sum * 100.0 if is_decimal_pct else raw_sum
                 if abs(pct_sum - 100.0) > 0.15:
                     first_r = entries[0][0]
@@ -996,7 +1050,7 @@ def check_sheet(
                     )
 
     # -----------------------------------------------------------------------
-    # 3. 報告基本資訊（報告編號配對 PDF、測試機構、測試日期） & 4. 測試結果（欄位 N～AD）
+    # 3. 報告基本資訊（欄位 K~M：測試報告編號、測試機構、測試日期） & 4. 測試結果
     # -----------------------------------------------------------------------
     if not rep_col:
         notes.append(f"工作表 [{sheet.name}] 未偵測到「測試報告編號」欄位，無法配對 PDF 報告。")
@@ -1004,18 +1058,49 @@ def check_sheet(
 
     checked_cells: Set[Tuple[int, int]] = set()
     warned_missing_reports: Set[Tuple[int, int]] = set()
+    warned_blank_reports: Set[Tuple[int, int]] = set()
     warned_empty_reports: Set[Tuple[str, str]] = set()
+    matched_pdf_ids: Set[int] = set()
+    checked_rep_anchors: Set[Tuple[int, int]] = set()
+    km_mismatch = {"report_no": 0, "agency": 0, "report_date": 0}
+    available_report_nos = [r.report_no for r in test_reports if r.report_no]
 
     for r in data_rows:
         rep_anchor = sheet.get_anchor(r, rep_col)
         rep_no_str = sheet.get_str(r, rep_col)
-        if not rep_no_str or re.match(r"^(N/?A|NONE|無|无|-|—|/)$", rep_no_str, re.IGNORECASE):
+        if not rep_no_str:
+            has_substance_or_mat = bool(
+                (mat_col and sheet.get_str(r, mat_col))
+                or any(sheet.get_str(r, sc) for sc in layout.substance_cols.values())
+            )
+            if test_reports and has_substance_or_mat and rep_anchor not in warned_blank_reports:
+                warned_blank_reports.add(rep_anchor)
+                issues.append(
+                    CheckIssue(
+                        sheet_name=sheet.name,
+                        cell_address=make_cell_address(rep_anchor[0], rep_anchor[1]),
+                        item_name="測試報告編號",
+                        actual_value="(空白)",
+                        expected_value="對應之內嵌 PDF 報告編號",
+                        evidence="該列有材料或測試數據但未填寫測試報告編號，無法與內嵌 PDF 比對",
+                        severity="WARNING",
+                        fixable=False,
+                    )
+                )
+            continue
+        if re.match(r"^(N/?A|NONE|無|无|-|—|/)$", rep_no_str, re.IGNORECASE):
             continue
 
         matched_pdf, match_warning = _match_test_report(rep_no_str, test_reports)
         if not matched_pdf:
             if rep_anchor not in warned_missing_reports:
                 warned_missing_reports.add(rep_anchor)
+                ev_msg = match_warning or "於 Excel 內嵌 PDF 中找不到對應此報告編號的第三方測試報告"
+                if not match_warning and available_report_nos:
+                    sample_nos = "、".join(available_report_nos[:5])
+                    if len(available_report_nos) > 5:
+                        sample_nos += f" 等共 {len(available_report_nos)} 份"
+                    ev_msg += f"（內嵌 PDF 編號：{sample_nos}）"
                 issues.append(
                     CheckIssue(
                         sheet_name=sheet.name,
@@ -1024,16 +1109,42 @@ def check_sheet(
                         actual_value=rep_no_str,
                         expected_value="對應之內嵌 PDF 報告",
                         report_no=rep_no_str,
-                        evidence=match_warning
-                        or "於 Excel 內嵌 PDF 中找不到對應此報告編號的第三方測試報告",
+                        evidence=ev_msg,
                         severity="WARNING",
                         fixable=False,
                     )
                 )
             continue
 
-        # 配對成功但完全解析不到物質結果：可能是掃描影像或表格格式不支援，
-        # 必須明確提示，避免「什麼都沒檢查」卻回報全部一致。
+        matched_pdf_ids.add(id(matched_pdf))
+
+        # 3a. 核對測試報告編號本身（欄位 K）是否與內嵌 PDF 正式編號完全一致
+        if rep_anchor not in checked_rep_anchors:
+            checked_rep_anchors.add(rep_anchor)
+            if matched_pdf.report_no:
+                pdf_nos = matched_pdf.all_report_nos or [matched_pdf.report_no]
+                exact_str_match = any(
+                    rep_no_str.strip().upper() == cand.strip().upper()
+                    for cand in pdf_nos
+                )
+                if not exact_str_match:
+                    km_mismatch["report_no"] += 1
+                    issues.append(
+                        CheckIssue(
+                            sheet_name=sheet.name,
+                            cell_address=make_cell_address(rep_anchor[0], rep_anchor[1]),
+                            item_name="測試報告編號",
+                            actual_value=rep_no_str,
+                            expected_value=matched_pdf.report_no,
+                            report_no=matched_pdf.report_no,
+                            pdf_page="P.1",
+                            evidence=f"PDF 報告 ({matched_pdf.filename}) 正式編號為 {matched_pdf.report_no}",
+                            severity="ERROR",
+                            fixable=True,
+                            fix_value=matched_pdf.report_no,
+                        )
+                    )
+
         report_key = (matched_pdf.filename, matched_pdf.report_no)
         if not matched_pdf.results and report_key not in warned_empty_reports:
             warned_empty_reports.add(report_key)
@@ -1051,13 +1162,14 @@ def check_sheet(
                 )
             )
 
-        # 3a. 核對測試機構 (欄位 L)
+        # 3b. 核對測試機構（欄位 L）
         if agency_col and matched_pdf.agency:
             ag_anchor = sheet.get_anchor(r, agency_col)
             if ag_anchor not in checked_cells:
                 checked_cells.add(ag_anchor)
                 ag_actual = sheet.get_str(r, agency_col)
                 if not _agencies_match(ag_actual, matched_pdf.agency):
+                    km_mismatch["agency"] += 1
                     issues.append(
                         CheckIssue(
                             sheet_name=sheet.name,
@@ -1074,7 +1186,7 @@ def check_sheet(
                         )
                     )
 
-        # 3b. 核對測試日期 (欄位 M)
+        # 3c. 核對測試日期（欄位 M）
         if date_col and matched_pdf.report_date:
             dt_anchor = sheet.get_anchor(r, date_col)
             if dt_anchor not in checked_cells:
@@ -1083,6 +1195,7 @@ def check_sheet(
                 dt_actual_str = sheet.get_str(r, date_col)
                 parsed_dt = _parse_excel_date(raw_dt)
                 if parsed_dt != matched_pdf.report_date:
+                    km_mismatch["report_date"] += 1
                     date_labeled = matched_pdf.date_is_labeled
                     date_evidence = f"PDF 報告日期為 {matched_pdf.raw_date or matched_pdf.report_date}"
                     if not date_labeled:
@@ -1103,7 +1216,7 @@ def check_sheet(
                         )
                     )
 
-        # 4. 核對各項物質測試結果 (欄位 N～AD)
+        # 4. 核對各項物質測試結果
         for sub_key, col_idx in layout.substance_cols.items():
             pdf_res = matched_pdf.results.get(sub_key)
             if not pdf_res:
@@ -1116,6 +1229,10 @@ def check_sheet(
 
             actual_str = sheet.get_str(r, col_idx)
             if not results_match(actual_str, pdf_res.expected_value):
+                is_ambig = bool(getattr(pdf_res, "ambiguous", False))
+                ev = f"PDF 原始結果={pdf_res.raw_result}, MDL={pdf_res.mdl or '-'}, 單位={pdf_res.unit}"
+                if is_ambig:
+                    ev += "（偵測到多樣品並列，請人工確認後再修改）"
                 issues.append(
                     CheckIssue(
                         sheet_name=sheet.name,
@@ -1125,11 +1242,38 @@ def check_sheet(
                         expected_value=pdf_res.expected_value,
                         report_no=matched_pdf.report_no or rep_no_str,
                         pdf_page=f"P.{pdf_res.page}",
-                        evidence=f"PDF 原始結果={pdf_res.raw_result}, MDL={pdf_res.mdl or '-'}, 單位={pdf_res.unit}",
-                        severity="ERROR",
-                        fixable=True,
-                        fix_value=pdf_res.expected_value,
+                        evidence=ev,
+                        severity="WARNING" if is_ambig else "ERROR",
+                        fixable=not is_ambig,
+                        fix_value=None if is_ambig else pdf_res.expected_value,
                     )
                 )
+
+    # 3d. 檢查未被任何資料列引用的內嵌第三方測試報告
+    if test_reports:
+        for rep in test_reports:
+            if id(rep) not in matched_pdf_ids:
+                issues.append(
+                    CheckIssue(
+                        sheet_name=sheet.name,
+                        cell_address=f"{col_index_to_letter(rep_col)}欄",
+                        item_name="未引用測試報告",
+                        actual_value="(未出現於表格)",
+                        expected_value=rep.report_no or rep.filename,
+                        report_no=rep.report_no,
+                        pdf_page="P.1",
+                        evidence=f"內嵌 PDF ({rep.filename}) 未被任何資料列的測試報告編號欄引用，請確認是否漏填或填錯編號",
+                        severity="WARNING",
+                        fixable=False,
+                    )
+                )
+
+        col_tags = [col_index_to_letter(c) for c in (rep_col, agency_col, date_col) if c is not None]
+        col_label = "~".join([col_tags[0], col_tags[-1]]) if len(col_tags) >= 2 else col_tags[0]
+        notes.append(
+            f"工作表 [{sheet.name}] 欄位 {col_label}（測試報告編號/測試機構/測試日期）已比對內嵌 PDF："
+            f"配對 {len(matched_pdf_ids)}/{len(test_reports)} 份"
+            f"（編號不符 {km_mismatch['report_no']}、機構不符 {km_mismatch['agency']}、日期不符 {km_mismatch['report_date']}）。"
+        )
 
     return issues, notes, True

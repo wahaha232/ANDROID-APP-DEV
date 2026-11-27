@@ -3,10 +3,10 @@
 O-193D 環境管理物質部件展開表 — 自動核對與修正主程式
 
 用法：
-  python o193d_checker.py <Excel檔案路徑> [--save-report] [--fix] [--sheet 工作表名] [--verbose]
+  python o193d_checker.py <Excel檔案路徑或資料夾...> [--save-report] [--fix | --interactive-fix] [--sheet 工作表名] [--recursive] [--verbose]
 
 結束代碼 (Exit Code)：
-  0 : 核對完成且無異常（或 --fix 執行完成）
+  0 : 核對完成且無異常（或 --fix 後複驗無異常）
   1 : 執行錯誤（檔案不存在、缺少套件等）
   2 : 發現異常且有可自動修正項目
   3 : 發現異常但皆為人工確認項（無可自動修正項目）
@@ -22,11 +22,11 @@ import sys
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from embed_extractor import extract_embedded_pdfs
 from excel_checker import CheckSummary, check_sheet, load_workbook_sheets
-from excel_fixer import apply_fixes_via_excel_com
+from excel_fixer import ExcelComSession, apply_fixes_via_excel_com
 from pdf_parser import MSDSData, TestReportData, parse_msds_pdf, parse_test_report_pdf
 
 
@@ -163,6 +163,8 @@ def format_report_text(
             else iss.cell_address
         )
         evidence = iss.evidence or "-"
+        # 先折行，主列放第一行，後續行縮排顯示，避免截斷後重複輸出
+        ev_chunks = _wrap_text(evidence, evidence_width)
         row_vals = [
             _truncate(lvl, headers[0][1]),
             _truncate(loc, headers[1][1]),
@@ -171,15 +173,13 @@ def format_report_text(
             _truncate(iss.expected_value, headers[4][1]),
             _truncate(iss.report_no or "-", headers[5][1]),
             _truncate(iss.pdf_page or "-", headers[6][1]),
-            _truncate(evidence, evidence_width),
+            ev_chunks[0],
         ]
         cells = [_pad_right(v, w) for v, w in zip(row_vals, (w for _, w in headers))]
         lines.append(" | ".join(cells))
 
-        # 依據過長時折行顯示，避免破壞表格對齊
-        if _display_width(evidence) > evidence_width:
-            for chunk in _wrap_text(evidence, evidence_width):
-                lines.append(evidence_indent + chunk)
+        for chunk in ev_chunks[1:]:
+            lines.append(evidence_indent + chunk)
 
     lines.append(sep)
     return "\n".join(lines)
@@ -189,7 +189,11 @@ def format_report_text(
 # 套件檢查
 # ---------------------------------------------------------------------------
 
+_WARNED_DEFUSEDXML = False
+
+
 def _check_dependencies(excel_path: str, need_fix: bool) -> List[str]:
+    global _WARNED_DEFUSEDXML
     missing: List[str] = []
     ext = os.path.splitext(excel_path)[1].lower()
     checks: List[Tuple[str, str]] = [
@@ -201,12 +205,19 @@ def _check_dependencies(excel_path: str, need_fix: bool) -> List[str]:
         checks.append(("xlrd", "xlrd"))
     else:
         checks.append(("openpyxl", "openpyxl"))
+        if not _WARNED_DEFUSEDXML and importlib.util.find_spec("defusedxml") is None:
+            _WARNED_DEFUSEDXML = True
+            print(
+                "[警告] 未安裝 defusedxml，解析外部 .xlsx/.xlsm 時將缺少 XML 安全防護；"
+                "建議執行 pip install defusedxml。",
+                file=sys.stderr,
+            )
     if need_fix:
         checks.append(("win32com", "pywin32"))
         checks.append(("pythoncom", "pywin32"))
 
     for mod_name, pip_name in checks:
-        if importlib.util.find_spec(mod_name) is None:
+        if importlib.util.find_spec(mod_name) is None and pip_name not in missing:
             missing.append(pip_name)
     return missing
 
@@ -218,10 +229,44 @@ def _check_dependencies(excel_path: str, need_fix: bool) -> List[str]:
 _EXCEL_EXTS = (".xls", ".xlsx", ".xlsm")
 _SKIP_SHEET_NAME_RE = re.compile(r"範例|範本|Example|Template", re.IGNORECASE)
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "output")
+DEFAULT_REPORT_DIR = os.path.join(SCRIPT_DIR, "reports")
+DEFAULT_BACKUP_DIR = os.path.join(SCRIPT_DIR, "backup")
+
+
+def _resolve_dir(raw: Optional[str], default_dir: str) -> str:
+    return os.path.abspath(os.path.expanduser(raw)) if raw else os.path.abspath(default_dir)
+
+
+def _make_report_path(
+    excel_path: str,
+    report_dir: str,
+    suffix: str,
+    used_paths: Optional[set] = None,
+) -> str:
+    os.makedirs(report_dir, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(excel_path))[0]
+    candidate = os.path.join(report_dir, f"{stem}_{suffix}.txt")
+    if used_paths is None:
+        return candidate
+    key = os.path.normcase(os.path.abspath(candidate))
+    if key not in used_paths:
+        used_paths.add(key)
+        return candidate
+    idx = 2
+    while True:
+        cand = os.path.join(report_dir, f"{stem}_{suffix}_{idx}.txt")
+        cand_key = os.path.normcase(os.path.abspath(cand))
+        if cand_key not in used_paths:
+            used_paths.add(cand_key)
+            return cand
+        idx += 1
+
 
 @dataclass
 class FileCheckResult:
-    """單一 Excel 檔案的核對結果（供單檔與批次輸出共用）。"""
+    """單一 Excel 檔案的核對結果（供單檔、批次與互動修正共用）。"""
     path: str
     exit_code: int
     ok: bool = True
@@ -235,6 +280,10 @@ class FileCheckResult:
     saved_report: str = ""
     saved_verify_report: str = ""
     fixed_count: int = 0
+    # 暫存已解析的 PDF 供 --interactive-fix 直接沿用，免去二次解析
+    test_reports: List[TestReportData] = field(default_factory=list)
+    msds_list: List[MSDSData] = field(default_factory=list)
+    total_pdfs: int = 0
 
 
 def _is_excel_file(path: str) -> bool:
@@ -245,14 +294,19 @@ def _is_excel_file(path: str) -> bool:
     )
 
 
-def _collect_excel_targets(inputs: List[str], recursive: bool) -> Tuple[List[str], List[str]]:
-    """
-    展開命令列輸入：檔案、資料夾（可遞迴）皆可，並去除重複與 Excel 暫存鎖檔。
-    回傳 (實際要核對的檔案清單, 輸入錯誤訊息)。
-    """
+def _collect_excel_targets(
+    inputs: List[str],
+    recursive: bool,
+    exclude_dirs: Optional[List[str]] = None,
+) -> Tuple[List[str], List[str]]:
     targets: List[str] = []
     errors: List[str] = []
     seen = set()
+    excluded = {
+        os.path.normcase(os.path.abspath(d))
+        for d in (exclude_dirs or [])
+        if d
+    }
 
     def add(path: str) -> None:
         abs_path = os.path.abspath(path)
@@ -268,7 +322,11 @@ def _collect_excel_targets(inputs: List[str], recursive: bool) -> Tuple[List[str
             found: List[str] = []
             if recursive:
                 for root, dirs, files in os.walk(path):
-                    dirs[:] = [d for d in dirs if not d.startswith(".")]
+                    dirs[:] = [
+                        d for d in dirs
+                        if not d.startswith(".")
+                        and os.path.normcase(os.path.abspath(os.path.join(root, d))) not in excluded
+                    ]
                     for name in files:
                         if _is_excel_file(name):
                             found.append(os.path.join(root, name))
@@ -307,13 +365,136 @@ def _set_error(result: FileCheckResult, message: str) -> FileCheckResult:
     return result
 
 
-def process_file(excel_path: str, args) -> FileCheckResult:
+def fix_and_verify_result(
+    result: FileCheckResult,
+    args,
+    excel_app: Any = None,
+    used_verify_paths: Optional[set] = None,
+) -> FileCheckResult:
+    """
+    對已完成核對的 FileCheckResult 執行 Excel COM 修正與複驗。
+    直接沿用記憶體中的 test_reports / msds_list，避免重複解析 PDF。
+    """
+    summary = result.summary
+    if not result.ok or summary is None:
+        return result
+
+    if summary.fixable_count == 0:
+        result.pre_messages.append("[提示] 沒有可自動修正的項目，未產生修正後檔案。")
+        result.exit_code = 0 if not summary.issues else 3
+        return result
+
+    missing = _check_dependencies(result.path, need_fix=True)
+    if missing:
+        return _set_error(
+            result,
+            f"缺少自動修正必要套件：{', '.join(missing)}；請先執行 pip install {' '.join(missing)}",
+        )
+
+    output_dir = _resolve_dir(getattr(args, "output_dir", None), DEFAULT_OUTPUT_DIR)
+    backup_dir = _resolve_dir(getattr(args, "backup_dir", None), DEFAULT_BACKUP_DIR)
+    report_dir = _resolve_dir(getattr(args, "report_dir", None), DEFAULT_REPORT_DIR)
+
+    result.pre_messages.append(
+        f"\n正在透過 Excel COM 自動修正 {summary.fixable_count} 個儲存格並標記紅字..."
+    )
+    try:
+        fix_res = apply_fixes_via_excel_com(
+            result.path,
+            summary.issues,
+            excel_app=excel_app,
+            output_dir=output_dir,
+            backup_dir=backup_dir,
+        )
+    except Exception as exc:
+        return _set_error(result, f"Excel COM 自動修正失敗：{exc}")
+
+    result.fixed_count = fix_res.fixed_count
+    if fix_res.backup_path:
+        result.pre_messages.append(f"[備份] 修正前原檔已備份至：{fix_res.backup_path}")
+    result.pre_messages.append(
+        f"[完成] 已保留原檔，修正後檔案已輸出至：{fix_res.saved_path}\n"
+        f"       共修正 {fix_res.fixed_count} 個儲存格（已套用紅色字體）。"
+    )
+    if fix_res.skipped_items:
+        result.pre_messages.append(f"[警告] 以下 {len(fix_res.skipped_items)} 個儲存格修正略過：")
+        for ref, reason in fix_res.skipped_items:
+            result.pre_messages.append(f"  - {ref}: {reason}")
+
+    result.pre_messages.append("\n正在複驗修正後的檔案...")
+    try:
+        sheets2 = load_workbook_sheets(fix_res.saved_path, target_sheet=args.sheet)
+    except Exception as exc:
+        return _set_error(result, f"讀取修正後檔案失敗：{exc}")
+
+    verify = CheckSummary(
+        excel_path=fix_res.saved_path,
+        total_pdfs=result.total_pdfs,
+        test_report_count=len(result.test_reports),
+        msds_count=len(result.msds_list),
+    )
+    for sh in sheets2:
+        verify.sheets_scanned.append(sh.name)
+        if (
+            not args.include_example
+            and _SKIP_SHEET_NAME_RE.search(sh.name)
+            and (args.sheet is None or args.sheet != sh.name)
+        ):
+            verify.notes.append(
+                f"工作表 [{sh.name}] 為範例/範本，已略過（可用 --include-example 納入）。"
+            )
+            continue
+        sh_issues, sh_notes, checked = check_sheet(sh, result.test_reports, result.msds_list)
+        verify.issues.extend(sh_issues)
+        verify.notes.extend(sh_notes)
+        if checked:
+            verify.sheets_checked.append(sh.name)
+
+    if not verify.sheets_checked:
+        return _set_error(result, "修正後複驗找不到可核對的工作表。")
+
+    result.verify_summary = verify
+    result.verify_text = format_report_text(
+        verify, result.test_reports, result.msds_list, verbose=args.verbose
+    )
+    if args.save_report:
+        verify_path = _make_report_path(
+            result.path, report_dir, "核對報告_修正後複驗", used_paths=used_verify_paths
+        )
+        try:
+            with open(verify_path, "w", encoding="utf-8-sig", newline="\r\n") as f:
+                f.write(result.verify_text + "\n")
+        except OSError as exc:
+            return _set_error(result, f"寫入修正後複驗報告失敗：{exc}")
+        result.saved_verify_report = verify_path
+        result.post_messages.append(f"[已存檔] 修正後複驗報告：{verify_path}")
+
+    if verify.issues:
+        result.exit_code = 2 if verify.fixable_count > 0 else 3
+        result.post_messages.append(
+            f"[提醒] 修正後仍有錯誤 {verify.error_count} 項、警告 {verify.warning_count} 項，"
+            "請依上方複驗報告人工確認。"
+        )
+    else:
+        result.exit_code = 0
+        result.post_messages.append("[完成] 修正後複驗：未發現異常。")
+    return result
+
+
+def process_file(
+    excel_path: str,
+    args,
+    excel_app: Any = None,
+    do_fix: Optional[bool] = None,
+    used_report_paths: Optional[set] = None,
+) -> FileCheckResult:
     """核對單一 Excel；所有輸出先收集在 FileCheckResult，由 main 決定顯示方式。"""
     excel_path = os.path.abspath(excel_path)
     if not os.path.isfile(excel_path):
         return _failure(excel_path, f"找不到檔案：{excel_path}")
 
-    missing = _check_dependencies(excel_path, args.fix)
+    run_fix = args.fix if do_fix is None else do_fix
+    missing = _check_dependencies(excel_path, run_fix)
     if missing:
         return _failure(
             excel_path,
@@ -332,7 +513,6 @@ def process_file(excel_path: str, args) -> FileCheckResult:
             if pdf.category == "msds":
                 msds_list.append(parse_msds_pdf(pdf.data, pdf.filename, pdf.source_entry))
             else:
-                # test_report 與 unknown 皆嘗試解析測試報告
                 rep = parse_test_report_pdf(pdf.data, pdf.filename, pdf.source_entry)
                 if pdf.category == "test_report" or rep.report_no or rep.results:
                     test_reports.append(rep)
@@ -345,7 +525,14 @@ def process_file(excel_path: str, args) -> FileCheckResult:
         test_report_count=len(test_reports),
         msds_count=len(msds_list),
     )
-    result = FileCheckResult(path=excel_path, exit_code=1, summary=summary)
+    result = FileCheckResult(
+        path=excel_path,
+        exit_code=1,
+        summary=summary,
+        test_reports=test_reports,
+        msds_list=msds_list,
+        total_pdfs=len(embedded_pdfs),
+    )
 
     if not embedded_pdfs:
         summary.notes.append("未在 Excel 中找到內嵌 PDF，所有報告相關核對將略過。")
@@ -390,8 +577,10 @@ def process_file(excel_path: str, args) -> FileCheckResult:
     result.report_text = format_report_text(summary, test_reports, msds_list, verbose=args.verbose)
 
     if args.save_report:
-        base = os.path.splitext(excel_path)[0]
-        report_path = f"{base}_核對報告.txt"
+        report_dir = _resolve_dir(getattr(args, "report_dir", None), DEFAULT_REPORT_DIR)
+        report_path = _make_report_path(
+            excel_path, report_dir, "核對報告", used_paths=used_report_paths
+        )
         try:
             with open(report_path, "w", encoding="utf-8-sig", newline="\r\n") as f:
                 f.write(result.report_text + "\n")
@@ -400,96 +589,11 @@ def process_file(excel_path: str, args) -> FileCheckResult:
         result.saved_report = report_path
         result.pre_messages.append(f"[已存檔] 核對報告：{report_path}")
 
-    if not args.fix:
+    if not run_fix:
         result.exit_code = 0 if not summary.issues else (2 if summary.fixable_count > 0 else 3)
         return result
 
-    if summary.fixable_count == 0:
-        result.pre_messages.append("[提示] 沒有可自動修正的項目，未修改 Excel 檔案。")
-        result.exit_code = 0 if not summary.issues else 3
-        return result
-
-    result.pre_messages.append(
-        f"\n正在透過 Excel COM 自動修正 {summary.fixable_count} 個儲存格並標記紅字..."
-    )
-    try:
-        fix_res = apply_fixes_via_excel_com(excel_path, summary.issues)
-    except Exception as exc:
-        return _set_error(result, f"Excel COM 自動修正失敗：{exc}")
-
-    result.fixed_count = fix_res.fixed_count
-    if fix_res.backup_path:
-        result.pre_messages.append(f"[備份] 修正前原檔已備份為：{fix_res.backup_path}")
-    if fix_res.used_fallback:
-        result.pre_messages.append(
-            f"[完成] 原檔案未覆寫，已另存為：{fix_res.saved_path}\n"
-            f"       共修正 {fix_res.fixed_count} 個儲存格（已套用紅色字體）。"
-        )
-    else:
-        result.pre_messages.append(
-            f"[完成] 已直接儲存至原檔案：{fix_res.saved_path}\n"
-            f"       共修正 {fix_res.fixed_count} 個儲存格（已套用紅色字體）。"
-        )
-    if fix_res.skipped_items:
-        result.pre_messages.append(f"[警告] 以下 {len(fix_res.skipped_items)} 個儲存格修正略過：")
-        for ref, reason in fix_res.skipped_items:
-            result.pre_messages.append(f"  - {ref}: {reason}")
-
-    result.pre_messages.append("\n正在複驗修正後的檔案...")
-    try:
-        sheets2 = load_workbook_sheets(fix_res.saved_path, target_sheet=args.sheet)
-    except Exception as exc:
-        return _set_error(result, f"讀取修正後檔案失敗：{exc}")
-
-    verify = CheckSummary(
-        excel_path=fix_res.saved_path,
-        total_pdfs=len(embedded_pdfs),
-        test_report_count=len(test_reports),
-        msds_count=len(msds_list),
-    )
-    for sh in sheets2:
-        verify.sheets_scanned.append(sh.name)
-        if (
-            not args.include_example
-            and _SKIP_SHEET_NAME_RE.search(sh.name)
-            and (args.sheet is None or args.sheet != sh.name)
-        ):
-            verify.notes.append(
-                f"工作表 [{sh.name}] 為範例/範本，已略過（可用 --include-example 納入）。"
-            )
-            continue
-        sh_issues, sh_notes, checked = check_sheet(sh, test_reports, msds_list)
-        verify.issues.extend(sh_issues)
-        verify.notes.extend(sh_notes)
-        if checked:
-            verify.sheets_checked.append(sh.name)
-
-    if not verify.sheets_checked:
-        return _set_error(result, "修正後複驗找不到可核對的工作表。")
-
-    result.verify_summary = verify
-    result.verify_text = format_report_text(verify, test_reports, msds_list, verbose=args.verbose)
-    if args.save_report:
-        base = os.path.splitext(fix_res.saved_path)[0]
-        verify_path = f"{base}_核對報告_修正後複驗.txt"
-        try:
-            with open(verify_path, "w", encoding="utf-8-sig", newline="\r\n") as f:
-                f.write(result.verify_text + "\n")
-        except OSError as exc:
-            return _set_error(result, f"寫入修正後複驗報告失敗：{exc}")
-        result.saved_verify_report = verify_path
-        result.post_messages.append(f"[已存檔] 修正後複驗報告：{verify_path}")
-
-    if verify.issues:
-        result.exit_code = 2 if verify.fixable_count > 0 else 3
-        result.post_messages.append(
-            f"[提醒] 修正後仍有錯誤 {verify.error_count} 項、警告 {verify.warning_count} 項，"
-            "請依上方複驗報告人工確認。"
-        )
-    else:
-        result.exit_code = 0
-        result.post_messages.append("[完成] 修正後複驗：未發現異常。")
-    return result
+    return fix_and_verify_result(result, args, excel_app=excel_app)
 
 
 def _result_status(result: FileCheckResult) -> str:
@@ -597,9 +701,9 @@ def format_batch_summary(results: List[FileCheckResult], input_errors: List[str]
     return "\n".join(lines)
 
 
-def _batch_report_path(targets: List[str]) -> str:
-    base_dir = os.path.dirname(targets[0]) if targets else os.getcwd()
-    return os.path.join(base_dir, "批次核對摘要.txt")
+def _batch_report_path(report_dir: str) -> str:
+    os.makedirs(report_dir, exist_ok=True)
+    return os.path.join(report_dir, "批次核對摘要.txt")
 
 
 def _aggregate_exit_code(results: List[FileCheckResult], input_errors: List[str]) -> int:
@@ -613,8 +717,47 @@ def _aggregate_exit_code(results: List[FileCheckResult], input_errors: List[str]
     return 0
 
 
+def _run_batch_fixes(results: List[FileCheckResult], args, batch_mode: bool) -> None:
+    """使用單一 ExcelComSession 批次修正所有可修正項目，減少 COM 啟閉開銷。"""
+    targets = [r for r in results if r.ok and r.summary and r.summary.fixable_count > 0]
+    if not targets:
+        return
+
+    used_verify_paths: set = set()
+    try:
+        with ExcelComSession() as excel_app:
+            for idx, res in enumerate(targets, 1):
+                if batch_mode:
+                    print(f"[修正 {idx}/{len(targets)}] {res.path}", flush=True)
+                pre_len = len(res.pre_messages)
+                fix_and_verify_result(
+                    res, args, excel_app=excel_app, used_verify_paths=used_verify_paths
+                )
+                if not batch_mode:
+                    for msg in res.pre_messages[pre_len:]:
+                        print(msg)
+                    if res.error:
+                        print(f"[錯誤] {res.error}", file=sys.stderr)
+                    if res.verify_text:
+                        print(res.verify_text)
+                    for msg in res.post_messages:
+                        print(msg)
+                else:
+                    err, warn, fixable = _result_counts(res)
+                    print(
+                        f"        {_result_status(res)} | 已修正 {res.fixed_count}、剩餘錯誤 {err}、警告 {warn}、可修正 {fixable}",
+                        flush=True,
+                    )
+                    if not res.ok and res.error:
+                        print(f"        [錯誤] {res.error}", file=sys.stderr)
+    except Exception as exc:
+        print(f"[錯誤] 啟動 Excel COM 失敗：{exc}", file=sys.stderr)
+        for res in targets:
+            if res.fixed_count == 0 and res.ok:
+                _set_error(res, f"啟動 Excel COM 失敗：{exc}")
+
+
 def main(argv: List[str] | None = None) -> int:
-    # 確保 Windows 終端機 UTF-8 輸出不亂碼
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             try:
@@ -633,12 +776,32 @@ def main(argv: List[str] | None = None) -> int:
     parser.add_argument(
         "--save-report",
         action="store_true",
-        help="將每份核對結果另存為「原檔名_核對報告.txt」；批次模式另存「批次核對摘要.txt」",
+        help="將每份核對結果另存至報告資料夾（預設 reports/）；批次模式另存「批次核對摘要.txt」",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=DEFAULT_OUTPUT_DIR,
+        help="比對／修正後的檔案輸出資料夾（預設：工具目錄下的 output/）",
+    )
+    parser.add_argument(
+        "--report-dir",
+        default=DEFAULT_REPORT_DIR,
+        help="比對後的報告輸出資料夾（預設：工具目錄下的 reports/）",
+    )
+    parser.add_argument(
+        "--backup-dir",
+        default=DEFAULT_BACKUP_DIR,
+        help="比對／修正前的原始檔案備份資料夾（預設：工具目錄下的 backup/）",
     )
     parser.add_argument(
         "--fix",
         action="store_true",
-        help="透過 Windows Excel COM 自動修正錯誤儲存格並標記紅字 RGB(255,0,0)",
+        help="透過 Windows Excel COM 自動修正錯誤儲存格並標記紅字 RGB(255,0,0)（保留原檔，輸出至 output/）",
+    )
+    parser.add_argument(
+        "--interactive-fix",
+        action="store_true",
+        help="核對完成後若有可修正項目，於同一次執行內詢問是否修正（免去重複解析 PDF）",
     )
     parser.add_argument(
         "--sheet",
@@ -661,8 +824,18 @@ def main(argv: List[str] | None = None) -> int:
         help="顯示已解析之內嵌 PDF 報告與 MSDS 清單；批次模式另顯示各檔完整報告",
     )
     args = parser.parse_args(argv)
+    output_dir = _resolve_dir(args.output_dir, DEFAULT_OUTPUT_DIR)
+    report_dir = _resolve_dir(args.report_dir, DEFAULT_REPORT_DIR)
+    backup_dir = _resolve_dir(args.backup_dir, DEFAULT_BACKUP_DIR)
+    args.output_dir = output_dir
+    args.report_dir = report_dir
+    args.backup_dir = backup_dir
 
-    targets, input_errors = _collect_excel_targets(args.excel_file, args.recursive)
+    targets, input_errors = _collect_excel_targets(
+        args.excel_file,
+        args.recursive,
+        exclude_dirs=[output_dir, report_dir, backup_dir],
+    )
     for message in input_errors:
         print(f"[錯誤] {message}", file=sys.stderr)
     if not targets:
@@ -672,11 +845,13 @@ def main(argv: List[str] | None = None) -> int:
 
     batch_mode = len(targets) > 1 or bool(input_errors)
     results: List[FileCheckResult] = []
+    used_report_paths: set = set()
 
+    # 階段 1：先全部完成 PDF 提取與核對（批次 --fix 也統一在階段 2 共用同一個 Excel COM）
     for index, path in enumerate(targets, 1):
         if batch_mode:
             print(f"[{index}/{len(targets)}] 核對：{path}", flush=True)
-        result = process_file(path, args)
+        result = process_file(path, args, do_fix=False, used_report_paths=used_report_paths)
         results.append(result)
         if batch_mode:
             err, warn, fixable = _result_counts(result)
@@ -687,26 +862,68 @@ def main(argv: List[str] | None = None) -> int:
             if not result.ok and result.error:
                 print(f"        [錯誤] {result.error}", file=sys.stderr)
 
+    # 顯示初檢結果
     if not batch_mode:
         _print_single_result(results[0])
-        return results[0].exit_code
+    else:
+        if args.verbose:
+            for result in results:
+                _print_batch_detail(result)
+        summary_text = format_batch_summary(results, input_errors)
+        print(summary_text)
+        if args.save_report:
+            summary_path = _batch_report_path(report_dir)
+            try:
+                with open(summary_path, "w", encoding="utf-8-sig", newline="\r\n") as f:
+                    f.write(summary_text + "\n")
+            except OSError as exc:
+                print(f"[錯誤] 寫入批次核對摘要失敗：{exc}", file=sys.stderr)
+                return 1
+            print(f"[已存檔] 批次核對摘要：{summary_path}")
 
-    if args.verbose:
-        for result in results:
-            _print_batch_detail(result)
+    # 階段 2：判斷是否執行自動修正（--fix 直接執行；--interactive-fix 只要有可修正項就詢問，不被單檔失敗阻斷）
+    fixable_files = [r for r in results if r.ok and r.summary and r.summary.fixable_count > 0]
+    total_fixable = sum(r.summary.fixable_count for r in fixable_files if r.summary)
 
-    summary_text = format_batch_summary(results, input_errors)
-    print(summary_text)
-    if args.save_report:
-        summary_path = _batch_report_path(targets)
+    should_fix = False
+    if args.fix:
+        if total_fixable > 0:
+            should_fix = True
+        elif not batch_mode and results[0].ok:
+            print("[提示] 沒有可自動修正的項目，未產生修正後檔案。")
+    elif args.interactive_fix and total_fixable > 0:
+        print("-" * 76)
+        if batch_mode:
+            print(
+                f"批次中共有 {len(fixable_files)} 個檔案、{total_fixable} 個項目可自動修正"
+                f"（將保留原檔，備份至 {backup_dir}、修正後輸出至 {output_dir}；失敗檔案將略過）。"
+            )
         try:
-            with open(summary_path, "w", encoding="utf-8-sig", newline="\r\n") as f:
-                f.write(summary_text + "\n")
-        except OSError as exc:
-            print(f"[錯誤] 寫入批次核對摘要失敗：{exc}", file=sys.stderr)
-            return 1
-        print(f"[已存檔] 批次核對摘要：{summary_path}")
+            ans = input("是否立即執行自動修正並標記紅字？(Y/N): ").strip()
+        except EOFError:
+            ans = ""
+        if ans.lower() == "y":
+            should_fix = True
+        else:
+            print("已取消自動修正。")
 
+    if should_fix:
+        _run_batch_fixes(results, args, batch_mode=batch_mode)
+        if batch_mode:
+            summary_text = format_batch_summary(results, input_errors)
+            print(summary_text)
+            if args.save_report:
+                summary_path = _batch_report_path(report_dir)
+                try:
+                    with open(summary_path, "w", encoding="utf-8-sig", newline="\r\n") as f:
+                        f.write(summary_text + "\n")
+                except OSError as exc:
+                    print(f"[錯誤] 更新批次核對摘要失敗：{exc}", file=sys.stderr)
+                    return 1
+                print(f"[已更新] 批次核對摘要：{summary_path}")
+
+    if not batch_mode:
+        return results[0].exit_code
     return _aggregate_exit_code(results, input_errors)
 
 

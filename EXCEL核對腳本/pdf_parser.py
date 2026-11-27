@@ -6,18 +6,19 @@ PDF 報告與 MSDS 解析模組 (PyMuPDF / fitz)
      - 略過流程圖（Flow Chart）與樣品照片頁
      - 解析報告編號（Report No.）、測試機構（Test Agency）、報告日期（Date）
      - 依表頭欄位（Result / MDL / Limit / Unit）的實際順序定位數值，
-       避免 Intertek 的 Result 在 MDL 之前時把 Limit 當成結果
+       支援同頁多表格與跨列式表頭，偵測多樣品並列時標記為人工確認
      - 解析各項物質之測試單位、MDL 與測試結果：
-       * N.D. / ND -> "<MDL"（預設單位 ppm / mg/kg，不帶單位）
+       * N.D. / ND / ND(<2) -> "<MDL"（預設單位 ppm / mg/kg，不帶單位）
        * 非 ppm 單位（如 IEC 62321-7-1 六價鉻 μg/cm2 + Negative）-> "<MDLμg/cm2"
        * 檢出數值 -> 直接回傳數值（若非 ppm 則保留單位）
-     - 無法判定時記錄 note，交由上層顯示，不再靜默略過
+     - 無法判定時記錄 note，交由上層顯示，絕不以 Limit 替代 MDL
   2. MSDS / SDS / 成份表：
      - 提取成分名稱、CAS No. 與含量百分比
 """
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -37,6 +38,7 @@ class SubstanceResult:
     unit: str = "ppm"          # 標準化單位："ppm" 或 "μg/cm2" 等
     page: int = 0              # 1-based 頁碼
     evidence: str = ""         # 來源行摘要
+    ambiguous: bool = False    # True 代表偵測到多樣品並列或無法確認，僅警告不自動修正
 
 
 @dataclass
@@ -105,6 +107,11 @@ _ND_PATTERN = re.compile(
     r"^(?:N\.?\s*D\.?|NOT\s*DETECTED|NEGATIVE|NEG\.?|ABSENT|BLQ|BDL|未檢出|未检出|陰性|阴性)$",
     re.IGNORECASE,
 )
+_ND_INLINE_MDL_PATTERN = re.compile(
+    r"^(?:N\.?\s*D\.?|NOT\s*DETECTED|NEGATIVE|NEG\.?|BLQ|BDL|未檢出|未检出)\s*"
+    r"[\(（]\s*([<≤]?)\s*(\d+(?:\.\d+)?)\s*([^\)\）]*)\s*[\)）]$",
+    re.IGNORECASE,
+)
 _SIGNED_NUM_PATTERN = re.compile(r"^([<≤>≥~])\s*(-?\d+(?:\.\d+)?)\s*(.*)$")
 _NUM_PATTERN = re.compile(
     r"^(-?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?))\s*(.*)$"
@@ -122,6 +129,7 @@ def _unit_suffix(unit: str, inline_unit: str = "") -> str:
 def _format_expected_value(raw_result: str, mdl: Optional[str], unit: str) -> Optional[str]:
     """
     依規範將 PDF 測試結果轉為 O-193D 應填寫值：
+      - ND(<2) / N.D. (<0.10μg/cm2) -> 直接取括號內 MDL 組成 <MDL
       - N.D. / ND / Not Detected / Negative -> <MDL（ppm 不帶單位；非 ppm 帶單位如 <0.10μg/cm2）
       - <X / >X / ≥X / ≤X / ~X -> 保留符號（ppm 不帶單位；非 ppm 帶單位）
       - 數字（含千分位、負數）-> 該數字（ppm 不帶單位；非 ppm 帶單位）
@@ -129,6 +137,12 @@ def _format_expected_value(raw_result: str, mdl: Optional[str], unit: str) -> Op
     res = (raw_result or "").strip()
     if not res:
         return None
+
+    m_nd_inline = _ND_INLINE_MDL_PATTERN.match(res)
+    if m_nd_inline:
+        mdl_val = m_nd_inline.group(2).strip()
+        inline_u = m_nd_inline.group(3).strip()
+        return f"<{mdl_val}{_unit_suffix(unit, inline_u)}"
 
     if _ND_PATTERN.match(res):
         if not mdl:
@@ -168,9 +182,19 @@ _MONTH_MAP = {
 }
 
 
+def _valid_date_str(y: int, mo: int, d: int) -> Optional[str]:
+    if not (1990 <= y <= 2100):
+        return None
+    try:
+        validated = dt.date(y, mo, d)
+    except ValueError:
+        return None
+    return validated.strftime("%Y/%m/%d")
+
+
 def parse_date_string_ex(text: str) -> Tuple[Optional[str], bool]:
     """
-    將多種常見日期格式正規化為 YYYY/MM/DD。
+    將多種常見日期格式正規化為 YYYY/MM/DD，並以真實日曆驗證合法性。
     回傳 (日期, 是否歧義)；歧義日期不應作為自動修正依據。
     """
     if not text:
@@ -180,27 +204,27 @@ def parse_date_string_ex(text: str) -> Tuple[Optional[str], bool]:
     # YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD / YYYY年MM月DD日
     m = re.search(r"(\d{4})\s*[-/\.年]\s*(\d{1,2})\s*[-/\.月]\s*(\d{1,2})", s)
     if m:
-        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        if 1990 <= y <= 2100 and 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"{y:04d}/{mo:02d}/{d:02d}", False
+        ds = _valid_date_str(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if ds:
+            return ds, False
 
     # Mon DD, YYYY  (e.g., Aug 15, 2024 / Aug. 15, 2024)
     m = re.search(r"([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})", s)
     if m:
         mo = _MONTH_MAP.get(m.group(1).lower())
         if mo:
-            d, y = int(m.group(2)), int(m.group(3))
-            if 1990 <= y <= 2100 and 1 <= d <= 31:
-                return f"{y:04d}/{mo:02d}/{d:02d}", False
+            ds = _valid_date_str(int(m.group(3)), mo, int(m.group(2)))
+            if ds:
+                return ds, False
 
     # DD Mon YYYY (e.g., 15 Aug 2024 / 15-Aug-2024)
     m = re.search(r"(\d{1,2})[\s\-]([A-Za-z]{3,9})\.?[\s\-,]+(\d{4})", s)
     if m:
         mo = _MONTH_MAP.get(m.group(2).lower())
         if mo:
-            d, y = int(m.group(1)), int(m.group(3))
-            if 1990 <= y <= 2100 and 1 <= d <= 31:
-                return f"{y:04d}/{mo:02d}/{d:02d}", False
+            ds = _valid_date_str(int(m.group(3)), mo, int(m.group(1)))
+            if ds:
+                return ds, False
 
     # DD/MM/YYYY 或 MM/DD/YYYY（無法判定時標記為歧義）
     m = re.search(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b", s)
@@ -208,10 +232,16 @@ def parse_date_string_ex(text: str) -> Tuple[Optional[str], bool]:
         a, b, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if 1990 <= y <= 2100:
             if a > 12 and b <= 12:
-                return f"{y:04d}/{b:02d}/{a:02d}", False
+                ds = _valid_date_str(y, b, a)
+                if ds:
+                    return ds, False
             if b > 12 and a <= 12:
-                return f"{y:04d}/{a:02d}/{b:02d}", False
-            return f"{y:04d}/{a:02d}/{b:02d}", True
+                ds = _valid_date_str(y, a, b)
+                if ds:
+                    return ds, False
+            ds = _valid_date_str(y, a, b)
+            if ds:
+                return ds, True
 
     return None, False
 
@@ -241,7 +271,6 @@ def _should_skip_page(page_text: str) -> bool:
     """判斷該頁是否為流程圖（Flow Chart）或樣品照片頁。"""
     if not page_text or len(page_text.strip()) < 20:
         return True
-    # 若頁面同時有明確的測試結果表格關鍵字（如 MDL + Test Result），則不略過
     has_result_table = bool(
         re.search(r"\bMDL\b|\bRL\b|Detection\s+Limit|檢出限|检出限", page_text, re.IGNORECASE)
         and re.search(r"\bN\.?D\.?\b|Negative|mg/kg|ppm|μg/cm|ug/cm", page_text, re.IGNORECASE)
@@ -259,7 +288,6 @@ def _should_skip_page(page_text: str) -> bool:
 # 報告基本資訊（編號、機構、日期）提取
 # ---------------------------------------------------------------------------
 
-# 機構 canonical 名稱、Excel 比對別名、PDF 偵測正則集中一份，避免兩邊漂移
 AGENCY_TABLE: List[Tuple[str, Tuple[str, ...], str]] = [
     ("Intertek", ("intertek", "its", "天祥"), r"\bINTERTEK\b|天祥"),
     ("SGS", ("sgs", "sgs-cstc", "通標", "通标", "通標標準", "通标标准"), r"\bSGS\b|通標標準|通标标准|SGS-CSTC|SGS\s+Taiwan"),
@@ -269,6 +297,13 @@ AGENCY_TABLE: List[Tuple[str, Tuple[str, ...], str]] = [
     ("BV", ("bv", "bureau veritas", "bv cps"), r"\bBUREAU\s+VERITAS\b|\bBV\s+CPS\b"),
     ("PONY", ("pony", "pony testing", "譜尼", "谱尼", "譜尼測試", "谱尼测试"), r"\bPONY\s+TESTING\b|譜尼測試|谱尼测试"),
     ("UL", ("ul", "underwriters", "underwriters laboratories", "ul vs"), r"\bUL\s+VS\b|\bUNDERWRITERS\s+LABORATORIES\b"),
+    ("CTT", ("ctt", "中鼎", "中鼎檢測", "中鼎检测"), r"\bCTT\b|中鼎檢測|中鼎检测"),
+    ("STC", ("stc", "標準及檢定中心", "标准及检定中心"), r"\bSTC\b|標準及檢定中心|标准及检定中心"),
+    ("CCIC", ("ccic", "中檢", "中检"), r"\bCCIC\b|中檢|中检"),
+    ("EMTEK", ("emtek", "信測", "信测"), r"\bEMTEK\b|信測|信测"),
+    ("NTEK", ("ntek", "北測", "北测"), r"\bNTEK\b|北測|北测"),
+    ("LCS", ("lcs", "立訊", "立讯"), r"\bLCS\b|立訊檢測|立讯检测"),
+    ("AGC", ("agc", "鑫宇環", "鑫宇环"), r"\bAGC\b|鑫宇環|鑫宇环"),
 ]
 
 AGENCY_ALIAS_GROUPS: List[Tuple[str, Tuple[str, ...]]] = [
@@ -288,26 +323,24 @@ def _detect_agency(text: str, filename: str = "") -> str:
 
 
 _REPORT_NO_PATTERNS = [
-    # 明確標籤：Report No. / Test Report No. / 報告編號 / 报告编号 / 报告号(REPORT NO.)
     r"(?:Test\s+)?Report\s*(?:No\.?|Number)\s*[\)）]?\s*[:：#]?\s*([A-Z0-9][A-Z0-9\-_/\.]{5,32})",
     r"(?:報告號|报告号)\s*(?:\([^)]*\))?\s*[:：#]?\s*([A-Z0-9][A-Z0-9\-_/\.]{5,32})",
     r"(?:測試|檢測|测试|检测)?(?:報告|报告)(?:編號|编号|號碼|号码)\s*[:：#]?\s*([A-Z0-9][A-Z0-9\-_/\.]{5,32})",
     r"\bNo\.?\s*[:：]\s*([A-Z]{2,6}\d{6,}[A-Z0-9\-]*)",
-    # 常見實驗室編號特徵
-    r"\b(CANEC\d{8,}[A-Z0-9\-]*)\b",     # SGS 廣州
-    r"\b(SHAEC\d{8,}[A-Z0-9\-]*)\b",     # SGS 上海
-    r"\b(SZXEC\d{8,}[A-Z0-9\-]*)\b",     # SGS 深圳
-    r"\b(XMNEC\d{8,}[A-Z0-9\-]*)\b",     # SGS 廈門
-    r"\b(TAOEC\d{8,}[A-Z0-9\-]*)\b",     # SGS 青島
-    r"\b(TJNEC\d{8,}[A-Z0-9\-]*)\b",     # SGS 天津
-    r"\b(CE/\d{4}/[A-Z0-9]+)\b",         # SGS 台灣
-    r"\b(KA/\d{4}/[A-Z0-9]+)\b",         # SGS 高雄
-    r"\b(SZHH\d{8,}[A-Z0-9\-]*)\b",      # Intertek 深圳
-    r"\b(GZHH\d{8,}[A-Z0-9\-]*)\b",      # Intertek 廣州
-    r"\b(SHAH\d{8,}[A-Z0-9\-]*)\b",      # Intertek 上海
-    r"\b(TWNC\d{8,}[A-Z0-9\-]*)\b",      # Intertek 台灣
-    r"\b(A\d{10,}[A-Z0-9]*)\b",          # CTI 華測常見格式
-    r"\b(EDD\d{2}[A-Z]\d{6,})\b",        # CTI
+    r"\b(CANEC\d{8,}[A-Z0-9\-]*)\b",
+    r"\b(SHAEC\d{8,}[A-Z0-9\-]*)\b",
+    r"\b(SZXEC\d{8,}[A-Z0-9\-]*)\b",
+    r"\b(XMNEC\d{8,}[A-Z0-9\-]*)\b",
+    r"\b(TAOEC\d{8,}[A-Z0-9\-]*)\b",
+    r"\b(TJNEC\d{8,}[A-Z0-9\-]*)\b",
+    r"\b(CE/\d{4}/[A-Z0-9]+)\b",
+    r"\b(KA/\d{4}/[A-Z0-9]+)\b",
+    r"\b(SZHH\d{8,}[A-Z0-9\-]*)\b",
+    r"\b(GZHH\d{8,}[A-Z0-9\-]*)\b",
+    r"\b(SHAH\d{8,}[A-Z0-9\-]*)\b",
+    r"\b(TWNC\d{8,}[A-Z0-9\-]*)\b",
+    r"\b(A\d{10,}[A-Z0-9]*)\b",
+    r"\b(EDD\d{2}[A-Z]\d{6,})\b",
 ]
 
 
@@ -318,14 +351,12 @@ def _extract_report_nos(text: str, filename: str = "") -> List[str]:
     for pat in _REPORT_NO_PATTERNS:
         for m in re.finditer(pat, head, re.IGNORECASE):
             cand = m.group(1).strip().rstrip(".,;:")
-            # 排除純日期或過短雜訊
             if len(cand) < 6 or re.match(r"^\d{4}[-/\.]\d{2}[-/\.]\d{2}$", cand):
                 continue
             key = cand.upper()
             if key not in seen:
                 seen.add(key)
                 found.append(cand)
-    # 檔名中也常含報告編號
     fname_stem = re.sub(r"\.pdf$", "", filename, flags=re.IGNORECASE)
     for m in re.finditer(r"([A-Z]{2,6}[\-_]?\d{6,}[A-Z0-9\-]*)", fname_stem, re.IGNORECASE):
         cand = m.group(1).strip()
@@ -336,9 +367,12 @@ def _extract_report_nos(text: str, filename: str = "") -> List[str]:
 
 
 _DATE_LABEL_PATTERNS = [
-    # 只接受明確的報告／測試日期欄位；不可用裸 Date/日期，否則會命中「收樣日期」
-    r"(?<![A-Za-z])(?:Report\s+Date|Date\s+of\s+Issue|Date\s+of\s+Testing|Issue\s+Date|Issued\s+Date|Test\s+Date|"
-    r"報告日期|报告日期|測試日期|测试日期|簽發日期|签发日期)\s*[:：]\s*([^\n]{6,32})",
+    r"(?<![A-Za-z])(?:Report\s+Date|Date\s+of\s+Report|Date\s+of\s+Issue|Date\s+Issued|Date\s+of\s+Testing|"
+    r"Issue\s+Date|Issued\s+Date|Test\s+Date|"
+    r"報告日期|报告日期|測試日期|测试日期|簽發日期|签发日期|報告簽發日期|报告签发日期|"
+    r"出具日期|發行日期|发行日期)\s*(?:\([^)\n]{1,30}\))?\s*[\r\n]?\s*[:：]\s*([^\n]{6,36})",
+    # 支援「日期(DATE) : 2026 年09 月29 日」或獨立行「Date : ...」，但排除收樣/收到日期
+    r"(?:^|[\r\n])\s*(?:日期\s*(?:\(\s*DATE\s*\))?|Date)\s*[:：]\s*([^\n]{6,36})",
 ]
 
 
@@ -354,7 +388,6 @@ def _extract_report_date(text: str) -> Tuple[str, str, bool]:
             parsed, ambiguous = parse_date_string_ex(raw)
             if parsed:
                 return parsed, raw, not ambiguous
-    # Fallback: 頁首前 1500 字元內的第一個有效日期（可能是收樣日，不可自動修正）
     parsed, _ = parse_date_string_ex(head[:1500])
     if parsed:
         return parsed, parsed, False
@@ -365,7 +398,6 @@ def _extract_report_date(text: str) -> Tuple[str, str, bool]:
 # 物質名稱對應規則（支援 18+ 常見 O-193D 管控物質）
 # ---------------------------------------------------------------------------
 
-# (標準鍵名, 正則列表) — 順序重要（較精確者在前）
 SUBSTANCE_PATTERNS: List[Tuple[str, List[str]]] = [
     ("Cd", [
         r"\bCadmium\s*\(Cd\)",
@@ -482,7 +514,6 @@ SUBSTANCE_KEYS: List[str] = [key for key, _ in SUBSTANCE_PATTERNS]
 
 def _match_substance(line: str) -> Optional[str]:
     """判斷一行文字對應的管控物質標準鍵名。"""
-    # 排除單體 PBB / PBDE 子項（如 Monobromobiphenyl），只抓總和或主項
     if re.search(r"\b(Mono|Di|Tri|Tetra|Penta|Hexa|Hepta|Octa|Nona|Deca)bromo", line, re.IGNORECASE):
         return None
     for key, pats in SUBSTANCE_PATTERNS:
@@ -492,7 +523,6 @@ def _match_substance(line: str) -> Optional[str]:
     return None
 
 
-# 支援 mg/kg、㎎/㎏（全形方塊字）、μg/cm2、㎍/cm2 等實際報告常見寫法
 _UNIT_ATOM = (
     r"(?:mg|㎎)\s*/\s*(?:kg|㎏)|ppm|(?:[uμµ]g|㎍)\s*/\s*cm[2²]|%|wt%|mg/l|[uμµ]g/l"
 )
@@ -500,14 +530,14 @@ _UNIT_TOKEN_RE = re.compile(rf"(?:{_UNIT_ATOM})", re.IGNORECASE)
 _UNIT_FULL_RE = re.compile(rf"^(?:{_UNIT_ATOM})$", re.IGNORECASE)
 
 _RESULT_TOKEN_RE = re.compile(
-    r"(N\.?D\.?|Not\s*Detected|Negative|Neg\.?|Absent|"
+    r"(N\.?D\.?\s*[\(（]\s*[<≤]?\s*\d+(?:\.\d+)?[^\)\）]*[\)）]|"
+    r"N\.?D\.?|Not\s*Detected|Negative|Neg\.?|Absent|"
     r"[<≤>≥~]\s*-?\d+(?:\.\d+)?(?:\s*[uμµ㎍]g/cm[2²])?|"
     r"-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|"
     r"-?\d+(?:\.\d+)?)",
     re.IGNORECASE,
 )
 
-# 排除明顯是 RoHS 限值欄位的值（例如 1000, 100 在 Limit 欄）
 _HEADER_LINE_RE = re.compile(
     r"(Test\s+Item|Parameter|Substance|Limit|Unit|MDL|Result|測試項目|测试项目|限值|單位|单位|檢出限|检出限|結果|结果)",
     re.IGNORECASE,
@@ -515,19 +545,22 @@ _HEADER_LINE_RE = re.compile(
 
 
 def _detect_page_default_unit(page_text: str) -> str:
-    """偵測頁面表格的預設單位（多數為 mg/kg / ppm，Cr6+ 金屬鍍層頁面可能為 μg/cm2）。"""
-    if re.search(r"IEC\s*62321-7-1", page_text, re.IGNORECASE) and re.search(
-        r"(?:[uμµ]g|㎍)\s*/\s*cm[2²]", page_text, re.IGNORECASE
-    ):
-        return "μg/cm2"
+    """
+    偵測頁面表格的預設單位（以 mg/kg / ppm 為主）。
+    注意：不再因頁面出現 IEC 62321-7-1 就將整頁預設單位設為 μg/cm2，
+    避免同頁混合重金屬(mg/kg)與六價鉻(μg/cm2)時汙染其他物質；
+    六價鉻的 μg/cm2 預設改由 Cr6+ 專屬邏輯處理。
+    """
     m = re.search(rf"Unit\s*[:：]?\s*({_UNIT_ATOM})", page_text, re.IGNORECASE)
     if m:
-        return normalize_unit(m.group(1))
+        u = normalize_unit(m.group(1))
+        if u != "μg/cm2":
+            return u
     return "ppm"
 
 
 # ---------------------------------------------------------------------------
-# 依實際欄位位置解析表格（解決 Result/MDL/Limit 欄序不同）
+# 依實際欄位位置解析表格（支援同頁多表格與多樣品偵測）
 # ---------------------------------------------------------------------------
 
 RowToken = Tuple[float, float, str]  # (x0, x1, text)
@@ -538,13 +571,12 @@ class ResultColumns:
     """單頁表格中 Result / MDL / Limit / Unit 欄位的 x 座標。"""
     anchors: List[Tuple[float, str]]   # (中心 x, 欄位類型)
     value_left: float                  # 數值欄最左側邊界
+    multi_result: bool = False         # 是否偵測到多組 Result 欄（多樣品並列）
 
 
 def _extract_rows_with_y(page) -> List[Tuple[float, List[RowToken]]]:
-    """
-    依 Y 座標群組文字，保留列基準 y 與每個 token 的 x 範圍。
-    """
-    words = page.get_text("words")  # (x0, y0, x1, y1, word, block_no, line_no, word_no)
+    """依 Y 座標群組文字，保留列基準 y 與每個 token 的 x 範圍。"""
+    words = page.get_text("words")
     if not words:
         return [
             (float(idx), [(0.0, 0.0, line)])
@@ -577,12 +609,10 @@ def _extract_rows_with_y(page) -> List[Tuple[float, List[RowToken]]]:
 
 
 def _extract_rows_with_pos(page) -> List[List[RowToken]]:
-    """相容舊介面：只回傳列內 token。"""
     return [row for _, row in _extract_rows_with_y(page)]
 
 
 def _extract_lines_with_layout(page) -> List[str]:
-    """將頁面文字依 Y 座標還原為同一列（相容舊介面，MSDS 使用）。"""
     return [" ".join(tok for _, _, tok in row) for row in _extract_rows_with_pos(page)]
 
 
@@ -618,23 +648,31 @@ def _classify_header_token(token: str) -> Optional[str]:
 def _detect_result_columns(rows: List[List[RowToken]]) -> Optional[ResultColumns]:
     """在頁面中尋找含 Result 與 MDL/Limit 的表頭列，回傳各欄位 x 座標。"""
     for row in rows:
-        found: Dict[str, Tuple[float, float]] = {}  # kind -> (center, x0)
+        found: Dict[str, Tuple[float, float]] = {}
+        result_xs: List[float] = []
         prev_norm = ""
         for x0, x1, text in row:
             kind = _classify_header_token(text)
             norm = _norm_header_token(text)
-            # "Detection Limit" 會被拆成 Detection + Limit，第二個視為 MDL
             if kind == "limit" and re.fullmatch(r"detection|method", prev_norm):
                 kind = "mdl"
+            if kind == "result":
+                cx = (x0 + x1) / 2.0
+                if not any(abs(cx - rx) < 25.0 for rx in result_xs):
+                    result_xs.append(cx)
             if kind and kind not in found:
                 found[kind] = ((x0 + x1) / 2.0, x0)
             prev_norm = norm
 
         if "result" in found and ("mdl" in found or "limit" in found):
-            anchors = [((c), k) for k, (c, _) in found.items()]
+            anchors = [(c, k) for k, (c, _) in found.items()]
             value_left = min(x0 for k, (_, x0) in found.items() if k in ("mdl", "limit", "result", "unit"))
             anchors.sort()
-            return ResultColumns(anchors=anchors, value_left=value_left)
+            return ResultColumns(
+                anchors=anchors,
+                value_left=value_left,
+                multi_result=(len(result_xs) > 1),
+            )
     return None
 
 
@@ -663,12 +701,93 @@ def _classify_table_label(text: str) -> Optional[str]:
     return None
 
 
-def _detect_table_layout(
-    rows_y: List[Tuple[float, List[RowToken]]]
-) -> Optional[Tuple[Dict[str, float], float, float, float]]:
+def _is_table_header_row(row: List[RowToken]) -> bool:
+    """判斷該列是否為包含至少兩個欄位標籤的表格表頭列。"""
+    kinds = set()
+    for _, _, text in row:
+        if _classify_value_token(text):
+            # 含數值／N.D.／比較符號的列視為資料列，避免把資料列誤判成表頭
+            return False
+        k = _classify_table_label(text)
+        if k:
+            kinds.add(k)
+    return len(kinds) >= 2 and ("result" in kinds or "mdl" in kinds or "limit" in kinds)
+
+
+def _is_header_like_row(row: List[RowToken]) -> bool:
+    """判斷該列是否只含表頭標籤（用於容納雙列式表頭，不把資料列納入）。"""
+    if any(_classify_value_token(text) for _, _, text in row):
+        return False
+    return any(_classify_table_label(text) for _, _, text in row)
+
+
+def _segment_start_index(
+    rows_y: List[Tuple[float, List[RowToken]]],
+    header_idx: int,
+    lower_bound: int,
+) -> int:
+    """從表頭列開始，往上納入最多 2 列 header-like 列（支援雙列式表頭）。"""
+    start = header_idx
+    probe = header_idx - 1
+    included = 0
+    while probe >= lower_bound and included < 2 and _is_header_like_row(rows_y[probe][1]):
+        start = probe
+        probe -= 1
+        included += 1
+    return start
+
+
+def _detect_table_segments(
+    rows_y: List[Tuple[float, List[RowToken]]],
+    notes: Optional[List[str]] = None,
+    page_num: int = 0,
+) -> List[Tuple[Dict[str, float], float, float, float, bool]]:
     """
-    找出跨列式表頭（例如 Intertek 的「报告限量值」與「(MDL)」分成兩列）
-    以及資料列範圍。回傳 (anchors, first_sub_y, stop_y, item_right)。
+    偵測單頁內的一個或多個表格區塊（支援同頁上半頁 RoHS、下半頁鹵素等不同欄寬），
+    並檢查是否有多組 Result 欄位（多樣品並列）。
+    回傳 [(anchors, first_sub_y, stop_y, item_right, multi_result), ...]。
+    """
+    # 找出所有可能是新表格表頭起始的列索引
+    header_indices: List[int] = []
+    for idx, (y, row) in enumerate(rows_y):
+        if _is_table_header_row(row):
+            # 與前一個表頭列距離 > 25pt 才視為新表格（避免把兩列表頭拆成兩個表）
+            if not header_indices or (y - rows_y[header_indices[-1]][0]) > 25.0:
+                header_indices.append(idx)
+
+    if not header_indices:
+        # 退回單一區塊模式（表頭文字可能分散於不同列）
+        seg = _detect_single_table_layout(rows_y)
+        return [seg] if seg else []
+
+    segments: List[Tuple[Dict[str, float], float, float, float, bool]] = []
+    for i, h_idx in enumerate(header_indices):
+        end_idx = header_indices[i + 1] if i + 1 < len(header_indices) else len(rows_y)
+        lower_bound = 0 if i == 0 else header_indices[i - 1] + 1
+        start_idx = _segment_start_index(rows_y, h_idx, lower_bound)
+        sub_rows = rows_y[start_idx:end_idx]
+        seg = _detect_single_table_layout(sub_rows)
+        if seg:
+            anchors, first_sub_y, stop_y, item_right, multi_result = seg
+            if i + 1 < len(header_indices):
+                # 不可讓本表格的資料範圍越過下一個表頭，避免跨表覆寫
+                stop_y = min(stop_y, rows_y[header_indices[i + 1]][0] - 0.1)
+            segments.append((anchors, first_sub_y, stop_y, item_right, multi_result))
+        elif notes is not None:
+            _note(
+                notes,
+                f"P.{page_num} 偵測到第 {i + 1} 個表格區塊，但無法判定欄位，"
+                "該區塊結果可能需人工確認",
+            )
+    return segments
+
+
+def _detect_single_table_layout(
+    rows_y: List[Tuple[float, List[RowToken]]]
+) -> Optional[Tuple[Dict[str, float], float, float, float, bool]]:
+    """
+    找出單一表格的跨列式表頭以及資料列範圍。
+    回傳 (anchors, first_sub_y, stop_y, item_right, multi_result)。
     """
     first_sub_y: Optional[float] = None
     for y, row in rows_y:
@@ -680,11 +799,16 @@ def _detect_table_layout(
         return None
 
     anchors: Dict[str, float] = {}
+    result_xs: List[float] = []
     for y, row in rows_y:
         if y > first_sub_y - 1:
             break
         for x0, x1, text in row:
             kind = _classify_table_label(text)
+            if kind == "result":
+                cx = (x0 + x1) / 2.0
+                if not any(abs(cx - rx) < 25.0 for rx in result_xs):
+                    result_xs.append(cx)
             if kind and kind not in anchors:
                 anchors[kind] = (x0 + x1) / 2.0
 
@@ -695,7 +819,6 @@ def _detect_table_layout(
     first_value_x = min(value_anchors)
     item_center = anchors.get("item")
     if item_center is not None:
-        # 以「項目欄中心」與「第一個數值欄」的中點作為邊界
         item_right = (item_center + first_value_x) / 2.0
     else:
         item_right = first_value_x - 100
@@ -715,7 +838,7 @@ def _detect_table_layout(
     if stop_y is None:
         stop_y = (rows_y[-1][0] + 20.0) if rows_y else first_sub_y + 1000.0
 
-    return anchors, first_sub_y, stop_y, item_right
+    return anchors, first_sub_y, stop_y, item_right, (len(result_xs) > 1)
 
 
 def _parse_page_by_bands(
@@ -727,108 +850,122 @@ def _parse_page_by_bands(
 ) -> Dict[str, SubstanceResult]:
     """
     依「物質名稱 → 下一個物質名稱」切出垂直區塊，再把 MDL/Result/Unit
-    依欄位 x 座標分配到對應區塊。可處理名稱、方法、MDL、結果分佔多列的表。
+    依欄位 x 座標分配到對應區塊。支援同頁多表格。
     """
-    layout = _detect_table_layout(rows_y)
-    if not layout:
-        return {}
-    anchors, first_sub_y, stop_y, item_right = layout
-    anchor_items = list(anchors.items())
-
-    starts: List[Tuple[float, str]] = []
-    for y, row in rows_y:
-        if y < first_sub_y - 1 or y >= stop_y:
-            continue
-        item_text = " ".join(
-            tok for x0, x1, tok in row if (x0 + x1) / 2.0 < item_right
-        )
-        if not item_text:
-            continue
-        key = _match_substance(item_text)
-        if not key:
-            continue
-        if not starts or key != starts[-1][1] or y - starts[-1][0] > 20:
-            starts.append((y, key))
-
-    if not starts:
+    segments = _detect_table_segments(rows_y, notes=notes, page_num=page_num)
+    if not segments:
         return {}
 
     results: Dict[str, SubstanceResult] = {}
-    for idx, (start_y, key) in enumerate(starts):
-        end_y = starts[idx + 1][0] if idx + 1 < len(starts) else stop_y
-        result_tokens: List[Tuple[float, float, str]] = []
-        mdl_tokens: List[Tuple[float, float, str]] = []
-        limit_tokens: List[Tuple[float, float, str]] = []
-        unit_tokens: List[Tuple[float, float, str]] = []
 
+    for anchors, first_sub_y, stop_y, item_right, multi_result in segments:
+        if multi_result:
+            _note(
+                notes,
+                f"P.{page_num} 偵測到多組 Result 欄位（可能為多樣品並列報告），該頁結果將標示為人工確認",
+            )
+        anchor_items = list(anchors.items())
+
+        starts: List[Tuple[float, str]] = []
         for y, row in rows_y:
-            if y < start_y - 1 or y >= end_y:
+            if y < first_sub_y - 1 or y >= stop_y:
                 continue
-            for x0, x1, text in _merge_row_tokens(row):
-                center = (x0 + x1) / 2.0
-                if center < item_right:
+            item_text = " ".join(
+                tok for x0, x1, tok in row if (x0 + x1) / 2.0 < item_right
+            )
+            if not item_text:
+                continue
+            key = _match_substance(item_text)
+            if not key:
+                continue
+            if not starts or key != starts[-1][1] or y - starts[-1][0] > 20:
+                starts.append((y, key))
+
+        if not starts:
+            continue
+
+        for idx, (start_y, key) in enumerate(starts):
+            end_y = starts[idx + 1][0] if idx + 1 < len(starts) else stop_y
+            result_tokens: List[Tuple[float, float, str]] = []
+            mdl_tokens: List[Tuple[float, float, str]] = []
+            unit_tokens: List[Tuple[float, float, str]] = []
+
+            for y, row in rows_y:
+                if y < start_y - 1 or y >= end_y:
                     continue
-                kind = min(anchor_items, key=lambda item: abs(item[1] - center))[0]
-                value = text.strip()
-                if kind == "result":
-                    if value:
-                        result_tokens.append((y, center, value))
-                elif kind == "mdl":
-                    if re.search(r"-?\d+", value):
-                        mdl_tokens.append((y, center, value))
-                elif kind == "limit":
-                    if re.search(r"-?\d+", value):
-                        limit_tokens.append((y, center, value))
-                elif kind == "unit" and _UNIT_FULL_RE.match(value):
-                    unit_tokens.append((y, center, value))
+                for x0, x1, text in _merge_row_tokens(row):
+                    center = (x0 + x1) / 2.0
+                    if center < item_right:
+                        continue
+                    kind = min(anchor_items, key=lambda item: abs(item[1] - center))[0]
+                    value = text.strip()
+                    if kind == "result":
+                        if value:
+                            result_tokens.append((y, center, value))
+                    elif kind == "mdl":
+                        if re.search(r"-?\d+", value):
+                            mdl_tokens.append((y, center, value))
+                    elif kind == "unit" and _UNIT_FULL_RE.match(value):
+                        unit_tokens.append((y, center, value))
 
-        if not result_tokens:
-            continue
-        result_tokens.sort()
-        mdl_tokens.sort()
-        limit_tokens.sort()
-        unit_tokens.sort()
+            if not result_tokens:
+                continue
+            result_tokens.sort()
+            mdl_tokens.sort()
+            unit_tokens.sort()
 
-        raw_res = result_tokens[0][2]
-        mdl: Optional[str] = None
-        for _, _, value in (mdl_tokens or limit_tokens):
-            m = re.search(r"-?\d+(?:\.\d+)?", value)
-            if m:
-                mdl = m.group(0)
-                break
+            # 偵測同列橫向有多個相距較遠的結果值（無重複表頭但多樣品並列）
+            first_y = result_tokens[0][0]
+            same_row_res = [t for t in result_tokens if abs(t[0] - first_y) <= 4.0 and _classify_value_token(t[2])]
+            is_ambiguous = multi_result or len(same_row_res) > 1
+            if len(same_row_res) > 1 and not multi_result:
+                _note(
+                    notes,
+                    f"P.{page_num} {key} 同列偵測到多個結果值（可能為多樣品並列），標示為人工確認",
+                )
 
-        unit: Optional[str] = None
-        inline = _INLINE_UNIT_PATTERN.search(raw_res)
-        if inline:
-            unit = normalize_unit(inline.group(1))
-        if unit is None and unit_tokens:
-            unit = normalize_unit(unit_tokens[0][2])
-        if unit is None:
-            unit = "μg/cm2" if (key == "Cr6+" and is_iec_7_1_ctx) else page_unit
+            raw_res = result_tokens[0][2]
+            mdl: Optional[str] = None
+            # 嚴格只從 MDL 欄位取值，絕不退回 Limit 欄位避免把限值當檢出限
+            for _, _, value in mdl_tokens:
+                m = re.search(r"-?\d+(?:\.\d+)?", value)
+                if m:
+                    mdl = m.group(0)
+                    break
 
-        if _ND_PATTERN.match(raw_res) and not mdl:
-            _note(notes, f"P.{page_num} {key}：結果為 N.D. 但無法判定 MDL，已略過此項")
-            continue
+            unit: Optional[str] = None
+            inline = _INLINE_UNIT_PATTERN.search(raw_res)
+            if inline:
+                unit = normalize_unit(inline.group(1))
+            if unit is None and unit_tokens:
+                unit = normalize_unit(unit_tokens[0][2])
+            if unit is None:
+                unit = "μg/cm2" if (key == "Cr6+" and is_iec_7_1_ctx) else page_unit
 
-        expected = _format_expected_value(raw_res, mdl, unit)
-        if not expected:
-            continue
+            if _ND_PATTERN.match(raw_res) and not mdl:
+                _note(notes, f"P.{page_num} {key}：結果為 N.D. 但無法判定 MDL，已略過此項")
+                continue
 
-        results[key] = SubstanceResult(
-            substance_key=key,
-            expected_value=expected,
-            raw_result=raw_res,
-            mdl=mdl,
-            unit=unit,
-            page=page_num,
-            evidence=f"{key} 結果={raw_res} MDL={mdl or '-'} 單位={unit}",
-        )
+            expected = _format_expected_value(raw_res, mdl, unit)
+            if not expected:
+                continue
+
+            results[key] = SubstanceResult(
+                substance_key=key,
+                expected_value=expected,
+                raw_result=raw_res,
+                mdl=mdl,
+                unit=unit,
+                page=page_num,
+                evidence=f"{key} 結果={raw_res} MDL={mdl or '-'} 單位={unit}",
+                ambiguous=is_ambiguous,
+            )
 
     return results
 
 
 def _merge_row_tokens(tokens: List[RowToken]) -> List[RowToken]:
-    """合併被空白拆開的 N.D.、Not Detected、比較符號與數值。"""
+    """合併被空白拆開的 N.D.、ND(<2)、Not Detected、比較符號與數值。"""
     out: List[RowToken] = []
     i = 0
     while i < len(tokens):
@@ -837,7 +974,16 @@ def _merge_row_tokens(tokens: List[RowToken]) -> List[RowToken]:
         nxt = tokens[i + 1][2].strip() if i + 1 < len(tokens) else ""
 
         if re.fullmatch(r"N\.?", cur, re.IGNORECASE) and re.fullmatch(r"D\.?", nxt, re.IGNORECASE):
+            # 檢查後面是否緊跟 (<2)
+            if i + 2 < len(tokens) and re.fullmatch(r"[\(（]\s*[<≤]?\s*\d+(?:\.\d+)?[^\)\）]*[\)）]", tokens[i + 2][2].strip()):
+                out.append((x0, tokens[i + 2][1], f"N.D.{tokens[i + 2][2].strip()}"))
+                i += 3
+                continue
             out.append((x0, tokens[i + 1][1], "N.D."))
+            i += 2
+            continue
+        if _ND_PATTERN.match(cur) and re.fullmatch(r"[\(（]\s*[<≤]?\s*\d+(?:\.\d+)?[^\)\）]*[\)）]", nxt):
+            out.append((x0, tokens[i + 1][1], f"{cur}{nxt}"))
             i += 2
             continue
         if cur.lower() == "not" and nxt.lower() == "detected":
@@ -859,7 +1005,7 @@ def _classify_value_token(text: str) -> Optional[str]:
     t = text.strip()
     if not t:
         return None
-    if _ND_PATTERN.match(t):
+    if _ND_INLINE_MDL_PATTERN.match(t) or _ND_PATTERN.match(t):
         return "nd"
     if re.fullmatch(r"[<≤>≥~]\s*-?\d+(?:\.\d+)?(?:[uμµ㎍]g/cm[2²])?", t, re.IGNORECASE):
         return "signed"
@@ -910,7 +1056,6 @@ def _parse_with_columns(
         kind = _classify_value_token(text)
         nearest = min(columns.anchors, key=lambda a: abs(a[0] - center))
         if kind is None:
-            # 文字型結果（Pass / Fail / N/A）也要歸到 Result 欄，避免退回數字猜測
             if (
                 nearest[1] == "result"
                 and _classify_header_token(text) is None
@@ -922,12 +1067,11 @@ def _parse_with_columns(
             assigned[nearest[1]].append((center, text.strip()))
 
     if not assigned["result"]:
-        # 已偵測到 Result 欄但該列為空（或只有 Limit/MDL）：
-        # 不可退回數字猜測，否則會把 Limit 當成結果並被 --fix 寫入。
         return None, True
 
     raw_res = assigned["result"][0][1]
     mdl = _first_numeric(assigned["mdl"])
+    is_ambiguous = columns.multi_result or len(assigned["result"]) > 1
 
     unit: Optional[str] = None
     inline = _INLINE_UNIT_PATTERN.search(raw_res)
@@ -960,6 +1104,7 @@ def _parse_with_columns(
         unit=unit,
         page=page_num,
         evidence=line.strip()[:140],
+        ambiguous=is_ambiguous,
     ), True
 
 
@@ -977,19 +1122,24 @@ def _parse_without_columns(
     if sub_key == "Cr6+" and is_iec_7_1_ctx and not unit_match:
         unit = "μg/cm2"
 
-    # 移除物質名稱本身以及 CAS 號，避免把 CAS 或 Cr6+ 的 "6" 誤當數值
     cleaned = line
-    cleaned = re.sub(r"\b\d{2,7}-\d{2}-\d\b", " ", cleaned)          # CAS No.
+    cleaned = re.sub(r"\b\d{2,7}-\d{2}-\d\b", " ", cleaned)
     cleaned = re.sub(r"Cr\s*\(?\s*(?:VI|6\+?)\s*\)?", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"IEC\s*62321(?:-\d+(?:-\d+)?)?", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"EPA\s*\d+[A-Z]?", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"EN\s*14582", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"2-?ethylhexyl", " ", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"[uμµ㎍]g/cm[2²]", " ", cleaned, flags=re.IGNORECASE)  # 避免 cm2 的 2 被當數值
+    cleaned = re.sub(r"[uμµ㎍]g/cm[2²]", " ", cleaned, flags=re.IGNORECASE)
 
     tokens = [m.group(1).strip() for m in _RESULT_TOKEN_RE.finditer(cleaned)]
     if not tokens:
         return None
+
+    nd_inline_idx = None
+    for idx, tok in enumerate(tokens):
+        if _ND_INLINE_MDL_PATTERN.match(tok):
+            nd_inline_idx = idx
+            break
 
     nd_idx = None
     for idx, tok in enumerate(tokens):
@@ -1006,7 +1156,11 @@ def _parse_without_columns(
     mdl_val: Optional[str] = None
     raw_res: Optional[str] = None
 
-    if nd_idx is not None:
+    if nd_inline_idx is not None:
+        raw_res = tokens[nd_inline_idx]
+        m_in = _ND_INLINE_MDL_PATTERN.match(raw_res)
+        mdl_val = m_in.group(2) if m_in else None
+    elif nd_idx is not None:
         raw_res = tokens[nd_idx]
         num_cands = []
         for idx, tok in enumerate(tokens):
@@ -1079,16 +1233,11 @@ def _parse_substance_line(
     tokens: Optional[List[RowToken]] = None,
     notes: Optional[List[str]] = None,
 ) -> Optional[SubstanceResult]:
-    """
-    從單行（或合併後的表格列）文字解析出物質的 Unit、MDL 與 Result。
-    若提供表頭 columns 與 token 座標，優先依欄位位置解析。
-    """
     note_list = notes if notes is not None else []
     sub_key = _match_substance(line)
     if not sub_key:
         return None
 
-    # 排除純標題/方法說明行（如 "Test Method: With reference to IEC 62321-5..."）
     if re.search(r"Test\s+Method|With\s+reference\s+to|determined\s+by|ICP-OES|GC-MS|UV-Vis|IC\b", line, re.IGNORECASE):
         if not re.search(r"\bN\.?D\.?\b|Negative|<\s*\d", line, re.IGNORECASE):
             return None
@@ -1154,7 +1303,6 @@ def parse_test_report_pdf(pdf_bytes: bytes, filename: str, source_entry: str) ->
             is_iec_7_1 = bool(re.search(r"IEC\s*62321-7-1", raw_text, re.IGNORECASE))
             rows_y = _extract_rows_with_y(page)
 
-            # 優先使用「欄位 + 垂直區塊」解析，可處理名稱／方法／MDL／結果分佔多列的表。
             band_results = _parse_page_by_bands(
                 rows_y, page_num, page_unit, is_iec_7_1, report.notes
             )
@@ -1166,7 +1314,6 @@ def parse_test_report_pdf(pdf_bytes: bytes, filename: str, source_entry: str) ->
             rows = [row for _, row in rows_y]
             columns = _detect_result_columns(rows)
 
-            # 逐列解析（同時支援「物質名稱在前一行、結果在下一行」的兩行合併容錯）
             for i, row in enumerate(rows):
                 row_tokens = _merge_row_tokens(row)
                 line = " ".join(t[2] for t in row_tokens)
@@ -1246,7 +1393,6 @@ def parse_msds_pdf(pdf_bytes: bytes, filename: str, source_entry: str) -> MSDSDa
                         continue
                     seen_cas.add(cas)
 
-                    # 取 CAS 之前的文字作為成分名稱猜測
                     idx = line.find(cas)
                     name_part = line[:idx].strip(" \t|:-—")
                     if not name_part and idx + len(cas) < len(line):

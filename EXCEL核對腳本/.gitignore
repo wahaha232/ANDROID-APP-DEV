@@ -3,4 +3,7 @@ __pycache__/
 *_核對報告.txt
 *_核對報告_修正後複驗.txt
 批次核對摘要.txt
+output/
+reports/
+backup/
 *.log

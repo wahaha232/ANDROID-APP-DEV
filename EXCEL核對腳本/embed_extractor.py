@@ -3,7 +3,7 @@
 內嵌 PDF 提取與分類模組
 支援：
   - .xls  (OLE2 Compound Document: CONTENTS / \x01Ole10Native / 原始串流掃描)
-  - .xlsx (ZIP: xl/embeddings/ 內的 .pdf 與 OLE .bin 封裝)
+  - .xlsx / .xlsm (ZIP: xl/embeddings/ 內的 .pdf 與 OLE .bin 封裝)
 自動將提取出的 PDF 分類為：
   - "test_report" (第三方測試報告)
   - "msds"        (MSDS / SDS / 成份表)
@@ -61,21 +61,11 @@ def _extract_pdf_bytes(raw: bytes) -> Optional[bytes]:
 def _parse_ole10native(raw: bytes) -> Tuple[Optional[str], Optional[bytes]]:
     """
     解析 OLE 1.0 Native (\x01Ole10Native) 結構。
-    結構概述：
-      - 4 bytes: total size (LE uint32)
-      - 2 bytes: flags (0x0002)
-      - null-terminated ANSI string: label (filename)
-      - null-terminated ANSI string: original path
-      - 2 bytes: flags2 (0x0000)
-      - 2 bytes: unknown
-      - 4 bytes: temp path len + temp path (null-terminated)
-      - 4 bytes: data size + data bytes
     若標頭格式非標準，則退回直接搜尋 %PDF-。
     """
     filename: Optional[str] = None
     try:
         if len(raw) > 10:
-            # 跳過 total_size(4) + flags(2)
             pos = 6
             nul1 = raw.find(b"\x00", pos)
             if nul1 != -1 and nul1 - pos <= 260:
@@ -88,12 +78,11 @@ def _parse_ole10native(raw: bytes) -> Tuple[Optional[str], Optional[bytes]]:
                             break
                     except UnicodeDecodeError:
                         continue
-            # 嘗試依結構精準讀取內嵌資料長度
             if nul1 != -1:
                 pos = nul1 + 1
                 nul2 = raw.find(b"\x00", pos)
                 if nul2 != -1:
-                    pos = nul2 + 1 + 4  # flags2 + unknown
+                    pos = nul2 + 1 + 4
                     if pos + 4 <= len(raw):
                         tmp_len = struct.unpack_from("<I", raw, pos)[0]
                         pos += 4 + tmp_len
@@ -114,7 +103,7 @@ def _parse_ole10native(raw: bytes) -> Tuple[Optional[str], Optional[bytes]]:
 
 def _extract_from_ole_bytes(ole_bytes: bytes, source_prefix: str) -> List[EmbeddedPDF]:
     """使用 olefile 從 OLE2 檔案或位元組流中提取所有內嵌 PDF。"""
-    import olefile  # 延遲載入，便於缺少套件時由主程式統一提示
+    import olefile
 
     results: List[EmbeddedPDF] = []
     if not olefile.isOleFile(ole_bytes):
@@ -184,7 +173,7 @@ def _extract_from_xls(excel_path: str) -> List[EmbeddedPDF]:
 
 
 def _extract_from_xlsx(excel_path: str) -> List[EmbeddedPDF]:
-    """從 .xlsx (ZIP) 的 xl/embeddings/ 提取內嵌 PDF（含直接 PDF 與 OLE .bin 封裝）。"""
+    """從 .xlsx / .xlsm (ZIP) 的 xl/embeddings/ 提取內嵌 PDF（含直接 PDF 與 OLE .bin 封裝）。"""
     results: List[EmbeddedPDF] = []
     total_bytes = 0
     with zipfile.ZipFile(excel_path, "r") as zf:
@@ -200,7 +189,6 @@ def _extract_from_xlsx(excel_path: str) -> List[EmbeddedPDF]:
                     f"（未壓縮 {info.file_size} bytes，累計上限 {MAX_EMBED_TOTAL_BYTES} bytes）"
                 )
                 continue
-            # 以有上限的 read 避免中央目錄大小不實時仍解壓出巨量資料
             try:
                 with zf.open(info) as fp:
                     raw = fp.read(MAX_EMBED_ENTRY_BYTES + 1)
@@ -224,7 +212,6 @@ def _extract_from_xlsx(excel_path: str) -> List[EmbeddedPDF]:
                         )
                     )
             else:
-                # 可能是 oleObject1.bin (OLE2 容器) 或直接包了 Ole10Native / PDF
                 sub_pdfs = _extract_from_ole_bytes(raw, info.filename)
                 results.extend(sub_pdfs)
     return results
@@ -242,7 +229,12 @@ _MSDS_STRONG_PATTERNS = [
     r"安全技术说明书",
     r"成分表|成份表|材質成分表|材料成分表",
     r"COMPOSITION\s*/?\s*INFORMATION\s+ON\s+INGREDIENTS",
+    r"SECTION\s*1[\s.:]+IDENTIFICATION",
+    r"SECTION\s*2[\s.:]+HAZARDS?\s+IDENTIFICATION",
     r"SECTION\s*3[\s.:]+COMPOSITION",
+    r"HAZARDS?\s+IDENTIFICATION",
+    r"GHS\s+CLASSIFICATION",
+    r"危害辨識資料|危险性概述|急救措施|消防措施|洩漏處理方法|泄漏应急处理",
 ]
 
 _TEST_REPORT_STRONG_PATTERNS = [
@@ -287,7 +279,7 @@ def classify_pdf(pdf_obj: EmbeddedPDF, sample_text: str = "") -> str:
 
 def extract_embedded_pdfs(excel_path: str) -> List[EmbeddedPDF]:
     """
-    從 .xls 或 .xlsx 提取所有內嵌 PDF 並去重與分類。
+    從 .xls / .xlsx / .xlsm 提取所有內嵌 PDF 並去重與分類。
     分類會使用 PyMuPDF 讀取前 2 頁文字輔助判斷。
     """
     if not os.path.isfile(excel_path):
@@ -299,7 +291,7 @@ def extract_embedded_pdfs(excel_path: str) -> List[EmbeddedPDF]:
     elif ext in (".xlsx", ".xlsm"):
         raw_pdfs = _extract_from_xlsx(excel_path)
     else:
-        raise ValueError(f"不支援的 Excel 格式：{ext}（僅支援 .xls / .xlsx）")
+        raise ValueError(f"不支援的 Excel 格式：{ext}（僅支援 .xls / .xlsx / .xlsm）")
 
     # 依 SHA-256 去重（避免同一檔案在 OLE 多個串流重複出現）
     deduped: List[EmbeddedPDF] = []
