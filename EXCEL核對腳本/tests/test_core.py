@@ -1015,26 +1015,30 @@ class TestOverwriteAndIterativeFix(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             out_dir = root / "output"
-            out_dir.mkdir()
+            group_same = out_dir / "07C6-105M-43AD_CL03A105MQ3CSNH"
+            group_same.mkdir(parents=True)
 
-            # 已存在於 output/ 的舊版檔案（同料號）
-            existing = out_dir / "sample_已修正.xlsx"
+            # 已存在於 output/<正崴料號_供應商料號>/ 的舊版檔案（同料號）
+            existing = group_same / "sample_已修正.xlsx"
             self._make_o193d_xlsx(existing, "07C6-105M-43AD", "CL03A105MQ3CSNH")
 
-            # 來源 1：同檔名且 Foxlink + 供應商料號皆相同 -> 應直接覆蓋
+            # 來源 1：同檔名且 Foxlink + 供應商料號皆相同 -> 歸類至同料號資料夾並直接覆蓋
             src_same = root / "sample.xlsx"
             self._make_o193d_xlsx(src_same, "07C6-105M-43AD", "CL03A105MQ3CSNH")
             resolved_same, overwrote_same = _resolve_output_path(str(src_same), str(out_dir))
             self.assertEqual(Path(resolved_same), existing)
             self.assertTrue(overwrote_same)
 
-            # 來源 2：同檔名但料號不同 -> 不覆蓋，改存 _2
+            # 來源 2：同檔名但料號不同 -> 自動歸類到另一個料號資料夾，不覆蓋舊版
             dir2 = root / "other"
             dir2.mkdir()
             src_diff = dir2 / "sample.xlsx"
             self._make_o193d_xlsx(src_diff, "07C6-999M-99ZZ", "CL10B104KB8NNNC")
             resolved_diff, overwrote_diff = _resolve_output_path(str(src_diff), str(out_dir))
-            self.assertEqual(Path(resolved_diff), out_dir / "sample_已修正_2.xlsx")
+            self.assertEqual(
+                Path(resolved_diff),
+                out_dir / "07C6-999M-99ZZ_CL10B104KB8NNNC" / "sample_已修正.xlsx",
+            )
             self.assertFalse(overwrote_diff)
 
     def test_interactive_fix_loops_until_clean(self):
@@ -1204,6 +1208,76 @@ class TestO193DFilenameAndO202CrossCheck(unittest.TestCase):
             self.assertIn("物料重量", text)
             self.assertIn("SVHC 漏報檢查", text)
             self.assertIn("7439-92-1", text)
+
+    def test_batch_prints_full_detail_and_archives_clean_o202_into_group_folder(self):
+        import openpyxl
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out_dir = root / "output"
+            rep_dir = root / "reports"
+            o193d_path = root / "07C6-105M-43AD O-193D 環境管理物質部件展開表.xlsx"
+            o202_path = root / "07C6-105M-43AD REACH法規SVHC物質調查表O-202 AH03.xlsx"
+
+            # O-193D：故意留 1 筆錯誤（含量 80%）以便測試批次明細表格輸出
+            wb1 = openpyxl.Workbook()
+            ws1 = wb1.active
+            ws1.title = "環境管理物質部件展開表"
+            ws1["A3"], ws1["D3"] = "產品名稱", "MLCC"
+            ws1["A4"], ws1["D4"] = "Foxlink產品料號", "07C6-105M-43AD"
+            ws1["A5"], ws1["D5"] = "供應商產品料號", "CL03A105MQ3CSNH"
+            ws1["A7"], ws1["D7"] = "總重量", "0.32mg"
+            for c, v in enumerate(["", "部件名稱", "部件重量", "均質材料", "CAS No.", "含量(%)"], 1):
+                ws1.cell(9, c, v)
+            for c, v in enumerate(["", "Ceramic body", "0.32mg", "Ceramic", "12047-27-7", 80], 1):
+                ws1.cell(10, c, v)
+            wb1.save(o193d_path)
+
+            # O-202AH：完全正確，應自動歸檔至 output/07C6-105M-43AD_CL03A105MQ3CSNH/
+            wb2 = openpyxl.Workbook()
+            ws_cat = wb2.active
+            ws_cat.title = "SVHC清單"
+            ws_cat["A1"] = "REACH 要求通報的高關注物質（SVHC)一覽表"
+            ws_cat["A3"], ws_cat["B3"], ws_cat["C3"] = "No", "CAS NO.", "化學物質名稱"
+            ws_cat["A4"], ws_cat["B4"], ws_cat["C4"] = 189, "7439-92-1", "鉛"
+
+            ws_real = wb2.create_sheet("調查表")
+            o202_headers = [
+                "供應商料號\nSupplier P/N", "正崴料號\nFoxlink P/N", "物料名稱Description",
+                "含有SVHC的名稱\nThe name of SVHC", "SVHC登記號\nSVHC CAS No.",
+                "物料重量 (grams)", "SVHC 重量 (grams)", "SVHC 占物料比重",
+                "SVHC 使用部位/用途", "SVHC 削減日期",
+            ]
+            for c, v in enumerate(o202_headers, 1):
+                ws_real.cell(8, c, v)
+            for c, v in enumerate(["CL03A105MQ3CSNH", "07C6-105M-43AD", "MLCC", "不含", "", "0.32mg"], 1):
+                ws_real.cell(9, c, v)
+            wb2.save(o202_path)
+
+            out = io.StringIO()
+            with redirect_stdout(out), redirect_stderr(io.StringIO()):
+                rc = main([
+                    str(o193d_path),
+                    str(o202_path),
+                    "--save-report",
+                    "--output-dir",
+                    str(out_dir),
+                    "--report-dir",
+                    str(rep_dir),
+                    "--no-fmd",
+                ])
+
+            text = out.getvalue()
+            # 批次模式不需 --verbose 也會印出完整明細表頭與錯誤列
+            self.assertIn("等級", text)
+            self.assertIn("工作表!位址", text)
+            self.assertIn("報告正確值", text)
+            self.assertIn("成分含量總和", text)
+            self.assertIn("批次核對摘要", text)
+            # 無錯誤的 O-202AH 已自動歸檔於 output/<正崴料號_供應商料號>/
+            expected_archived = out_dir / "07C6-105M-43AD_CL03A105MQ3CSNH" / o202_path.name
+            self.assertTrue(expected_archived.exists())
+            self.assertEqual(rc, 3)
 
 
 if __name__ == "__main__":

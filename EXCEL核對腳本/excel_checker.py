@@ -853,23 +853,83 @@ def _find_supplier_part_no_in_header(sheet: UnifiedSheet, header_row: int) -> Op
     return _find_header_field_value(sheet, header_row, _SUPPLIER_PN_LABEL_RE)
 
 
+def _extract_o202_identity_from_sheets(sheets: List[UnifiedSheet]) -> Tuple[str, str]:
+    """從 O-202AH 調查表實際填寫列抽取 (Foxlink正崴料號, 供應商料號)。"""
+    example_re = re.compile(r"XXXX|8112-9000-XXX|5811-XXXX|5812-XXXX", re.IGNORECASE)
+    skip_name_re = re.compile(r"範例|範本|Example|Template", re.IGNORECASE)
+    for sh in sheets:
+        if skip_name_re.search(sh.name):
+            continue
+        max_r = min(sh.nrows, 20)
+        max_c = min(sh.ncols, 12)
+        c_sup = c_fox = header_r = None
+        for r in range(1, max_r + 1):
+            row_text = " ".join(sh.get_str(r, c) for c in range(1, max_c + 1))
+            if not re.search(r"含有\s*SVHC|name\s*of\s*SVHC|SVHC登記號|SVHC\s*CAS", row_text, re.IGNORECASE):
+                continue
+            for c in range(1, max_c + 1):
+                t = sh.get_str(r, c)
+                if re.search(r"供應商料號|供应商料号|Supplier\s*P/?N", t, re.IGNORECASE):
+                    c_sup = c
+                elif re.search(r"正崴料號|正崴料号|Foxlink\s*P/?N", t, re.IGNORECASE):
+                    c_fox = c
+            if c_sup or c_fox:
+                header_r = r
+                break
+        if not header_r:
+            continue
+        for r in range(header_r + 1, min(sh.nrows, header_r + 10) + 1):
+            sup = sh.get_str(r, c_sup) if c_sup else ""
+            fox = sh.get_str(r, c_fox) if c_fox else ""
+            if not sup and not fox:
+                continue
+            if example_re.search(sup) or example_re.search(fox):
+                break
+            return fox.strip(), sup.strip()
+    return "", ""
+
+
 def extract_product_identity(excel_path: str) -> Tuple[str, str]:
     """
-    從 Excel 檔案表頭讀取 (Foxlink產品料號, 供應商產品料號)，
-    用於判斷 output 資料夾內同名檔案是否屬於同一產品（相同則覆蓋舊版）。
+    從 O-193D 或 O-202AH Excel 檔案讀取 (Foxlink產品料號, 供應商產品料號)，
+    用於 output 資料夾自動歸類與判斷同名舊檔是否屬於同一產品。
     """
+    fn_fox = extract_foxlink_pn_from_filename(excel_path) or ""
+    if not fn_fox:
+        stem = os.path.splitext(os.path.basename(excel_path))[0].strip()
+        m_o202 = re.search(r"^([A-Z0-9][A-Z0-9\-]{5,})\s*[_\-\s]*(?:REACH|SVHC|O-?202)", stem, re.IGNORECASE)
+        if m_o202:
+            fn_fox = m_o202.group(1).strip().rstrip("-_")
     try:
         sheets = load_workbook_sheets(excel_path)
     except Exception:
-        return "", ""
+        return fn_fox, ""
     for sh in sheets:
         layout = detect_header_layout(sh)
-        header_row = layout.header_row if layout else 15
-        fox = _find_foxlink_part_no_in_header(sh, header_row) or ""
-        sup = _find_supplier_part_no_in_header(sh, header_row) or ""
+        if not layout:
+            continue
+        fox = _find_foxlink_part_no_in_header(sh, layout.header_row) or fn_fox
+        sup = _find_supplier_part_no_in_header(sh, layout.header_row) or ""
         if fox or sup:
             return fox.strip(), sup.strip()
-    return "", ""
+    o202_fox, o202_sup = _extract_o202_identity_from_sheets(sheets)
+    if o202_fox or o202_sup:
+        return (o202_fox or fn_fox).strip(), o202_sup.strip()
+    return fn_fox, ""
+
+
+def make_output_group_folder_name(identity: Tuple[str, str]) -> str:
+    """
+    依 (Foxlink產品料號, 供應商產品料號) 產生 output 自動歸類子資料夾名稱，
+    例如 '07C6-105M-43AD_CL03A105MQ3CSNH'；若雙料號皆空則回傳空字串。
+    """
+    fox, sup = (identity[0] or "").strip(), (identity[1] or "").strip()
+    parts = [p for p in (fox, sup) if p]
+    if not parts:
+        return ""
+    raw = "_".join(parts)
+    cleaned = re.sub(r'[<>:"/\\|?*\r\n\t]+', "_", raw).strip(" .")
+    return cleaned[:100]
 
 
 def _norm_fmd_text(text: str) -> str:

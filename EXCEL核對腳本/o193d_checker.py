@@ -26,7 +26,7 @@ from typing import Any, List, Optional, Tuple
 
 from embed_extractor import extract_embedded_pdfs
 from excel_checker import CheckSummary, check_sheet, load_workbook_sheets
-from excel_fixer import ExcelComSession, apply_fixes_via_excel_com
+from excel_fixer import ExcelComSession, apply_fixes_via_excel_com, archive_verified_file_to_output
 from fmd_matcher import DEFAULT_SAMSUNG_FMD_DIR, FMDRecord, load_fmd_index
 from pdf_parser import MSDSData, TestReportData, parse_msds_pdf, parse_test_report_pdf
 from svhc_checker import check_o202_workbook, is_o202_svhc_workbook
@@ -708,6 +708,32 @@ def process_file(
         result.pre_messages.append(f"[已存檔] 核對報告：{report_path}")
 
     if not run_fix:
+        # 確認無錯誤且處於輸出/互動模式時，自動歸檔至 output/<正崴料號_供應商料號>/
+        should_archive = (
+            summary.error_count == 0
+            and (
+                getattr(args, "save_report", False)
+                or getattr(args, "fix", False)
+                or getattr(args, "interactive_fix", False)
+                or _resolve_dir(getattr(args, "output_dir", None), DEFAULT_OUTPUT_DIR) != os.path.abspath(DEFAULT_OUTPUT_DIR)
+            )
+        )
+        if should_archive:
+            output_dir = _resolve_dir(getattr(args, "output_dir", None), DEFAULT_OUTPUT_DIR)
+            try:
+                archived_path, overwrote = archive_verified_file_to_output(
+                    excel_path, output_dir=output_dir
+                )
+                result.saved_output_path = archived_path
+                if overwrote:
+                    result.pre_messages.append(
+                        f"[已歸檔] 比對無錯誤，比對料號相同已覆蓋舊版歸檔至：{archived_path}"
+                    )
+                else:
+                    result.pre_messages.append(f"[已歸檔] 比對無錯誤，已歸檔至：{archived_path}")
+            except OSError as exc:
+                result.pre_messages.append(f"[警告] 無錯誤檔案歸檔至 output 失敗：{exc}")
+
         result.exit_code = 0 if not summary.issues else (2 if summary.fixable_count > 0 else 3)
         return result
 
@@ -876,13 +902,19 @@ def _run_batch_fixes(
                     for msg in res.post_messages[post_len:]:
                         print(msg)
                 else:
+                    for msg in res.pre_messages[pre_len:]:
+                        print(msg)
+                    if res.error:
+                        print(f"[錯誤] {res.error}", file=sys.stderr)
+                    if res.verify_text:
+                        print(res.verify_text)
+                    for msg in res.post_messages[post_len:]:
+                        print(msg)
                     err, warn, fixable = _result_counts(res)
                     print(
                         f"        {_result_status(res)} | 已修正 {res.fixed_count}、剩餘錯誤 {err}、警告 {warn}、可修正 {fixable}",
                         flush=True,
                     )
-                    if not res.ok and res.error:
-                        print(f"        [錯誤] {res.error}", file=sys.stderr)
     except Exception as exc:
         print(f"[錯誤] 啟動 Excel COM 失敗：{exc}", file=sys.stderr)
         for res in targets:
@@ -1061,13 +1093,12 @@ def main(argv: List[str] | None = None) -> int:
             if not result.ok and result.error:
                 print(f"        [錯誤] {result.error}", file=sys.stderr)
 
-    # 顯示初檢結果
+    # 顯示初檢結果（批次模式同樣顯示各檔完整明細表格，最後再輸出批次核對摘要）
     if not batch_mode:
         _print_single_result(results[0])
     else:
-        if args.verbose:
-            for result in results:
-                _print_batch_detail(result)
+        for result in results:
+            _print_batch_detail(result)
         summary_text = format_batch_summary(results, input_errors)
         print(summary_text)
         if args.save_report:

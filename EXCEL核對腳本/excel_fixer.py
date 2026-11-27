@@ -18,7 +18,7 @@ import shutil
 from dataclasses import dataclass, field
 from typing import Any, Callable, List, Optional, Tuple
 
-from excel_checker import CheckIssue, extract_product_identity
+from excel_checker import CheckIssue, extract_product_identity, make_output_group_folder_name
 
 # Excel VBA/COM 的 RGB(r, g, b) = r + g*256 + b*65536，因此紅色 RGB(255, 0, 0) = 255
 EXCEL_COLOR_RED = 255
@@ -68,25 +68,47 @@ def _make_numbered_path(excel_path: str, suffix: str, target_dir: Optional[str] 
         idx += 1
 
 
+def _resolve_grouped_output_dir(
+    excel_path: str,
+    output_dir: Optional[str] = None,
+    source_identity: Optional[Tuple[str, str]] = None,
+) -> Tuple[str, Tuple[str, str]]:
+    """
+    依檔案的 (Foxlink產品料號, 供應商產品料號) 決定 output 內的自動歸類資料夾：
+    例如 output\\07C6-105M-43AD_CL03A105MQ3CSNH\\；若無法解析雙料號則回傳 output_dir 本身。
+    """
+    base_dir = os.path.abspath(output_dir) if output_dir else os.path.dirname(os.path.abspath(excel_path))
+    src_id = source_identity if source_identity is not None else extract_product_identity(excel_path)
+    group_name = make_output_group_folder_name(src_id)
+    if group_name:
+        return os.path.join(base_dir, group_name), src_id
+    return base_dir, src_id
+
+
 def _resolve_output_path(
     excel_path: str,
     output_dir: Optional[str] = None,
     source_identity: Optional[Tuple[str, str]] = None,
+    suffix: Optional[str] = "已修正",
 ) -> Tuple[str, bool]:
     """
-    決定修正後檔案於 output 資料夾中的輸出路徑：
-    - 若目標檔名尚未存在，直接使用「原檔名_已修正.<ext>」。
+    決定檔案於 output 歸類資料夾中的輸出路徑：
+    - 若目標檔名尚未存在，直接使用「原檔名_已修正.<ext>」（或 suffix=None 時使用原檔名）。
     - 若目標檔名已存在，比對 [Foxlink產品料號 + 供應商產品料號]：
       * 相同（且檔案未被鎖定）→ 直接覆蓋舊版本檔案，回傳 (path, True)。
       * 不同（或無法比對）→ 依序尋找 _2、_3... 直到找到同料號舊檔或空位。
     """
     stem, ext = os.path.splitext(os.path.basename(excel_path))
-    parent = os.path.abspath(output_dir) if output_dir else os.path.dirname(os.path.abspath(excel_path))
-    src_id = source_identity if source_identity is not None else extract_product_identity(excel_path)
+    parent, src_id = _resolve_grouped_output_dir(
+        excel_path, output_dir=output_dir, source_identity=source_identity
+    )
 
     idx = 1
     while True:
-        name = f"{stem}_已修正{ext}" if idx == 1 else f"{stem}_已修正_{idx}{ext}"
+        if suffix:
+            name = f"{stem}_{suffix}{ext}" if idx == 1 else f"{stem}_{suffix}_{idx}{ext}"
+        else:
+            name = f"{stem}{ext}" if idx == 1 else f"{stem}_{idx}{ext}"
         cand = os.path.join(parent, name)
         if not os.path.exists(cand):
             return cand, False
@@ -95,6 +117,25 @@ def _resolve_output_path(
             if _identities_match(src_id, existing_id) and not _is_file_locked(cand):
                 return cand, True
         idx += 1
+
+
+def archive_verified_file_to_output(
+    excel_path: str,
+    output_dir: Optional[str] = None,
+) -> Tuple[str, bool]:
+    """
+    將比對確認無錯誤的檔案（例如 O-202AH 或無異常 O-193D）歸檔至 output 對應的料號資料夾。
+    若同料號檔案已存在則直接覆蓋舊版。回傳 (archived_path, overwrote_existing)。
+    """
+    abs_path = os.path.abspath(excel_path)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    resolved_output_dir = os.path.abspath(output_dir) if output_dir else os.path.join(script_dir, "output")
+    dest_path, overwrote = _resolve_output_path(
+        abs_path, output_dir=resolved_output_dir, suffix=None
+    )
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    shutil.copy2(abs_path, dest_path)
+    return dest_path, overwrote
 
 
 def _make_output_path(excel_path: str, output_dir: Optional[str] = None) -> str:
@@ -280,10 +321,11 @@ def apply_fixes_via_excel_com(
     else:
         output_path, overwrote_existing = _resolve_output_path(abs_path, output_dir=resolved_output_dir)
         try:
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
             shutil.copy2(abs_path, output_path)
         except OSError as exc:
             raise RuntimeError(
-                f"無法建立輸出檔案至 {resolved_output_dir}（{exc}），已中止自動修正"
+                f"無法建立輸出檔案至 {os.path.dirname(output_path)}（{exc}），已中止自動修正"
             ) from exc
 
     target_open_path = output_path
