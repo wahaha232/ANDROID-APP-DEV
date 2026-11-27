@@ -280,6 +280,7 @@ class FileCheckResult:
     post_messages: List[str] = field(default_factory=list)
     saved_report: str = ""
     saved_verify_report: str = ""
+    saved_output_path: str = ""
     fixed_count: int = 0
     # 暫存已解析的 PDF 供 --interactive-fix 直接沿用，免去二次解析
     test_reports: List[TestReportData] = field(default_factory=list)
@@ -366,71 +367,23 @@ def _set_error(result: FileCheckResult, message: str) -> FileCheckResult:
     return result
 
 
-def fix_and_verify_result(
+def reverify_result(
     result: FileCheckResult,
     args,
-    excel_app: Any = None,
     used_verify_paths: Optional[set] = None,
     fmd_records: Optional[List[FMDRecord]] = None,
 ) -> FileCheckResult:
-    """
-    對已完成核對的 FileCheckResult 執行 Excel COM 修正與複驗。
-    直接沿用記憶體中的 test_reports / msds_list，避免重複解析 PDF。
-    """
-    summary = result.summary
-    if not result.ok or summary is None:
-        return result
-
-    if summary.fixable_count == 0:
-        result.pre_messages.append("[提示] 沒有可自動修正的項目，未產生修正後檔案。")
-        result.exit_code = 0 if not summary.issues else 3
-        return result
-
-    missing = _check_dependencies(result.path, need_fix=True)
-    if missing:
-        return _set_error(
-            result,
-            f"缺少自動修正必要套件：{', '.join(missing)}；請先執行 pip install {' '.join(missing)}",
-        )
-
-    output_dir = _resolve_dir(getattr(args, "output_dir", None), DEFAULT_OUTPUT_DIR)
-    backup_dir = _resolve_dir(getattr(args, "backup_dir", None), DEFAULT_BACKUP_DIR)
+    """重新讀取最新輸出檔（或原檔）進行複驗並更新複驗報告。"""
+    target_path = result.saved_output_path or result.path
     report_dir = _resolve_dir(getattr(args, "report_dir", None), DEFAULT_REPORT_DIR)
 
-    result.pre_messages.append(
-        f"\n正在透過 Excel COM 自動修正 {summary.fixable_count} 個儲存格並標記紅字..."
-    )
     try:
-        fix_res = apply_fixes_via_excel_com(
-            result.path,
-            summary.issues,
-            excel_app=excel_app,
-            output_dir=output_dir,
-            backup_dir=backup_dir,
-        )
+        sheets2 = load_workbook_sheets(target_path, target_sheet=args.sheet)
     except Exception as exc:
-        return _set_error(result, f"Excel COM 自動修正失敗：{exc}")
-
-    result.fixed_count = fix_res.fixed_count
-    if fix_res.backup_path:
-        result.pre_messages.append(f"[備份] 修正前原檔已備份至：{fix_res.backup_path}")
-    result.pre_messages.append(
-        f"[完成] 已保留原檔，修正後檔案已輸出至：{fix_res.saved_path}\n"
-        f"       共修正 {fix_res.fixed_count} 個儲存格（已套用紅色字體）。"
-    )
-    if fix_res.skipped_items:
-        result.pre_messages.append(f"[警告] 以下 {len(fix_res.skipped_items)} 個儲存格修正略過：")
-        for ref, reason in fix_res.skipped_items:
-            result.pre_messages.append(f"  - {ref}: {reason}")
-
-    result.pre_messages.append("\n正在複驗修正後的檔案...")
-    try:
-        sheets2 = load_workbook_sheets(fix_res.saved_path, target_sheet=args.sheet)
-    except Exception as exc:
-        return _set_error(result, f"讀取修正後檔案失敗：{exc}")
+        return _set_error(result, f"讀取複驗檔案失敗：{exc}")
 
     verify = CheckSummary(
-        excel_path=fix_res.saved_path,
+        excel_path=target_path,
         total_pdfs=result.total_pdfs,
         test_report_count=len(result.test_reports),
         msds_count=len(result.msds_list),
@@ -477,12 +430,93 @@ def fix_and_verify_result(
         result.exit_code = 2 if verify.fixable_count > 0 else 3
         result.post_messages.append(
             f"[提醒] 修正後仍有錯誤 {verify.error_count} 項、警告 {verify.warning_count} 項，"
-            "請依上方複驗報告人工確認。"
+            "請依上方複驗報告確認。"
         )
     else:
         result.exit_code = 0
         result.post_messages.append("[完成] 修正後複驗：未發現異常。")
     return result
+
+
+def fix_and_verify_result(
+    result: FileCheckResult,
+    args,
+    excel_app: Any = None,
+    used_verify_paths: Optional[set] = None,
+    fmd_records: Optional[List[FMDRecord]] = None,
+) -> FileCheckResult:
+    """
+    對已完成核對的 FileCheckResult 執行 Excel COM 修正與複驗。
+    直接沿用記憶體中的 test_reports / msds_list，避免重複解析 PDF。
+    支援多輪連續修正：若已有 saved_output_path，直接針對該輸出檔繼續修正而不重複備份。
+    """
+    active_summary = result.verify_summary or result.summary
+    if not result.ok or active_summary is None:
+        return result
+
+    if active_summary.fixable_count == 0:
+        result.pre_messages.append("[提示] 沒有可自動修正的項目，未產生修正後檔案。")
+        result.exit_code = 0 if not active_summary.issues else 3
+        return result
+
+    missing = _check_dependencies(result.path, need_fix=True)
+    if missing:
+        return _set_error(
+            result,
+            f"缺少自動修正必要套件：{', '.join(missing)}；請先執行 pip install {' '.join(missing)}",
+        )
+
+    output_dir = _resolve_dir(getattr(args, "output_dir", None), DEFAULT_OUTPUT_DIR)
+    backup_dir = _resolve_dir(getattr(args, "backup_dir", None), DEFAULT_BACKUP_DIR)
+    is_followup_round = bool(result.saved_output_path and os.path.isfile(result.saved_output_path))
+
+    result.pre_messages.append(
+        f"\n正在透過 Excel COM 自動修正 {active_summary.fixable_count} 個儲存格並標記紅字..."
+    )
+    try:
+        fix_res = apply_fixes_via_excel_com(
+            result.path,
+            active_summary.issues,
+            excel_app=excel_app,
+            output_dir=output_dir,
+            backup_dir=backup_dir,
+            in_place_target=result.saved_output_path if is_followup_round else None,
+            create_backup=not is_followup_round,
+        )
+    except Exception as exc:
+        return _set_error(result, f"Excel COM 自動修正失敗：{exc}")
+
+    result.fixed_count += fix_res.fixed_count
+    result.saved_output_path = fix_res.saved_path
+    if fix_res.backup_path:
+        result.pre_messages.append(f"[備份] 修正前原檔已備份至：{fix_res.backup_path}")
+    if is_followup_round:
+        result.pre_messages.append(
+            f"[完成] 已更新修正後檔案：{fix_res.saved_path}\n"
+            f"       本輪共修正 {fix_res.fixed_count} 個儲存格（已套用紅色字體）。"
+        )
+    elif fix_res.overwrote_existing:
+        result.pre_messages.append(
+            f"[完成] 已保留原檔，比對 [Foxlink產品料號+供應商產品料號] 相同，已直接覆蓋舊版檔案：{fix_res.saved_path}\n"
+            f"       共修正 {fix_res.fixed_count} 個儲存格（已套用紅色字體）。"
+        )
+    else:
+        result.pre_messages.append(
+            f"[完成] 已保留原檔，修正後檔案已輸出至：{fix_res.saved_path}\n"
+            f"       共修正 {fix_res.fixed_count} 個儲存格（已套用紅色字體）。"
+        )
+    if fix_res.skipped_items:
+        result.pre_messages.append(f"[警告] 以下 {len(fix_res.skipped_items)} 個儲存格修正略過：")
+        for ref, reason in fix_res.skipped_items:
+            result.pre_messages.append(f"  - {ref}: {reason}")
+
+    result.pre_messages.append("\n正在複驗修正後的檔案...")
+    return reverify_result(
+        result,
+        args,
+        used_verify_paths=used_verify_paths,
+        fmd_records=fmd_records,
+    )
 
 
 def process_file(
@@ -734,7 +768,10 @@ def _run_batch_fixes(
     fmd_records: Optional[List[FMDRecord]] = None,
 ) -> None:
     """使用單一 ExcelComSession 批次修正所有可修正項目，減少 COM 啟閉開銷。"""
-    targets = [r for r in results if r.ok and r.summary and r.summary.fixable_count > 0]
+    targets = [
+        r for r in results
+        if r.ok and (r.verify_summary or r.summary) and (r.verify_summary or r.summary).fixable_count > 0
+    ]
     if not targets:
         return
 
@@ -743,8 +780,9 @@ def _run_batch_fixes(
         with ExcelComSession() as excel_app:
             for idx, res in enumerate(targets, 1):
                 if batch_mode:
-                    print(f"[修正 {idx}/{len(targets)}] {res.path}", flush=True)
+                    print(f"[修正 {idx}/{len(targets)}] {res.saved_output_path or res.path}", flush=True)
                 pre_len = len(res.pre_messages)
+                post_len = len(res.post_messages)
                 fix_and_verify_result(
                     res,
                     args,
@@ -759,7 +797,7 @@ def _run_batch_fixes(
                         print(f"[錯誤] {res.error}", file=sys.stderr)
                     if res.verify_text:
                         print(res.verify_text)
-                    for msg in res.post_messages:
+                    for msg in res.post_messages[post_len:]:
                         print(msg)
                 else:
                     err, warn, fixable = _result_counts(res)
@@ -774,6 +812,45 @@ def _run_batch_fixes(
         for res in targets:
             if res.fixed_count == 0 and res.ok:
                 _set_error(res, f"啟動 Excel COM 失敗：{exc}")
+
+
+def _run_batch_reverify(
+    results: List[FileCheckResult],
+    args,
+    batch_mode: bool,
+    fmd_records: Optional[List[FMDRecord]] = None,
+) -> None:
+    """對目前仍有錯誤的檔案重新讀取複驗（供人工修正後再次驗證）。"""
+    targets = [
+        r for r in results
+        if r.ok and (r.verify_summary or r.summary) and (r.verify_summary or r.summary).error_count > 0
+    ]
+    if not targets:
+        return
+    used_verify_paths: set = set()
+    for idx, res in enumerate(targets, 1):
+        if batch_mode:
+            print(f"[複驗 {idx}/{len(targets)}] {res.saved_output_path or res.path}", flush=True)
+        post_len = len(res.post_messages)
+        reverify_result(
+            res,
+            args,
+            used_verify_paths=used_verify_paths,
+            fmd_records=fmd_records,
+        )
+        if not batch_mode:
+            if res.error:
+                print(f"[錯誤] {res.error}", file=sys.stderr)
+            if res.verify_text:
+                print(res.verify_text)
+            for msg in res.post_messages[post_len:]:
+                print(msg)
+        else:
+            err, warn, fixable = _result_counts(res)
+            print(
+                f"        {_result_status(res)} | 剩餘錯誤 {err}、警告 {warn}、可修正 {fixable}",
+                flush=True,
+            )
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -962,6 +1039,65 @@ def main(argv: List[str] | None = None) -> int:
                     print(f"[錯誤] 更新批次核對摘要失敗：{exc}", file=sys.stderr)
                     return 1
                 print(f"[已更新] 批次核對摘要：{summary_path}")
+
+        # 互動模式：若修正後仍有錯誤，持續詢問是否再次修正／重新複驗，直到無錯誤或使用者取消
+        while args.interactive_fix:
+            rem_fixable_files = [
+                r for r in results
+                if r.ok and (r.verify_summary or r.summary) and (r.verify_summary or r.summary).fixable_count > 0
+            ]
+            rem_error_files = [
+                r for r in results
+                if r.ok and (r.verify_summary or r.summary) and (r.verify_summary or r.summary).error_count > 0
+            ]
+            rem_fixable_total = sum(
+                (r.verify_summary or r.summary).fixable_count for r in rem_fixable_files
+            )
+            rem_error_total = sum(
+                (r.verify_summary or r.summary).error_count for r in rem_error_files
+            )
+
+            if rem_fixable_total == 0 and rem_error_total == 0:
+                break
+
+            print("-" * 76)
+            if rem_fixable_total > 0:
+                try:
+                    ans2 = input(
+                        f"[提醒] 修正後仍有錯誤 {rem_error_total} 項（其中 {rem_fixable_total} 項可自動修正）。"
+                        "是否再次執行自動修正？(Y/N): "
+                    ).strip()
+                except EOFError:
+                    ans2 = ""
+                if ans2.lower() != "y":
+                    print("已結束自動修正。")
+                    break
+                _run_batch_fixes(results, args, batch_mode=batch_mode, fmd_records=fmd_records)
+            else:
+                try:
+                    ans2 = input(
+                        f"[提醒] 修正後仍有錯誤 {rem_error_total} 項（需人工修改檔案）。"
+                        "若已手動修正，請輸入 R 重新複驗，或直接按 Enter 結束: "
+                    ).strip()
+                except EOFError:
+                    ans2 = ""
+                if ans2.lower() not in ("r", "y"):
+                    print("已結束核對。")
+                    break
+                _run_batch_reverify(results, args, batch_mode=batch_mode, fmd_records=fmd_records)
+
+            if batch_mode:
+                summary_text = format_batch_summary(results, input_errors)
+                print(summary_text)
+                if args.save_report:
+                    summary_path = _batch_report_path(report_dir)
+                    try:
+                        with open(summary_path, "w", encoding="utf-8-sig", newline="\r\n") as f:
+                            f.write(summary_text + "\n")
+                    except OSError as exc:
+                        print(f"[錯誤] 更新批次核對摘要失敗：{exc}", file=sys.stderr)
+                        return 1
+                    print(f"[已更新] 批次核對摘要：{summary_path}")
 
     if not batch_mode:
         return results[0].exit_code

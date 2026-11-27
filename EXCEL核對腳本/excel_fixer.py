@@ -18,7 +18,7 @@ import shutil
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple
 
-from excel_checker import CheckIssue
+from excel_checker import CheckIssue, extract_product_identity
 
 # Excel VBA/COM 的 RGB(r, g, b) = r + g*256 + b*65536，因此紅色 RGB(255, 0, 0) = 255
 EXCEL_COLOR_RED = 255
@@ -35,6 +35,23 @@ class FixResult:
     fixed_count: int
     skipped_items: List[Tuple[str, str]] = field(default_factory=list)
     backup_path: str = ""
+    overwrote_existing: bool = False
+
+
+def _norm_identity(identity: Tuple[str, str]) -> Tuple[str, str]:
+    fox, sup = identity
+    return (
+        re.sub(r"\s+", "", (fox or "").strip()).upper(),
+        re.sub(r"\s+", "", (sup or "").strip()).upper(),
+    )
+
+
+def _identities_match(id1: Tuple[str, str], id2: Tuple[str, str]) -> bool:
+    n1 = _norm_identity(id1)
+    n2 = _norm_identity(id2)
+    if not any(n1) or not any(n2):
+        return False
+    return n1 == n2
 
 
 def _make_numbered_path(excel_path: str, suffix: str, target_dir: Optional[str] = None) -> str:
@@ -51,8 +68,38 @@ def _make_numbered_path(excel_path: str, suffix: str, target_dir: Optional[str] 
         idx += 1
 
 
+def _resolve_output_path(
+    excel_path: str,
+    output_dir: Optional[str] = None,
+    source_identity: Optional[Tuple[str, str]] = None,
+) -> Tuple[str, bool]:
+    """
+    決定修正後檔案於 output 資料夾中的輸出路徑：
+    - 若目標檔名尚未存在，直接使用「原檔名_已修正.<ext>」。
+    - 若目標檔名已存在，比對 [Foxlink產品料號 + 供應商產品料號]：
+      * 相同（且檔案未被鎖定）→ 直接覆蓋舊版本檔案，回傳 (path, True)。
+      * 不同（或無法比對）→ 依序尋找 _2、_3... 直到找到同料號舊檔或空位。
+    """
+    stem, ext = os.path.splitext(os.path.basename(excel_path))
+    parent = os.path.abspath(output_dir) if output_dir else os.path.dirname(os.path.abspath(excel_path))
+    src_id = source_identity if source_identity is not None else extract_product_identity(excel_path)
+
+    idx = 1
+    while True:
+        name = f"{stem}_已修正{ext}" if idx == 1 else f"{stem}_已修正_{idx}{ext}"
+        cand = os.path.join(parent, name)
+        if not os.path.exists(cand):
+            return cand, False
+        if any(_norm_identity(src_id)):
+            existing_id = extract_product_identity(cand)
+            if _identities_match(src_id, existing_id) and not _is_file_locked(cand):
+                return cand, True
+        idx += 1
+
+
 def _make_output_path(excel_path: str, output_dir: Optional[str] = None) -> str:
-    return _make_numbered_path(excel_path, "已修正", target_dir=output_dir)
+    path, _ = _resolve_output_path(excel_path, output_dir=output_dir)
+    return path
 
 
 def _make_fallback_path(excel_path: str, output_dir: Optional[str] = None) -> str:
@@ -176,17 +223,22 @@ def apply_fixes_via_excel_com(
     excel_app: Any = None,
     output_dir: Optional[str] = None,
     backup_dir: Optional[str] = None,
+    in_place_target: Optional[str] = None,
+    create_backup: bool = True,
 ) -> FixResult:
     """
     透過 Windows Excel COM 編輯並輸出修正後的檔案：
     - 保留原始檔案不動
-    - 將原始檔案備份至 backup_dir（預設為工具目錄下 backup/）
-    - 將修正後檔案輸出至 output_dir（預設為工具目錄下 output/），寫入所有 fixable 項目並標記紅字
+    - 將原始檔案備份至 backup_dir（預設為工具目錄下 backup/；多輪繼續修正時可設 create_backup=False 避免重複備份）
+    - 將修正後檔案輸出至 output_dir（預設為工具目錄下 output/）：
+      * 若 output_dir 內已有同名檔案且 [Foxlink產品料號 + 供應商產品料號] 相同，直接覆蓋舊版本
+      * 若指定 in_place_target（例如第二輪繼續修正上一輪的輸出檔），直接編輯該輸出檔
+    - 寫入所有 fixable 項目並標記紅字 RGB(255, 0, 0)
     若傳入 excel_app（來自 ExcelComSession），會沿用該執行個體而不重複啟動 Excel。
     """
     fixable = [i for i in issues if i.fixable and i.fix_value is not None]
     if not fixable:
-        return FixResult(saved_path=excel_path, used_fallback=False, fixed_count=0)
+        return FixResult(saved_path=in_place_target or excel_path, used_fallback=False, fixed_count=0)
 
     abs_path = os.path.abspath(excel_path)
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -196,21 +248,28 @@ def apply_fixes_via_excel_com(
     os.makedirs(resolved_output_dir, exist_ok=True)
     os.makedirs(resolved_backup_dir, exist_ok=True)
 
-    backup_path = _make_backup_path(abs_path, backup_dir=resolved_backup_dir)
-    try:
-        shutil.copy2(abs_path, backup_path)
-    except OSError as exc:
-        raise RuntimeError(
-            f"無法建立修正前備份至 {resolved_backup_dir}（{exc}），已中止自動修正"
-        ) from exc
+    backup_path = ""
+    if create_backup:
+        backup_path = _make_backup_path(abs_path, backup_dir=resolved_backup_dir)
+        try:
+            shutil.copy2(abs_path, backup_path)
+        except OSError as exc:
+            raise RuntimeError(
+                f"無法建立修正前備份至 {resolved_backup_dir}（{exc}），已中止自動修正"
+            ) from exc
 
-    output_path = _make_output_path(abs_path, output_dir=resolved_output_dir)
-    try:
-        shutil.copy2(abs_path, output_path)
-    except OSError as exc:
-        raise RuntimeError(
-            f"無法建立輸出檔案至 {resolved_output_dir}（{exc}），已中止自動修正"
-        ) from exc
+    overwrote_existing = False
+    if in_place_target and os.path.isfile(in_place_target):
+        output_path = os.path.abspath(in_place_target)
+        overwrote_existing = True
+    else:
+        output_path, overwrote_existing = _resolve_output_path(abs_path, output_dir=resolved_output_dir)
+        try:
+            shutil.copy2(abs_path, output_path)
+        except OSError as exc:
+            raise RuntimeError(
+                f"無法建立輸出檔案至 {resolved_output_dir}（{exc}），已中止自動修正"
+            ) from exc
 
     target_open_path = output_path
     saved_path = output_path
@@ -273,6 +332,7 @@ def apply_fixes_via_excel_com(
             fixed_count=fixed_count,
             skipped_items=skipped,
             backup_path=backup_path,
+            overwrote_existing=overwrote_existing,
         )
 
     if excel_app is not None:

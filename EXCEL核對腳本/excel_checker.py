@@ -788,13 +788,10 @@ def _is_standalone_100_pct(sheet: UnifiedSheet, row: int, pct_col: Optional[int]
     return abs(v - 100.0) <= 0.15
 
 
-def _find_supplier_part_no_in_header(sheet: UnifiedSheet, header_row: int) -> Optional[str]:
-    """從表頭區讀取「供應商產品料號 / Supplier Product No.」。"""
-    label_re = re.compile(
-        r"供應商產品料號|供应商产品料号|Supplier\s*Product\s*No|原廠型番|原厂型番|Manufacturer\s*Part\s*No",
-        re.IGNORECASE,
-    )
-    for r in range(1, header_row):
+def _find_header_field_value(sheet: UnifiedSheet, header_row: int, label_re: re.Pattern) -> Optional[str]:
+    """從表頭區（1..header_row-1）依標籤正則尋找右側對應值。"""
+    limit_row = min(sheet.nrows, max(header_row - 1, 15))
+    for r in range(1, limit_row + 1):
         for c in range(1, min(sheet.ncols, 20) + 1):
             txt = sheet.get_str(r, c)
             if not txt or not label_re.search(txt):
@@ -808,6 +805,44 @@ def _find_supplier_part_no_in_header(sheet: UnifiedSheet, header_row: int) -> Op
                 if val:
                     return val
     return None
+
+
+_FOXLINK_PN_LABEL_RE = re.compile(
+    r"Foxlink\s*產品料號|Foxlink\s*产品料号|Foxlink\s*Product\s*No|客戶料號|客户料号|Customer\s*Part\s*No",
+    re.IGNORECASE,
+)
+_SUPPLIER_PN_LABEL_RE = re.compile(
+    r"供應商產品料號|供应商产品料号|Supplier\s*Product\s*No|原廠型番|原厂型番|Manufacturer\s*Part\s*No",
+    re.IGNORECASE,
+)
+
+
+def _find_foxlink_part_no_in_header(sheet: UnifiedSheet, header_row: int) -> Optional[str]:
+    return _find_header_field_value(sheet, header_row, _FOXLINK_PN_LABEL_RE)
+
+
+def _find_supplier_part_no_in_header(sheet: UnifiedSheet, header_row: int) -> Optional[str]:
+    """從表頭區讀取「供應商產品料號 / Supplier Product No.」。"""
+    return _find_header_field_value(sheet, header_row, _SUPPLIER_PN_LABEL_RE)
+
+
+def extract_product_identity(excel_path: str) -> Tuple[str, str]:
+    """
+    從 Excel 檔案表頭讀取 (Foxlink產品料號, 供應商產品料號)，
+    用於判斷 output 資料夾內同名檔案是否屬於同一產品（相同則覆蓋舊版）。
+    """
+    try:
+        sheets = load_workbook_sheets(excel_path)
+    except Exception:
+        return "", ""
+    for sh in sheets:
+        layout = detect_header_layout(sh)
+        header_row = layout.header_row if layout else 15
+        fox = _find_foxlink_part_no_in_header(sh, header_row) or ""
+        sup = _find_supplier_part_no_in_header(sh, header_row) or ""
+        if fox or sup:
+            return fox.strip(), sup.strip()
+    return "", ""
 
 
 def _norm_fmd_text(text: str) -> str:

@@ -992,5 +992,96 @@ class TestSamsungFMDComparison(unittest.TestCase):
             self.assertIn("CAS No.(FMD)", fmd_items)
 
 
+class TestOverwriteAndIterativeFix(unittest.TestCase):
+    def _make_o193d_xlsx(self, path: Path, foxlink_pn: str, supplier_pn: str) -> None:
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "展開表"
+        ws["B4"] = "Foxlink產品料號"
+        ws["D4"] = foxlink_pn
+        ws["B5"] = "供應商產品料號"
+        ws["D5"] = supplier_pn
+        for c, v in enumerate(["", "部件名稱", "均質材料", "含量(%)"], 1):
+            ws.cell(9, c, v)
+        for c, v in enumerate(["", "P1", "M1", 100], 1):
+            ws.cell(10, c, v)
+        wb.save(path)
+
+    def test_output_overwrites_same_product_identity_and_numbers_different(self):
+        from excel_fixer import _resolve_output_path
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out_dir = root / "output"
+            out_dir.mkdir()
+
+            # 已存在於 output/ 的舊版檔案（同料號）
+            existing = out_dir / "sample_已修正.xlsx"
+            self._make_o193d_xlsx(existing, "07C6-105M-43AD", "CL03A105MQ3CSNH")
+
+            # 來源 1：同檔名且 Foxlink + 供應商料號皆相同 -> 應直接覆蓋
+            src_same = root / "sample.xlsx"
+            self._make_o193d_xlsx(src_same, "07C6-105M-43AD", "CL03A105MQ3CSNH")
+            resolved_same, overwrote_same = _resolve_output_path(str(src_same), str(out_dir))
+            self.assertEqual(Path(resolved_same), existing)
+            self.assertTrue(overwrote_same)
+
+            # 來源 2：同檔名但料號不同 -> 不覆蓋，改存 _2
+            dir2 = root / "other"
+            dir2.mkdir()
+            src_diff = dir2 / "sample.xlsx"
+            self._make_o193d_xlsx(src_diff, "07C6-999M-99ZZ", "CL10B104KB8NNNC")
+            resolved_diff, overwrote_diff = _resolve_output_path(str(src_diff), str(out_dir))
+            self.assertEqual(Path(resolved_diff), out_dir / "sample_已修正_2.xlsx")
+            self.assertFalse(overwrote_diff)
+
+    def test_interactive_fix_loops_until_clean(self):
+        import o193d_checker
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            src = root / "part.xlsx"
+            self._make_o193d_xlsx(src, "07C6-105M-43AD", "CL03A105MQ3CSNH")
+
+            issue1 = CheckIssue("展開表", "Q14", "Cr6+", "<0.1", "<0.10μg/cm2", severity="ERROR", fixable=True, fix_value="<0.10μg/cm2")
+            issue2 = CheckIssue("展開表", "Q15", "Cr6+", "<0.1", "<0.10μg/cm2", severity="ERROR", fixable=True, fix_value="<0.10μg/cm2")
+
+            # 第 1 次初檢有 2 錯；第 1 輪修正後複驗剩 1 錯；第 2 輪修正後複驗 0 錯
+            call_state = {"round": 0}
+
+            def fake_process_file(path, args, **kwargs):
+                s = CheckSummary(excel_path=path)
+                s.issues.extend([issue1, issue2])
+                return FileCheckResult(path=path, exit_code=2, summary=s, report_text="init")
+
+            def fake_run_batch_fixes(results, args, batch_mode, fmd_records=None):
+                call_state["round"] += 1
+                res = results[0]
+                v = CheckSummary(excel_path=res.path)
+                if call_state["round"] == 1:
+                    v.issues.append(issue2)
+                    res.exit_code = 2
+                else:
+                    res.exit_code = 0
+                res.verify_summary = v
+                res.fixed_count += 1
+
+            answers = iter(["y", "y"])
+            out = io.StringIO()
+            with (
+                patch.object(o193d_checker, "process_file", side_effect=fake_process_file),
+                patch.object(o193d_checker, "_run_batch_fixes", side_effect=fake_run_batch_fixes),
+                patch("builtins.input", side_effect=lambda _prompt="": next(answers)),
+                redirect_stdout(out),
+                redirect_stderr(io.StringIO()),
+            ):
+                rc = main([str(src), "--interactive-fix", "--no-fmd"])
+
+            self.assertEqual(rc, 0)
+            self.assertEqual(call_state["round"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()
