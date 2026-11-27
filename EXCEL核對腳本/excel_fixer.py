@@ -122,10 +122,13 @@ def _resolve_output_path(
 def archive_verified_file_to_output(
     excel_path: str,
     output_dir: Optional[str] = None,
+    move_source: bool = False,
 ) -> Tuple[str, bool]:
     """
     將比對確認無錯誤的檔案（例如 O-202AH 或無異常 O-193D）歸檔至 output 對應的料號資料夾。
-    若同料號檔案已存在則直接覆蓋舊版。回傳 (archived_path, overwrote_existing)。
+    若同料號檔案已存在則直接覆蓋舊版。
+    當 move_source=True 時，直接將原始檔案搬移過去（跨磁碟自動退回 copy + remove）。
+    回傳 (archived_path, overwrote_existing)。
     """
     abs_path = os.path.abspath(excel_path)
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -134,8 +137,32 @@ def archive_verified_file_to_output(
         abs_path, output_dir=resolved_output_dir, suffix=None
     )
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-    shutil.copy2(abs_path, dest_path)
+    if os.path.normcase(abs_path) == os.path.normcase(os.path.abspath(dest_path)):
+        return dest_path, False
+    if move_source:
+        shutil.move(abs_path, dest_path)
+    else:
+        shutil.copy2(abs_path, dest_path)
     return dest_path, overwrote
+
+
+def move_source_file_to_backup(
+    excel_path: str,
+    backup_dir: Optional[str] = None,
+) -> str:
+    """
+    將已完成修正的原始檔案從原位置搬移至 backup 資料夾（直接覆蓋前一版本）。
+    回傳最終備份路徑。
+    """
+    abs_path = os.path.abspath(excel_path)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    resolved_backup_dir = os.path.abspath(backup_dir) if backup_dir else os.path.join(script_dir, "backup")
+    os.makedirs(resolved_backup_dir, exist_ok=True)
+    backup_path = _make_backup_path(abs_path, backup_dir=resolved_backup_dir)
+    if os.path.normcase(abs_path) == os.path.normcase(os.path.abspath(backup_path)):
+        return backup_path
+    shutil.move(abs_path, backup_path)
+    return backup_path
 
 
 def _make_output_path(excel_path: str, output_dir: Optional[str] = None) -> str:
@@ -148,6 +175,16 @@ def _make_fallback_path(excel_path: str, output_dir: Optional[str] = None) -> st
 
 
 def _make_backup_path(excel_path: str, backup_dir: Optional[str] = None) -> str:
+    """
+    決定修正前備份路徑：
+    預設直接覆蓋前一版本「原檔名_修正前備份.<ext>」；
+    若舊備份正被其他程式鎖定無法覆寫，才退回自動加編號。
+    """
+    stem, ext = os.path.splitext(os.path.basename(excel_path))
+    parent = os.path.abspath(backup_dir) if backup_dir else os.path.dirname(os.path.abspath(excel_path))
+    candidate = os.path.join(parent, f"{stem}_修正前備份{ext}")
+    if not os.path.exists(candidate) or not _is_file_locked(candidate):
+        return candidate
     return _make_numbered_path(excel_path, "修正前備份", target_dir=backup_dir)
 
 
@@ -209,14 +246,37 @@ def _try_set_number_format(cell, candidates: Tuple[str, ...]) -> None:
             continue
 
 
+def _read_number_format(cell) -> str:
+    """安全讀取儲存格目前的 NumberFormat（COM 失敗時視為空字串）。"""
+    try:
+        fmt = cell.NumberFormat
+    except Exception:
+        return ""
+    return fmt if isinstance(fmt, str) else ""
+
+
+def _format_conflicts_with_number(fmt: str) -> bool:
+    """判斷現有格式是否會讓寫入的數值顯示錯誤（文字、百分比、日期／時間）。"""
+    f = (fmt or "").strip().lower()
+    if not f:
+        return False
+    if "@" in f or "%" in f:
+        return True
+    if any(tok in f for tok in ("yy", "dd", "年", "月", "日", "上午", "下午", "am/pm")):
+        return True
+    return bool(re.search(r"(?:^|[^a-z])(?:h{1,2}|s{1,2}):", f))
+
+
 def _write_cell(cell, value: Any) -> None:
     coerced, kind = _coerce_fix_value(value)
     if kind == "date":
         _try_set_number_format(cell, ("yyyy/mm/dd", "yyyy-mm-dd"))
         cell.Value = coerced
     elif kind == "number":
-        # 重設為通用格式（同時相容英文 General 與中文 G/通用格式），避免日期/文字格式殘留
-        _try_set_number_format(cell, ("General", "G/通用格式", "0.########"))
+        # 只在文字／百分比／日期等會讓數值顯示錯誤的格式才重設，
+        # 其餘（例如 0.000）保留原格式，避免不必要的顯示變更。
+        if _format_conflicts_with_number(_read_number_format(cell)):
+            _try_set_number_format(cell, ("General", "G/通用格式", "0.########"))
         cell.Value = coerced
     else:
         # 含 <、單位或特殊符號的值一律以文字寫入，避免 Excel 自動轉型

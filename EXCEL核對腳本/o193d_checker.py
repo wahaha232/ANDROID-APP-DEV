@@ -26,7 +26,12 @@ from typing import Any, List, Optional, Tuple
 
 from embed_extractor import extract_embedded_pdfs
 from excel_checker import CheckSummary, check_sheet, load_workbook_sheets
-from excel_fixer import ExcelComSession, apply_fixes_via_excel_com, archive_verified_file_to_output
+from excel_fixer import (
+    ExcelComSession,
+    apply_fixes_via_excel_com,
+    archive_verified_file_to_output,
+    move_source_file_to_backup,
+)
 from fmd_matcher import DEFAULT_SAMSUNG_FMD_DIR, FMDRecord, load_fmd_index
 from pdf_parser import MSDSData, TestReportData, parse_msds_pdf, parse_test_report_pdf
 from svhc_checker import check_o202_workbook, is_o202_svhc_workbook
@@ -323,6 +328,7 @@ class FileCheckResult:
     total_pdfs: int = 0
     is_o202: bool = False
     extra_o193d_paths: List[str] = field(default_factory=list)
+    needs_archive_move: bool = False
 
 
 def _is_excel_file(path: str) -> bool:
@@ -708,7 +714,7 @@ def process_file(
         result.pre_messages.append(f"[已存檔] 核對報告：{report_path}")
 
     if not run_fix:
-        # 確認無錯誤且處於輸出/互動模式時，自動歸檔至 output/<正崴料號_供應商料號>/
+        # 確認無錯誤且處於輸出/互動模式時，標記待全部比對完成後搬移至 output/<正崴料號_供應商料號>/
         should_archive = (
             summary.error_count == 0
             and (
@@ -719,20 +725,7 @@ def process_file(
             )
         )
         if should_archive:
-            output_dir = _resolve_dir(getattr(args, "output_dir", None), DEFAULT_OUTPUT_DIR)
-            try:
-                archived_path, overwrote = archive_verified_file_to_output(
-                    excel_path, output_dir=output_dir
-                )
-                result.saved_output_path = archived_path
-                if overwrote:
-                    result.pre_messages.append(
-                        f"[已歸檔] 比對無錯誤，比對料號相同已覆蓋舊版歸檔至：{archived_path}"
-                    )
-                else:
-                    result.pre_messages.append(f"[已歸檔] 比對無錯誤，已歸檔至：{archived_path}")
-            except OSError as exc:
-                result.pre_messages.append(f"[警告] 無錯誤檔案歸檔至 output 失敗：{exc}")
+            result.needs_archive_move = True
 
         result.exit_code = 0 if not summary.issues else (2 if summary.fixable_count > 0 else 3)
         return result
@@ -876,22 +869,32 @@ def _run_batch_fixes(
         return
 
     used_verify_paths: set = set()
+    started = False
     try:
         with ExcelComSession() as excel_app:
+            started = True
             for idx, res in enumerate(targets, 1):
+                label = res.saved_output_path or res.path
                 if batch_mode:
-                    print(f"[修正 {idx}/{len(targets)}] {res.saved_output_path or res.path}", flush=True)
+                    print(f"[修正 {idx}/{len(targets)}] {label}", flush=True)
                 pre_len = len(res.pre_messages)
                 post_len = len(res.post_messages)
                 prefix = f"修正進度 [{idx}/{len(targets)}]" if batch_mode else "修正進度"
-                fix_and_verify_result(
-                    res,
-                    args,
-                    excel_app=excel_app,
-                    used_verify_paths=used_verify_paths,
-                    fmd_records=fmd_records,
-                    progress_prefix=prefix,
-                )
+                try:
+                    fix_and_verify_result(
+                        res,
+                        args,
+                        excel_app=excel_app,
+                        used_verify_paths=used_verify_paths,
+                        fmd_records=fmd_records,
+                        progress_prefix=prefix,
+                    )
+                except Exception as exc:
+                    # 單檔失敗不可中止其他檔案；若 Excel COM 已失效，
+                    # 後續檔案會各自回報失敗，批次摘要仍可完整呈現。
+                    _set_error(res, f"自動修正失敗：{exc}")
+                    print(f"[錯誤] {label}：{exc}", file=sys.stderr)
+                    continue
                 if not batch_mode:
                     for msg in res.pre_messages[pre_len:]:
                         print(msg)
@@ -916,10 +919,11 @@ def _run_batch_fixes(
                         flush=True,
                     )
     except Exception as exc:
-        print(f"[錯誤] 啟動 Excel COM 失敗：{exc}", file=sys.stderr)
+        message = "Excel COM 工作階段失敗" if started else "啟動 Excel COM 失敗"
+        print(f"[錯誤] {message}：{exc}", file=sys.stderr)
         for res in targets:
             if res.fixed_count == 0 and res.ok:
-                _set_error(res, f"啟動 Excel COM 失敗：{exc}")
+                _set_error(res, f"{message}：{exc}")
 
 
 def _run_batch_reverify(
@@ -959,6 +963,40 @@ def _run_batch_reverify(
                 f"        {_result_status(res)} | 剩餘錯誤 {err}、警告 {warn}、可修正 {fixable}",
                 flush=True,
             )
+
+
+def _finalize_source_file_moves(
+    results: List[FileCheckResult],
+    output_dir: str,
+    backup_dir: str,
+) -> None:
+    """
+    在所有初檢、交叉比對與修正複驗完成後，統一將已處理的原始檔案搬移至對應資料夾：
+      - 比對確認無錯誤（needs_archive_move）：直接搬移至 output/<正崴料號_供應商料號>/（同料號覆蓋舊版）
+      - 已自動修正輸出至 output：將原始檔案搬移至 backup/（直接覆蓋前一版本）
+    若原檔正被 Excel 鎖定無法搬移，僅印出警告並保留原檔。
+    """
+    for res in results:
+        if not res.ok or not os.path.isfile(res.path):
+            continue
+        if res.fixed_count > 0 and res.saved_output_path and os.path.isfile(res.saved_output_path):
+            try:
+                moved_backup = move_source_file_to_backup(res.path, backup_dir=backup_dir)
+                print(f"[已搬移原檔] 修正前原始檔案已搬移至：{moved_backup}")
+            except OSError as exc:
+                print(f"[警告] 無法搬移原始檔案（可能正被 Excel 開啟）：{res.path}（{exc}）", file=sys.stderr)
+        elif res.needs_archive_move:
+            try:
+                archived_path, overwrote = archive_verified_file_to_output(
+                    res.path, output_dir=output_dir, move_source=True
+                )
+                res.saved_output_path = archived_path
+                if overwrote:
+                    print(f"[已搬移歸檔] 比對無錯誤，同料號覆蓋舊版並搬移至：{archived_path}")
+                else:
+                    print(f"[已搬移歸檔] 比對無錯誤，已將原始檔案搬移至：{archived_path}")
+            except OSError as exc:
+                print(f"[警告] 無法搬移無錯誤檔案（可能正被 Excel 開啟）：{res.path}（{exc}）", file=sys.stderr)
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -1007,12 +1045,13 @@ def main(argv: List[str] | None = None) -> int:
         action="store_true",
         help="停用欄位 B~J 與 SAMSUNG FMD 成分表的比對",
     )
-    parser.add_argument(
+    fix_group = parser.add_mutually_exclusive_group()
+    fix_group.add_argument(
         "--fix",
         action="store_true",
         help="透過 Windows Excel COM 自動修正錯誤儲存格並標記紅字 RGB(255,0,0)（保留原檔，輸出至 output/）",
     )
-    parser.add_argument(
+    fix_group.add_argument(
         "--interactive-fix",
         action="store_true",
         help="核對完成後若有可修正項目，於同一次執行內詢問是否修正（免去重複解析 PDF）",
@@ -1210,6 +1249,9 @@ def main(argv: List[str] | None = None) -> int:
                         print(f"[錯誤] 更新批次核對摘要失敗：{exc}", file=sys.stderr)
                         return 1
                     print(f"[已更新] 批次核對摘要：{summary_path}")
+
+    # 全部比對與修正完成後，統一搬移已處理的原始檔案（無錯誤 -> output 歸類資料夾；已修正 -> backup 覆蓋舊版）
+    _finalize_source_file_moves(results, output_dir=output_dir, backup_dir=backup_dir)
 
     if not batch_mode:
         return results[0].exit_code

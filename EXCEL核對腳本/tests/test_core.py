@@ -722,6 +722,8 @@ class TestOutputDirectories(unittest.TestCase):
                     "--save-report",
                     "--report-dir",
                     str(report_dir),
+                    "--output-dir",
+                    str(root / "output"),
                 ])
 
             self.assertEqual(rc, 0)
@@ -806,7 +808,7 @@ class TestOutputDirectories(unittest.TestCase):
             self.assertEqual(src.read_bytes(), b"ORIGINAL_CONTENT")
             self.assertEqual(Path(res1.backup_path), bak_dir / "part_修正前備份.xlsx")
             self.assertEqual(Path(res1.saved_path), out_dir / "part_已修正.xlsx")
-            self.assertEqual(Path(res2.backup_path), bak_dir / "part_修正前備份_2.xlsx")
+            self.assertEqual(Path(res2.backup_path), bak_dir / "part_修正前備份.xlsx")
             self.assertEqual(Path(res2.saved_path), out_dir / "part_已修正_2.xlsx")
             self.assertTrue(Path(res1.backup_path).exists())
             self.assertTrue(Path(res1.saved_path).exists())
@@ -1274,9 +1276,12 @@ class TestO193DFilenameAndO202CrossCheck(unittest.TestCase):
             self.assertIn("報告正確值", text)
             self.assertIn("成分含量總和", text)
             self.assertIn("批次核對摘要", text)
-            # 無錯誤的 O-202AH 已自動歸檔於 output/<正崴料號_供應商料號>/
+            # 無錯誤的 O-202AH 已自動搬移至 output/<正崴料號_供應商料號>/（原位置清空）
             expected_archived = out_dir / "07C6-105M-43AD_CL03A105MQ3CSNH" / o202_path.name
             self.assertTrue(expected_archived.exists())
+            self.assertFalse(o202_path.exists())
+            # 尚有錯誤未修正的 O-193D 保留於原位置不動
+            self.assertTrue(o193d_path.exists())
             self.assertEqual(rc, 3)
 
 
