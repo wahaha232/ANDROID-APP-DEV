@@ -42,6 +42,40 @@ def _display_width(text: str) -> int:
     return w
 
 
+def _format_progress_bar(
+    current: int,
+    total: int,
+    prefix: str = "修正進度",
+    detail: str = "",
+    width: int = 28,
+) -> str:
+    """產生終端機進度條與百分比字串。"""
+    safe_total = max(total, 1)
+    clamped = max(0, min(current, safe_total))
+    pct = (clamped / safe_total) * 100.0
+    filled = int(round((clamped / safe_total) * width))
+    bar = ("█" * filled) + ("░" * (width - filled))
+    suffix = f" {detail}" if detail else ""
+    return f"  {prefix} [{bar}] {pct:5.1f}% ({clamped}/{safe_total}){suffix}"
+
+
+def _make_fix_progress_callback(prefix: str = "修正進度"):
+    """建立可原地刷新的終端機進度條回呼，完成時自動換行。"""
+    state = {"last_len": 0, "done_newline": False}
+
+    def _callback(current: int, total: int, detail: str = "") -> None:
+        line = _format_progress_bar(current, total, prefix=prefix, detail=detail)
+        pad = max(0, state["last_len"] - _display_width(line))
+        state["last_len"] = _display_width(line)
+        is_final = detail == "完成" and current >= total
+        end = "\n" if is_final else ""
+        if is_final:
+            state["done_newline"] = True
+        print(f"\r{line}{' ' * pad}", end=end, flush=True)
+
+    return _callback, state
+
+
 def _pad_right(text: str, target_width: int) -> str:
     cur = _display_width(text)
     if cur >= target_width:
@@ -444,6 +478,7 @@ def fix_and_verify_result(
     excel_app: Any = None,
     used_verify_paths: Optional[set] = None,
     fmd_records: Optional[List[FMDRecord]] = None,
+    progress_prefix: str = "修正進度",
 ) -> FileCheckResult:
     """
     對已完成核對的 FileCheckResult 執行 Excel COM 修正與複驗。
@@ -473,6 +508,7 @@ def fix_and_verify_result(
     result.pre_messages.append(
         f"\n正在透過 Excel COM 自動修正 {active_summary.fixable_count} 個儲存格並標記紅字..."
     )
+    progress_cb, progress_state = _make_fix_progress_callback(prefix=progress_prefix)
     try:
         fix_res = apply_fixes_via_excel_com(
             result.path,
@@ -482,9 +518,14 @@ def fix_and_verify_result(
             backup_dir=backup_dir,
             in_place_target=result.saved_output_path if is_followup_round else None,
             create_backup=not is_followup_round,
+            progress_cb=progress_cb,
         )
     except Exception as exc:
+        if progress_state["last_len"] and not progress_state["done_newline"]:
+            print("", flush=True)
         return _set_error(result, f"Excel COM 自動修正失敗：{exc}")
+    if progress_state["last_len"] and not progress_state["done_newline"]:
+        print("", flush=True)
 
     result.fixed_count += fix_res.fixed_count
     result.saved_output_path = fix_res.saved_path
@@ -783,12 +824,14 @@ def _run_batch_fixes(
                     print(f"[修正 {idx}/{len(targets)}] {res.saved_output_path or res.path}", flush=True)
                 pre_len = len(res.pre_messages)
                 post_len = len(res.post_messages)
+                prefix = f"修正進度 [{idx}/{len(targets)}]" if batch_mode else "修正進度"
                 fix_and_verify_result(
                     res,
                     args,
                     excel_app=excel_app,
                     used_verify_paths=used_verify_paths,
                     fmd_records=fmd_records,
+                    progress_prefix=prefix,
                 )
                 if not batch_mode:
                     for msg in res.pre_messages[pre_len:]:

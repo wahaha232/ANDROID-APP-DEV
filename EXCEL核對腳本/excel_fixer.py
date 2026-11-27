@@ -16,7 +16,7 @@ import os
 import re
 import shutil
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 from excel_checker import CheckIssue, extract_product_identity
 
@@ -239,6 +239,7 @@ def apply_fixes_via_excel_com(
     backup_dir: Optional[str] = None,
     in_place_target: Optional[str] = None,
     create_backup: bool = True,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
 ) -> FixResult:
     """
     透過 Windows Excel COM 編輯並輸出修正後的檔案：
@@ -297,7 +298,18 @@ def apply_fixes_via_excel_com(
         fixed_count = 0
         skipped: List[Tuple[str, str]] = []
 
+        total_items = len(fixable)
+        processed_items = 0
+
+        def _notify(label: str) -> None:
+            if progress_cb is not None:
+                try:
+                    progress_cb(processed_items, total_items, label)
+                except Exception:
+                    pass
+
         try:
+            _notify("開啟檔案...")
             wb = excel.Workbooks.Open(
                 Filename=target_open_path,
                 UpdateLinks=0,
@@ -315,6 +327,8 @@ def apply_fixes_via_excel_com(
                 except Exception as exc:
                     for it in sheet_issues:
                         skipped.append((f"{sheet_name}!{it.cell_address}", f"找不到工作表: {exc}"))
+                        processed_items += 1
+                        _notify(f"{it.cell_address} (略過)")
                     continue
 
                 for it in sheet_issues:
@@ -326,10 +340,14 @@ def apply_fixes_via_excel_com(
                         skipped.append((f"{sheet_name}!{it.cell_address}", str(exc)))
                     finally:
                         cell = None
+                        processed_items += 1
+                        _notify(f"{it.cell_address}")
                 ws = None
 
+            _notify("儲存檔案...")
             wb.Save()
             saved_path = target_open_path
+            _notify("完成")
         finally:
             cell = None
             ws = None

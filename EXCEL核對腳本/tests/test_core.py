@@ -1107,6 +1107,21 @@ class TestOverwriteAndIterativeFix(unittest.TestCase):
         self.assertEqual(cell.NumberFormat, "G/通用格式")
         self.assertEqual(cell.Font.Color, EXCEL_COLOR_RED)
 
+    def test_progress_bar_format_and_callback(self):
+        from o193d_checker import _format_progress_bar
+
+        bar0 = _format_progress_bar(0, 4, detail="開啟檔案...", width=10)
+        bar50 = _format_progress_bar(2, 4, detail="Q14", width=10)
+        bar100 = _format_progress_bar(4, 4, detail="完成", width=10)
+
+        self.assertIn("[░░░░░░░░░░]", bar0)
+        self.assertIn("0.0%", bar0)
+        self.assertIn("[█████░░░░░]", bar50)
+        self.assertIn("50.0%", bar50)
+        self.assertIn("(2/4)", bar50)
+        self.assertIn("[██████████]", bar100)
+        self.assertIn("100.0%", bar100)
+
 
 if __name__ == "__main__":
     unittest.main()
