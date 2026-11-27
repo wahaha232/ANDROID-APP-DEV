@@ -27,6 +27,7 @@ from typing import Any, List, Optional, Tuple
 from embed_extractor import extract_embedded_pdfs
 from excel_checker import CheckSummary, check_sheet, load_workbook_sheets
 from excel_fixer import ExcelComSession, apply_fixes_via_excel_com
+from fmd_matcher import DEFAULT_SAMSUNG_FMD_DIR, FMDRecord, load_fmd_index
 from pdf_parser import MSDSData, TestReportData, parse_msds_pdf, parse_test_report_pdf
 
 
@@ -370,6 +371,7 @@ def fix_and_verify_result(
     args,
     excel_app: Any = None,
     used_verify_paths: Optional[set] = None,
+    fmd_records: Optional[List[FMDRecord]] = None,
 ) -> FileCheckResult:
     """
     對已完成核對的 FileCheckResult 執行 Excel COM 修正與複驗。
@@ -444,7 +446,9 @@ def fix_and_verify_result(
                 f"工作表 [{sh.name}] 為範例/範本，已略過（可用 --include-example 納入）。"
             )
             continue
-        sh_issues, sh_notes, checked = check_sheet(sh, result.test_reports, result.msds_list)
+        sh_issues, sh_notes, checked = check_sheet(
+            sh, result.test_reports, result.msds_list, fmd_records=fmd_records
+        )
         verify.issues.extend(sh_issues)
         verify.notes.extend(sh_notes)
         if checked:
@@ -487,6 +491,8 @@ def process_file(
     excel_app: Any = None,
     do_fix: Optional[bool] = None,
     used_report_paths: Optional[set] = None,
+    fmd_records: Optional[List[FMDRecord]] = None,
+    fmd_init_notes: Optional[List[str]] = None,
 ) -> FileCheckResult:
     """核對單一 Excel；所有輸出先收集在 FileCheckResult，由 main 決定顯示方式。"""
     excel_path = os.path.abspath(excel_path)
@@ -536,6 +542,8 @@ def process_file(
 
     if not embedded_pdfs:
         summary.notes.append("未在 Excel 中找到內嵌 PDF，所有報告相關核對將略過。")
+    for note in (fmd_init_notes or []):
+        summary.notes.append(note)
     for rep in test_reports:
         for note in rep.notes:
             summary.notes.append(f"[{rep.filename}] {note}")
@@ -561,7 +569,9 @@ def process_file(
                 f"工作表 [{sh.name}] 為範例/範本，已略過（可用 --include-example 納入）。"
             )
             continue
-        sh_issues, sh_notes, checked = check_sheet(sh, test_reports, msds_list)
+        sh_issues, sh_notes, checked = check_sheet(
+            sh, test_reports, msds_list, fmd_records=fmd_records
+        )
         summary.issues.extend(sh_issues)
         summary.notes.extend(sh_notes)
         if checked:
@@ -593,7 +603,7 @@ def process_file(
         result.exit_code = 0 if not summary.issues else (2 if summary.fixable_count > 0 else 3)
         return result
 
-    return fix_and_verify_result(result, args, excel_app=excel_app)
+    return fix_and_verify_result(result, args, excel_app=excel_app, fmd_records=fmd_records)
 
 
 def _result_status(result: FileCheckResult) -> str:
@@ -717,7 +727,12 @@ def _aggregate_exit_code(results: List[FileCheckResult], input_errors: List[str]
     return 0
 
 
-def _run_batch_fixes(results: List[FileCheckResult], args, batch_mode: bool) -> None:
+def _run_batch_fixes(
+    results: List[FileCheckResult],
+    args,
+    batch_mode: bool,
+    fmd_records: Optional[List[FMDRecord]] = None,
+) -> None:
     """使用單一 ExcelComSession 批次修正所有可修正項目，減少 COM 啟閉開銷。"""
     targets = [r for r in results if r.ok and r.summary and r.summary.fixable_count > 0]
     if not targets:
@@ -731,7 +746,11 @@ def _run_batch_fixes(results: List[FileCheckResult], args, batch_mode: bool) -> 
                     print(f"[修正 {idx}/{len(targets)}] {res.path}", flush=True)
                 pre_len = len(res.pre_messages)
                 fix_and_verify_result(
-                    res, args, excel_app=excel_app, used_verify_paths=used_verify_paths
+                    res,
+                    args,
+                    excel_app=excel_app,
+                    used_verify_paths=used_verify_paths,
+                    fmd_records=fmd_records,
                 )
                 if not batch_mode:
                     for msg in res.pre_messages[pre_len:]:
@@ -794,6 +813,16 @@ def main(argv: List[str] | None = None) -> int:
         help="比對／修正前的原始檔案備份資料夾（預設：工具目錄下的 backup/）",
     )
     parser.add_argument(
+        "--fmd-dir",
+        default=DEFAULT_SAMSUNG_FMD_DIR,
+        help="三星原廠成分表（SAMSUNG FMD）資料夾路徑，用於比對欄位 B~J",
+    )
+    parser.add_argument(
+        "--no-fmd",
+        action="store_true",
+        help="停用欄位 B~J 與 SAMSUNG FMD 成分表的比對",
+    )
+    parser.add_argument(
         "--fix",
         action="store_true",
         help="透過 Windows Excel COM 自動修正錯誤儲存格並標記紅字 RGB(255,0,0)（保留原檔，輸出至 output/）",
@@ -847,11 +876,23 @@ def main(argv: List[str] | None = None) -> int:
     results: List[FileCheckResult] = []
     used_report_paths: set = set()
 
+    fmd_records: List[FMDRecord] = []
+    fmd_init_notes: List[str] = []
+    if not args.no_fmd and args.fmd_dir:
+        fmd_records, fmd_init_notes = load_fmd_index(args.fmd_dir)
+
     # 階段 1：先全部完成 PDF 提取與核對（批次 --fix 也統一在階段 2 共用同一個 Excel COM）
     for index, path in enumerate(targets, 1):
         if batch_mode:
             print(f"[{index}/{len(targets)}] 核對：{path}", flush=True)
-        result = process_file(path, args, do_fix=False, used_report_paths=used_report_paths)
+        result = process_file(
+            path,
+            args,
+            do_fix=False,
+            used_report_paths=used_report_paths,
+            fmd_records=fmd_records,
+            fmd_init_notes=fmd_init_notes,
+        )
         results.append(result)
         if batch_mode:
             err, warn, fixable = _result_counts(result)
@@ -908,7 +949,7 @@ def main(argv: List[str] | None = None) -> int:
             print("已取消自動修正。")
 
     if should_fix:
-        _run_batch_fixes(results, args, batch_mode=batch_mode)
+        _run_batch_fixes(results, args, batch_mode=batch_mode, fmd_records=fmd_records)
         if batch_mode:
             summary_text = format_batch_summary(results, input_errors)
             print(summary_text)

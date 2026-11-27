@@ -36,6 +36,14 @@ from excel_checker import (  # noqa: E402
     results_match,
 )
 from excel_fixer import _coerce_fix_value, _excel_file_format, apply_fixes_via_excel_com  # noqa: E402
+from fmd_matcher import (  # noqa: E402
+    FMDEntry,
+    FMDRecord,
+    decode_samsung_mlcc_part_no,
+    load_fmd_index,
+    match_samsung_fmd,
+    parse_samsung_fmd_file,
+)
 from o193d_checker import (  # noqa: E402
     DEFAULT_BACKUP_DIR,
     DEFAULT_OUTPUT_DIR,
@@ -873,6 +881,115 @@ class TestColumnsKMComparison(unittest.TestCase):
         self.assertIn(("E欄", "未引用測試報告"), by_item)
         self.assertEqual(by_item[("E欄", "未引用測試報告")].expected_value, "RT26R-S6850-999-C")
         self.assertTrue(any("已比對內嵌 PDF" in n for n in notes))
+
+
+class TestSamsungFMDComparison(unittest.TestCase):
+    def test_decode_samsung_mlcc_part_no(self):
+        self.assertEqual(decode_samsung_mlcc_part_no("CL03A105MQ3CSNH"), ("X5R", "0603"))
+        self.assertEqual(decode_samsung_mlcc_part_no("CL10B104KB8NNNC"), ("X7R", "1608"))
+        self.assertEqual(decode_samsung_mlcc_part_no("CL21X475KAFNNNE"), ("X6S", "2012"))
+        self.assertIsNone(decode_samsung_mlcc_part_no("CIGT201208EH"))
+
+    def test_match_fmd_three_tier_and_disambiguation(self):
+        rec_2026 = FMDRecord(
+            filepath="C:\\fmd\\2026\\X5R_0603_2026_V1.xlsx",
+            filename="Material Declaration Data Sheet.(X5R 0603 Normal(Ni) TYPE)_2026_V1.xlsx",
+            relpath="2026\\X5R_0603_2026_V1.xlsx",
+            mtime=1.0,
+            size=100,
+            part_numbers=["CL03A**********"],
+            entries=[FMDEntry("Ceramic body", "Ceramic BaTiO3", "Barium Titanate", "12047-27-7", 0.197)],
+            total_weight_mg=0.32,
+            year=2026,
+            version=1,
+            is_root=False,
+        )
+        rec_2027 = FMDRecord(
+            filepath="C:\\fmd\\X5R_0603_2027_V1.xlsx",
+            filename="Material Declaration Data Sheet.(X5R 0603 Normal(Ni) TYPE)_2027_V1.xlsx",
+            relpath="X5R_0603_2027_V1.xlsx",
+            mtime=2.0,
+            size=100,
+            part_numbers=["CL03A**********"],
+            entries=[FMDEntry("Ceramic body", "Ceramic BaTiO3", "Barium Titanate", "12047-27-7", 0.197)],
+            total_weight_mg=0.32,
+            year=2027,
+            version=1,
+            is_root=True,
+        )
+        rec_slash = FMDRecord(
+            filepath="C:\\fmd\\CL21B_IMC_2027_V1.xlsx",
+            filename="CL21B_IMC_2027_V1.xlsx",
+            relpath="CL21B_IMC_2027_V1.xlsx",
+            mtime=2.0,
+            size=100,
+            part_numbers=["CL21B******6/P/R***"],
+            entries=[FMDEntry("Termination (IMC Epoxy)", "IMC Epoxy", "Copper", "7440-50-8", 0.41)],
+            total_weight_mg=26.3,
+            year=2027,
+            version=1,
+            is_root=True,
+        )
+
+        matched, warn = match_samsung_fmd("CL03A105MQ3CSNH", [rec_2026, rec_2027])
+        self.assertIs(matched, rec_2027)
+        self.assertIsNone(warn)
+
+        matched2, warn2 = match_samsung_fmd("CL21B475KLB6PJE", [rec_2027, rec_slash])
+        self.assertIs(matched2, rec_slash)
+        self.assertIsNone(warn2)
+
+    def test_parse_fmd_xlsx_and_check_columns_b_to_j(self):
+        import openpyxl
+
+        with tempfile.TemporaryDirectory() as td:
+            fmd_dir = Path(td) / "fmd"
+            fmd_dir.mkdir()
+            fmd_path = fmd_dir / "Material Declaration Data Sheet.(X5R 0603 Normal(Ni) TYPE)_2027_V1.xlsx"
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "X5R TYPE"
+            headers = ["", "PRODUCT", "Part Number", "Part Name", "Material Name", "Content\n(mg)", "Substance Name", "Content\n(wt%, mg)", "CAS No."]
+            for c, val in enumerate(headers, 1):
+                ws.cell(9, c, val)
+            rows = [
+                ["", "Ceramic Chip Capacitors", "CL03A**********", "Ceramic body", "Ceramic BaTiO3", 0.197, "Barium Titanate", 61.5, "12047-27-7"],
+                ["", None, None, "Inner electrode", "Ni", 0.103, "Nickel", 32.3, "7440-02-0"],
+            ]
+            for idx, rvals in enumerate(rows, 12):
+                for c, val in enumerate(rvals, 1):
+                    ws.cell(idx, c, val)
+            wb.save(fmd_path)
+
+            rec = parse_samsung_fmd_file(str(fmd_path), base_dir=str(fmd_dir))
+            self.assertIsNotNone(rec)
+            assert rec is not None
+            self.assertEqual(rec.part_numbers, ["CL03A**********"])
+            self.assertEqual(len(rec.entries), 2)
+
+            cache_file = Path(td) / "cache.json"
+            recs, notes = load_fmd_index(str(fmd_dir), cache_path=str(cache_file))
+            self.assertEqual(len(recs), 1)
+            self.assertEqual(notes, [])
+            self.assertTrue(cache_file.exists())
+
+            # 建立 O-193D 工作表：第 1 列完全相符，第 2 列故意填錯重量與 CAS
+            sheet = make_sheet([
+                [None, "供應商產品料號", "CL03A105MQ3CSNH"],
+                [None, "總重量", "0.30mg"],
+                [None, "部件名稱", "部件料號", "部件重量", "均質材料名稱", "製造商名稱", "均質材料重量", "物質名稱", "CAS No.", "含量 (%)"],
+                [None, "Ceramic body", "Ceramic BaTiO3", "0.197mg", "Barium Titanate", "SAMSUNG", "0.197mg", "Barium Titanate", "12047-27-7", 100.0],
+                [None, "Inner electrode", "Ni", "0.200mg", "Nickel", "WRONG_MFR", "0.200mg", "Nickel", "7440-50-8", 100.0],
+            ])
+            issues, check_notes, checked = check_sheet(sheet, [], [], fmd_records=recs)
+            self.assertTrue(checked)
+            self.assertTrue(any("欄位 B~J 已比對 SAMSUNG FMD" in n for n in check_notes))
+
+            fmd_items = {i.item_name for i in issues if "(FMD)" in i.item_name}
+            self.assertIn("部件重量(FMD)", fmd_items)
+            self.assertIn("製造商名稱(FMD)", fmd_items)
+            self.assertIn("均質材料重量(FMD)", fmd_items)
+            self.assertIn("CAS No.(FMD)", fmd_items)
 
 
 if __name__ == "__main__":

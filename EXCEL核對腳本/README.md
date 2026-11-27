@@ -60,6 +60,8 @@ python o193d_checker.py "D:\核對資料\2026Q4" --recursive --save-report
 | `--output-dir 路徑` | 指定比對／修正後檔案的輸出資料夾（預設為工具目錄下的 `output/`） |
 | `--report-dir 路徑` | 指定核對報告與批次摘要的輸出資料夾（預設為工具目錄下的 `reports/`） |
 | `--backup-dir 路徑` | 指定修正前原始檔案的備份資料夾（預設為工具目錄下的 `backup/`） |
+| `--fmd-dir 路徑` | 指定三星原廠成分表（SAMSUNG FMD）資料夾，供欄位 B~J 比對 |
+| `--no-fmd` | 停用欄位 B~J 與 SAMSUNG FMD 成分表的比對 |
 | `--sheet 名稱` | 只核對指定工作表（套用到批次中的所有檔案） |
 | `--recursive` | 輸入資料夾時遞迴搜尋子資料夾 |
 | `--include-example` | 一併核對名稱含範例／範本／Example 的工作表 |
@@ -113,7 +115,8 @@ python -m unittest discover -s tests -v
 | `o193d_checker.py` | CLI 主程式、報告排版、結束碼 |
 | `embed_extractor.py` | 提取並分類內嵌 PDF |
 | `pdf_parser.py` | 測試報告 / MSDS 解析（含欄位定位） |
-| `excel_checker.py` | Excel 讀取與核對邏輯 |
+| `excel_checker.py` | Excel 讀取與核對邏輯（含欄位 B~J FMD 與 K~M PDF 比對） |
+| `fmd_matcher.py` | SAMSUNG FMD 原廠成分表解析、本機快取索引與三層配對 |
 | `excel_fixer.py` | Excel COM 修正、備份與型別寫入 |
 | `執行核對.bat` | 單檔拖曳操作的包裝 |
 | `批次核對.bat` | 多檔／資料夾批次操作的包裝 |

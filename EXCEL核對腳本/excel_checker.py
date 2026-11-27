@@ -22,6 +22,11 @@ import zipfile
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from fmd_matcher import (
+    FMDEntry,
+    FMDRecord,
+    match_samsung_fmd,
+)
 from pdf_parser import (
     AGENCY_ALIAS_GROUPS,
     MSDSData,
@@ -349,12 +354,17 @@ _HEADER_ANCHOR_RE = re.compile(r"部件名稱|部件名称|零件名稱|零件�
 
 _META_COLUMN_PATTERNS: Dict[str, List[str]] = {
     "part_name": [r"部件名稱|部件名称|零件名稱|零件名称|Part\s*Name"],
+    "part_no": [r"部件料號|部件料号|零件料號|零件料号|Part\s*No\.?"],
     "weight_unit": [r"重量單位|重量单位|單位|单位|Unit"],
     "content_pct": [r"含量|百分比|比例|組成比|组成比|Content|Composition\s*\(?%\)?|Weight\s*%"],
+    "material_weight": [
+        r"(?:均質材料重|均质材料重|材料重量|材質重量|Homogeneous\s*Material\s*Weight|Material\s*Weight)(?!.*(?:單位|单位|Unit|%|％|百分比|比例))"
+    ],
     "part_weight": [
         r"(?:部件重|零件重|單重|单重|淨重|净重|重量|Weight)(?!.*(?:單位|单位|Unit|%|％|百分比|比例))"
     ],
     "material_name": [r"均質材料|均质材料|材質名稱|材质名称|材料名稱|材料名称|Homogeneous\s*Material|Material\s*Name"],
+    "manufacturer": [r"製造商|制造商|廠牌|厂牌|Manufacturer(?:\s*Name)?"],
     "composition_name": [r"成分名稱|成份名稱|成分名称|化學物質|化学物质|物質名稱|物质名称|Substance\s*Name|Chemical\s*Name|Ingredient"],
     "cas_no": [r"\bCAS\b|CAS\s*No|CAS編號|CAS编号"],
     "report_no": [r"報告編號|报告编号|測試報告編號|测试报告编号|檢測報告編號|检测报告编号|報告號|报告号|測試報告號|测试报告号|Report\s*No|Report\s*Number"],
@@ -778,10 +788,368 @@ def _is_standalone_100_pct(sheet: UnifiedSheet, row: int, pct_col: Optional[int]
     return abs(v - 100.0) <= 0.15
 
 
+def _find_supplier_part_no_in_header(sheet: UnifiedSheet, header_row: int) -> Optional[str]:
+    """從表頭區讀取「供應商產品料號 / Supplier Product No.」。"""
+    label_re = re.compile(
+        r"供應商產品料號|供应商产品料号|Supplier\s*Product\s*No|原廠型番|原厂型番|Manufacturer\s*Part\s*No",
+        re.IGNORECASE,
+    )
+    for r in range(1, header_row):
+        for c in range(1, min(sheet.ncols, 20) + 1):
+            txt = sheet.get_str(r, c)
+            if not txt or not label_re.search(txt):
+                continue
+            for dc in range(1, 5):
+                if c + dc > sheet.ncols:
+                    break
+                if sheet.get_anchor(r, c + dc) == sheet.get_anchor(r, c):
+                    continue
+                val = sheet.get_str(r, c + dc)
+                if val:
+                    return val
+    return None
+
+
+def _norm_fmd_text(text: str) -> str:
+    return re.sub(r"\s+", "", (text or "").strip().lower())
+
+
+def _format_mg(val_mg: float) -> str:
+    rounded = round(val_mg, 6)
+    s = f"{rounded:.6f}".rstrip("0").rstrip(".")
+    return f"{s}mg"
+
+
+def _check_columns_b_to_j_against_fmd(
+    sheet: UnifiedSheet,
+    layout: HeaderLayout,
+    data_rows: List[int],
+    fmd_records: List[FMDRecord],
+    total_wt_info: Optional[Tuple[str, float, str]],
+) -> Tuple[List[CheckIssue], List[str]]:
+    """
+    將 O-193D 的欄位 B~J（部件名稱、部件料號、部件重量、均質材料名稱、製造商、
+    均質材料重量、物質名稱、CAS No.、含量%）與配對到的 SAMSUNG FMD 成分表比對。
+    """
+    issues: List[CheckIssue] = []
+    notes: List[str] = []
+    if not fmd_records or not data_rows:
+        return issues, notes
+
+    supplier_pn = _find_supplier_part_no_in_header(sheet, layout.header_row)
+    if not supplier_pn:
+        return issues, notes
+
+    part_col = layout.meta_cols.get("part_name")
+    part_no_col = layout.meta_cols.get("part_no")
+    wt_col = layout.meta_cols.get("part_weight")
+    wt_unit_col = layout.meta_cols.get("weight_unit")
+    mat_col = layout.meta_cols.get("material_name")
+    mfr_col = layout.meta_cols.get("manufacturer")
+    mat_wt_col = layout.meta_cols.get("material_weight")
+    comp_col = layout.meta_cols.get("composition_name")
+    cas_col = layout.meta_cols.get("cas_no")
+    pct_col = layout.meta_cols.get("content_pct")
+
+    # 檢查是否為三星產品（料號以 CL/CI 開頭，或製造商含 SAMSUNG）
+    mfr_values = [sheet.get_str(r, mfr_col).upper() for r in data_rows] if mfr_col else []
+    is_samsung = (
+        bool(re.match(r"^(?:CL\d{2}[A-Z]|CI[A-Z]{2})", supplier_pn.strip(), re.IGNORECASE))
+        or any("SAMSUNG" in m for m in mfr_values)
+    )
+    if not is_samsung:
+        return issues, notes
+
+    excel_materials: List[str] = []
+    for r in data_rows:
+        if part_no_col:
+            v = sheet.get_str(r, part_no_col)
+            if v:
+                excel_materials.append(v)
+        if mat_col:
+            v = sheet.get_str(r, mat_col)
+            if v:
+                excel_materials.append(v)
+
+    excel_total_mg = (total_wt_info[1] * 1000.0) if total_wt_info else None
+    matched_fmd, fmd_warn = match_samsung_fmd(
+        supplier_pn,
+        fmd_records,
+        excel_materials=excel_materials,
+        excel_total_mg=excel_total_mg,
+    )
+    if not matched_fmd:
+        if fmd_warn:
+            issues.append(
+                CheckIssue(
+                    sheet_name=sheet.name,
+                    cell_address="B~J欄",
+                    item_name="SAMSUNG FMD 配對",
+                    actual_value=supplier_pn,
+                    expected_value="唯一對應之 FMD 檔案",
+                    evidence=fmd_warn,
+                    severity="WARNING",
+                    fixable=False,
+                )
+            )
+        else:
+            notes.append(
+                f"工作表 [{sheet.name}] 供應商料號「{supplier_pn}」於 SAMSUNG FMD 資料夾中未找到對應成分表，略過欄位 B~J FMD 比對。"
+            )
+        return issues, notes
+
+    # 預先計算 FMD 各部件總重與各均質材料總重（mg）
+    part_weight_mg: Dict[str, float] = {}
+    mat_weight_mg: Dict[Tuple[str, str], float] = {}
+    mat_entry_count: Dict[Tuple[str, str], int] = {}
+    for e in matched_fmd.entries:
+        p_key = _norm_fmd_text(e.part_name)
+        m_key = (p_key, _norm_fmd_text(e.material_name))
+        mat_entry_count[m_key] = mat_entry_count.get(m_key, 0) + 1
+        if e.weight_mg is not None:
+            part_weight_mg[p_key] = part_weight_mg.get(p_key, 0.0) + e.weight_mg
+            mat_weight_mg[m_key] = mat_weight_mg.get(m_key, 0.0) + e.weight_mg
+
+    # 將 O-193D 各資料列與 FMD entries 配對（多輪精準對齊，避免單一欄位打錯就錯位）
+    remaining_fmd = list(range(len(matched_fmd.entries)))
+    row_to_fmd: Dict[int, int] = {}
+
+    def _row_fmd_score(r: int, e: FMDEntry) -> int:
+        score = 0
+        if part_col and _norm_fmd_text(sheet.get_str(r, part_col)) == _norm_fmd_text(e.part_name):
+            score += 4
+        if cas_col and e.cas_no and _norm_fmd_text(sheet.get_str(r, cas_col)) == _norm_fmd_text(e.cas_no):
+            score += 4
+        if part_no_col and _norm_fmd_text(sheet.get_str(r, part_no_col)) == _norm_fmd_text(e.material_name):
+            score += 3
+        if comp_col and _norm_fmd_text(sheet.get_str(r, comp_col)) == _norm_fmd_text(e.substance_name):
+            score += 3
+        if mat_col and _norm_fmd_text(sheet.get_str(r, mat_col)) in (
+            _norm_fmd_text(e.substance_name),
+            _norm_fmd_text(e.material_name),
+        ):
+            score += 2
+        return score
+
+    # 先配對高分列，再配對其餘列
+    for threshold in (8, 4, 2):
+        for r in data_rows:
+            if r in row_to_fmd or not remaining_fmd:
+                continue
+            best_idx = None
+            best_score = 0
+            for idx in remaining_fmd:
+                sc = _row_fmd_score(r, matched_fmd.entries[idx])
+                if sc > best_score:
+                    best_score = sc
+                    best_idx = idx
+            if best_idx is not None and best_score >= threshold:
+                row_to_fmd[r] = best_idx
+                remaining_fmd.remove(best_idx)
+
+    # 若行數剛好相等且仍有未配對列，依剩餘順序配對（抓出整列填錯的情況）
+    unmatched_rows = [r for r in data_rows if r not in row_to_fmd]
+    for r, idx in zip(unmatched_rows, list(remaining_fmd)):
+        row_to_fmd[r] = idx
+        remaining_fmd.remove(idx)
+
+    checked_anchors: Set[Tuple[int, int]] = set()
+    fmd_issue_count = 0
+    fmd_label = matched_fmd.filename
+
+    def _add_fmd_issue(
+        row: int,
+        col: int,
+        item_name: str,
+        actual: str,
+        expected: str,
+        evidence: str,
+        fixable: bool = True,
+        fix_value: Optional[str] = None,
+    ) -> None:
+        nonlocal fmd_issue_count
+        anchor = sheet.get_anchor(row, col)
+        if anchor in checked_anchors:
+            return
+        checked_anchors.add(anchor)
+        fmd_issue_count += 1
+        issues.append(
+            CheckIssue(
+                sheet_name=sheet.name,
+                cell_address=make_cell_address(anchor[0], anchor[1]),
+                item_name=item_name,
+                actual_value=actual or "(空白)",
+                expected_value=expected,
+                report_no=fmd_label,
+                evidence=evidence,
+                severity="ERROR",
+                fixable=fixable,
+                fix_value=fix_value if fixable else None,
+            )
+        )
+
+    def _cell_mg(row: int, col: int) -> Optional[float]:
+        raw = sheet.get_value(row, col)
+        if raw is None or str(raw).strip() == "":
+            return None
+        unit_override = sheet.get_str(row, wt_unit_col).lower() if wt_unit_col else ""
+        default_u = unit_override if unit_override in _WEIGHT_UNIT_FACTORS else layout.weight_header_unit
+        parsed = _parse_weight_and_unit(raw, default_u)
+        if not parsed:
+            return None
+        g = _to_grams(parsed[0], parsed[1])
+        return g * 1000.0 if g is not None else None
+
+    for r in data_rows:
+        if r not in row_to_fmd:
+            continue
+        entry = matched_fmd.entries[row_to_fmd[r]]
+        p_key = _norm_fmd_text(entry.part_name)
+        m_key = (p_key, _norm_fmd_text(entry.material_name))
+
+        # 欄 B：部件名稱
+        if part_col and entry.part_name:
+            actual = sheet.get_str(r, part_col)
+            if _norm_fmd_text(actual) != _norm_fmd_text(entry.part_name):
+                _add_fmd_issue(
+                    r, part_col, "部件名稱(FMD)", actual, entry.part_name,
+                    f"SAMSUNG FMD ({fmd_label}) Part Name 為 {entry.part_name}",
+                    fixable=True, fix_value=entry.part_name,
+                )
+
+        # 欄 C：部件料號（對應 FMD Material Name）
+        if part_no_col and entry.material_name:
+            actual = sheet.get_str(r, part_no_col)
+            if _norm_fmd_text(actual) != _norm_fmd_text(entry.material_name):
+                _add_fmd_issue(
+                    r, part_no_col, "部件料號(FMD)", actual, entry.material_name,
+                    f"SAMSUNG FMD ({fmd_label}) Material Name 為 {entry.material_name}",
+                    fixable=True, fix_value=entry.material_name,
+                )
+
+        # 欄 D：部件重量
+        if wt_col and p_key in part_weight_mg:
+            exp_mg = part_weight_mg[p_key]
+            act_mg = _cell_mg(r, wt_col)
+            tol = max(abs(exp_mg) * 0.02, 1e-3)
+            if act_mg is None or abs(act_mg - exp_mg) > tol:
+                exp_disp = _format_mg(exp_mg)
+                _add_fmd_issue(
+                    r, wt_col, "部件重量(FMD)", sheet.get_str(r, wt_col), exp_disp,
+                    f"SAMSUNG FMD ({fmd_label}) 部件「{entry.part_name}」重量為 {exp_disp}",
+                    fixable=True, fix_value=exp_disp,
+                )
+
+        # 欄 E：均質材料名稱（單一物質材料容許填寫 Substance Name 或 Material Name）
+        if mat_col and (entry.substance_name or entry.material_name):
+            actual = sheet.get_str(r, mat_col)
+            allowed = {_norm_fmd_text(entry.material_name)}
+            if mat_entry_count.get(m_key, 1) == 1 and entry.substance_name:
+                allowed.add(_norm_fmd_text(entry.substance_name))
+            allowed.discard("")
+            if _norm_fmd_text(actual) not in allowed:
+                exp_name = entry.substance_name if mat_entry_count.get(m_key, 1) == 1 and entry.substance_name else entry.material_name
+                _add_fmd_issue(
+                    r, mat_col, "均質材料名稱(FMD)", actual, exp_name,
+                    f"SAMSUNG FMD ({fmd_label}) 均質材料應為 {exp_name}",
+                    fixable=True, fix_value=exp_name,
+                )
+
+        # 欄 F：製造商名稱
+        if mfr_col:
+            actual = sheet.get_str(r, mfr_col)
+            if "samsung" not in actual.lower():
+                _add_fmd_issue(
+                    r, mfr_col, "製造商名稱(FMD)", actual, "SAMSUNG",
+                    f"資料來源為 SAMSUNG 原廠 FMD ({fmd_label})，製造商應含 SAMSUNG",
+                    fixable=True, fix_value="SAMSUNG",
+                )
+
+        # 欄 G：均質材料重量
+        if mat_wt_col and m_key in mat_weight_mg:
+            exp_mg = mat_weight_mg[m_key]
+            act_mg = _cell_mg(r, mat_wt_col)
+            tol = max(abs(exp_mg) * 0.02, 1e-3)
+            if act_mg is None or abs(act_mg - exp_mg) > tol:
+                exp_disp = _format_mg(exp_mg)
+                _add_fmd_issue(
+                    r, mat_wt_col, "均質材料重量(FMD)", sheet.get_str(r, mat_wt_col), exp_disp,
+                    f"SAMSUNG FMD ({fmd_label}) 材料「{entry.material_name}」重量為 {exp_disp}",
+                    fixable=True, fix_value=exp_disp,
+                )
+
+        # 欄 H：物質名稱
+        if comp_col and entry.substance_name:
+            actual = sheet.get_str(r, comp_col)
+            if _norm_fmd_text(actual) != _norm_fmd_text(entry.substance_name):
+                _add_fmd_issue(
+                    r, comp_col, "物質名稱(FMD)", actual, entry.substance_name,
+                    f"SAMSUNG FMD ({fmd_label}) Substance Name 為 {entry.substance_name}",
+                    fixable=True, fix_value=entry.substance_name,
+                )
+
+        # 欄 I：CAS No.
+        if cas_col and entry.cas_no:
+            actual = sheet.get_str(r, cas_col)
+            if _norm_fmd_text(actual) != _norm_fmd_text(entry.cas_no):
+                _add_fmd_issue(
+                    r, cas_col, "CAS No.(FMD)", actual, entry.cas_no,
+                    f"SAMSUNG FMD ({fmd_label}) CAS No. 為 {entry.cas_no}",
+                    fixable=True, fix_value=entry.cas_no,
+                )
+
+        # 欄 J：含量 (%)（以同一均質材料內各物質重量比例換算）
+        if pct_col and entry.weight_mg is not None and mat_weight_mg.get(m_key, 0.0) > 0:
+            exp_pct = (entry.weight_mg / mat_weight_mg[m_key]) * 100.0
+            raw_pct = sheet.get_value(r, pct_col)
+            act_pct: Optional[float] = None
+            if raw_pct is not None and str(raw_pct).strip() != "":
+                try:
+                    v = float(str(raw_pct).strip().replace("%", "").replace("％", "").strip())
+                    if sheet.is_percent_format(r, pct_col) or (0.0 < v <= 1.0001 and abs(exp_pct - v * 100.0) < abs(exp_pct - v)):
+                        act_pct = v * 100.0
+                    else:
+                        act_pct = v
+                except ValueError:
+                    act_pct = None
+            if act_pct is None or abs(act_pct - exp_pct) > 0.5:
+                exp_pct_str = f"{round(exp_pct, 2):g}"
+                _add_fmd_issue(
+                    r, pct_col, "含量%(FMD)", sheet.get_str(r, pct_col), f"{exp_pct_str}%",
+                    f"SAMSUNG FMD ({fmd_label}) 該物質於均質材料「{entry.material_name}」占比應為 {exp_pct_str}%",
+                    fixable=False,
+                )
+
+    # 檢查 FMD 中是否仍有缺漏未填寫的成分列
+    for idx in remaining_fmd:
+        missing_e = matched_fmd.entries[idx]
+        fmd_issue_count += 1
+        issues.append(
+            CheckIssue(
+                sheet_name=sheet.name,
+                cell_address="B~J欄",
+                item_name="FMD 成分缺漏",
+                actual_value="(缺少此列)",
+                expected_value=f"{missing_e.part_name} / {missing_e.substance_name} ({missing_e.cas_no})",
+                report_no=fmd_label,
+                evidence=f"SAMSUNG FMD ({fmd_label}) 包含此成分列，但展開表中未填寫",
+                severity="ERROR",
+                fixable=False,
+            )
+        )
+
+    notes.append(
+        f"工作表 [{sheet.name}] 欄位 B~J 已比對 SAMSUNG FMD（{fmd_label}，料號={supplier_pn}）："
+        f"比對 {len(row_to_fmd)}/{len(matched_fmd.entries)} 筆成分列，不符 {fmd_issue_count} 項。"
+    )
+    return issues, notes
+
+
 def check_sheet(
     sheet: UnifiedSheet,
     test_reports: List[TestReportData],
     msds_list: List[MSDSData],
+    fmd_records: Optional[List[FMDRecord]] = None,
 ) -> Tuple[List[CheckIssue], List[str], bool]:
     issues: List[CheckIssue] = []
     notes: List[str] = []
@@ -1048,6 +1416,16 @@ def check_sheet(
                             fixable=False,
                         )
                     )
+
+    # -----------------------------------------------------------------------
+    # 2b. 欄位 B~J 比對三星原廠成分表（SAMSUNG FMD）
+    # -----------------------------------------------------------------------
+    if fmd_records:
+        fmd_issues, fmd_notes = _check_columns_b_to_j_against_fmd(
+            sheet, layout, data_rows, fmd_records, total_wt_info
+        )
+        issues.extend(fmd_issues)
+        notes.extend(fmd_notes)
 
     # -----------------------------------------------------------------------
     # 3. 報告基本資訊（欄位 K~M：測試報告編號、測試機構、測試日期） & 4. 測試結果
