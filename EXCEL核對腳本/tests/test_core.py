@@ -1082,6 +1082,31 @@ class TestOverwriteAndIterativeFix(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(call_state["round"], 2)
 
+    def test_write_cell_fallback_number_format_for_localized_excel(self):
+        from excel_fixer import EXCEL_COLOR_RED, _write_cell
+
+        class _LocalizedCell:
+            def __init__(self):
+                self._fmt = "G/通用格式"
+                self.Value = None
+                self.Font = type("Font", (), {"Color": None})()
+
+            @property
+            def NumberFormat(self):
+                return self._fmt
+
+            @NumberFormat.setter
+            def NumberFormat(self, val):
+                if val == "General":
+                    raise RuntimeError("無法設定種類 Range 的 NumberFormat 屬性")
+                self._fmt = val
+
+        cell = _LocalizedCell()
+        _write_cell(cell, "386")
+        self.assertEqual(cell.Value, 386)
+        self.assertEqual(cell.NumberFormat, "G/通用格式")
+        self.assertEqual(cell.Font.Color, EXCEL_COLOR_RED)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -154,18 +154,32 @@ def _coerce_fix_value(value: Any) -> Tuple[Any, str]:
     return s, "text"
 
 
+def _try_set_number_format(cell, candidates: Tuple[str, ...]) -> None:
+    """
+    安全設定 Excel 儲存格 NumberFormat（相容繁中／簡中／英文等不同語系 Excel）。
+    部分語系 Excel 對英文 'General' 會拋出 COM 例外，須依序嘗試本地化格式，
+    且絕不讓格式設定失敗阻擋儲存格數值寫入。
+    """
+    for fmt in candidates:
+        try:
+            cell.NumberFormat = fmt
+            return
+        except Exception:
+            continue
+
+
 def _write_cell(cell, value: Any) -> None:
     coerced, kind = _coerce_fix_value(value)
     if kind == "date":
-        cell.NumberFormat = "yyyy/mm/dd"
+        _try_set_number_format(cell, ("yyyy/mm/dd", "yyyy-mm-dd"))
         cell.Value = coerced
     elif kind == "number":
-        # 重設為 General，避免原儲存格為日期/百分比/文字格式造成數值顯示異常
-        cell.NumberFormat = "General"
+        # 重設為通用格式（同時相容英文 General 與中文 G/通用格式），避免日期/文字格式殘留
+        _try_set_number_format(cell, ("General", "G/通用格式", "0.########"))
         cell.Value = coerced
     else:
         # 含 <、單位或特殊符號的值一律以文字寫入，避免 Excel 自動轉型
-        cell.NumberFormat = "@"
+        _try_set_number_format(cell, ("@",))
         cell.Value = coerced
     cell.Font.Color = EXCEL_COLOR_RED
 
